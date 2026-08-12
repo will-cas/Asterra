@@ -43,15 +43,33 @@ namespace Asterra.Gameplay.Player
 
         private SimEntityId? _selectedBuilding;
         private bool _placeMode;
+        private string _placeBuildingDefId;
         private bool _attackMoveArmed;
+        private bool _patrolArmed;
         private GameObject _ghost;
         private Renderer _ghostRenderer;
+
+        private readonly List<SimEntityId>[] _controlGroups = CreateControlGroups();
+        private int _lastGroupTapIndex = -1;
+        private float _lastGroupTapTime = -10f;
 
         public SelectionState Selection => _selection;
         public bool IsPlaceMode => _placeMode;
         public bool IsAttackMoveArmed => _attackMoveArmed;
+        public bool IsPatrolArmed => _patrolArmed;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
+        public int IdleWorkerCount => CountIdleWorkers();
+        public bool HasBuilderSelected => HasSelectedBuilder();
+        public bool HasCombatUnitSelected => HasSelectedCombatUnit();
+
+        private static List<SimEntityId>[] CreateControlGroups()
+        {
+            var groups = new List<SimEntityId>[10];
+            for (int i = 0; i < groups.Length; i++)
+                groups[i] = new List<SimEntityId>();
+            return groups;
+        }
 
         public void Bind(MatchBootstrap bootstrap)
         {
@@ -76,21 +94,33 @@ namespace Asterra.Gameplay.Player
                 return;
             var bridge = FindFirstObjectByType<SimPresentationBridge>();
             if (bridge != null)
+            {
                 bridge.BindSelection(() => _selection.Selected);
+                bridge.BindSelectedBuilding(() => _selectedBuilding);
+            }
         }
 
         public void EnterPlaceMode()
         {
-            if (!HasSelectedBuilder())
+            EnterPlaceMode(_roster != null ? _roster.ProducerBuildingId : null);
+        }
+
+        public void EnterPlaceMode(string buildingDefId)
+        {
+            if (!HasSelectedBuilder() || string.IsNullOrEmpty(buildingDefId))
                 return;
             CancelAttackMoveArm();
+            CancelPatrolArm();
+            _placeBuildingDefId = buildingDefId;
             _placeMode = true;
             EnsureGhost();
+            ResizeGhostForCurrentBuilding();
         }
 
         public void CancelPlaceMode()
         {
             _placeMode = false;
+            _placeBuildingDefId = null;
             if (_ghost != null)
                 _ghost.SetActive(false);
         }
@@ -98,6 +128,128 @@ namespace Asterra.Gameplay.Player
         public void CancelAttackMoveArm()
         {
             _attackMoveArmed = false;
+        }
+
+        public void CancelPatrolArm()
+        {
+            _patrolArmed = false;
+        }
+
+        public void StopSelected()
+        {
+            var ids = GetOrderUnitIds();
+            if (ids.Length == 0 || _commands == null)
+                return;
+            _commands.SubmitLocal(new StopCommand
+            {
+                Issuer = _local,
+                UnitIds = ids,
+            });
+        }
+
+        public void SetSelectedStance(UnitStance stance)
+        {
+            var ids = GetOrderUnitIds();
+            if (ids.Length == 0 || _commands == null)
+                return;
+            _commands.SubmitLocal(new SetStanceCommand
+            {
+                Issuer = _local,
+                UnitIds = ids,
+                Stance = stance,
+            });
+            MatchFeedback.Show($"Stance: {stance}");
+        }
+
+        public void SelectIdleWorker()
+        {
+            if (_world == null)
+                return;
+            var idle = new List<SimEntityId>();
+            for (int i = 0; i < _world.Units.Count; i++)
+            {
+                var u = _world.Units[i];
+                if (!u.IsAlive || u.Owner != _local || !u.IsIdle)
+                    continue;
+                if (!FactionDefaultContent.IsBuilderUnitId(u.DefinitionId))
+                    continue;
+                idle.Add(u.Id);
+            }
+
+            if (idle.Count == 0)
+            {
+                MatchFeedback.Show("No idle workers");
+                return;
+            }
+
+            _selectedBuilding = null;
+            CancelPlaceMode();
+            _selection.Set(idle);
+            FocusOnSelection();
+            MatchFeedback.Show($"Idle workers: {idle.Count}");
+        }
+
+        public void JumpToBuilding(SimEntityId buildingId)
+        {
+            if (_world == null)
+                return;
+            for (int i = 0; i < _world.Buildings.Count; i++)
+            {
+                var b = _world.Buildings[i];
+                if (b.Id != buildingId)
+                    continue;
+                var cam = FindFirstObjectByType<RtsCameraRig>();
+                if (cam != null)
+                    cam.FocusOn(b.X, b.Z);
+                _selectedBuilding = buildingId;
+                return;
+            }
+        }
+
+        public void FocusOnSelection()
+        {
+            if (_selection == null || _selection.Selected.Count == 0 || _world == null)
+                return;
+            float sx = 0f;
+            float sz = 0f;
+            int n = 0;
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var unit = _world.Units[u];
+                    if (unit.Id != id || !unit.IsAlive)
+                        continue;
+                    sx += unit.X;
+                    sz += unit.Z;
+                    n++;
+                    break;
+                }
+            }
+
+            if (n == 0)
+                return;
+            var cam = FindFirstObjectByType<RtsCameraRig>();
+            if (cam != null)
+                cam.FocusOn(sx / n, sz / n);
+        }
+
+        private int CountIdleWorkers()
+        {
+            if (_world == null)
+                return 0;
+            int count = 0;
+            for (int i = 0; i < _world.Units.Count; i++)
+            {
+                var u = _world.Units[i];
+                if (!u.IsAlive || u.Owner != _local || !u.IsIdle)
+                    continue;
+                if (FactionDefaultContent.IsBuilderUnitId(u.DefinitionId))
+                    count++;
+            }
+
+            return count;
         }
 
         public void TrainFromSelectedBuilding()
@@ -184,12 +336,20 @@ namespace Asterra.Gameplay.Player
             {
                 if (_attackMoveArmed)
                     CancelAttackMoveArm();
+                if (_patrolArmed)
+                    CancelPatrolArm();
                 CancelPlaceMode();
             }
 
             if (_attackMoveArmed)
             {
                 HandleAttackMoveArmedPointer();
+                return;
+            }
+
+            if (_patrolArmed)
+            {
+                HandlePatrolArmedPointer();
                 return;
             }
 
@@ -205,16 +365,20 @@ namespace Asterra.Gameplay.Player
                 {
                     if (TryRaycastGround(out float x, out float z) && CanPlaceAt(x, z))
                     {
+                        string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                            ? _roster.ProducerBuildingId
+                            : _placeBuildingDefId;
                         _commands.SubmitLocal(new PlaceBuildingCommand
                         {
                             Issuer = _local,
-                            BuildingDefId = _roster.ProducerBuildingId,
+                            BuildingDefId = defId,
                             X = x,
                             Z = z,
                             YawDegrees = 0f,
                         });
                         MatchFeedback.Show("Building ordered");
-                        CancelPlaceMode();
+                        if (!IsAdditiveModifierHeld())
+                            CancelPlaceMode();
                     }
                 }
 
@@ -350,6 +514,7 @@ namespace Asterra.Gameplay.Player
                         TargetX = x,
                         TargetZ = z,
                     });
+                    MatchFeedback.Show("Attack-move ordered");
                 }
 
                 CancelAttackMoveArm();
@@ -358,6 +523,41 @@ namespace Asterra.Gameplay.Player
 
             if (rmb)
                 CancelAttackMoveArm();
+        }
+
+        private void HandlePatrolArmedPointer()
+        {
+            if (IsPointerOverUi())
+                return;
+
+            bool lmb = UnityEngine.Input.GetMouseButtonDown(0);
+            bool rmb = UnityEngine.Input.GetMouseButtonDown(1);
+            if (!lmb && !rmb)
+                return;
+
+            if (lmb && TryRaycastGround(out float x, out float z))
+            {
+                x = Mathf.Clamp(x, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                z = Mathf.Clamp(z, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                var unitIds = GetOrderUnitIds();
+                if (unitIds.Length > 0)
+                {
+                    _commands.SubmitLocal(new PatrolCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetX = x,
+                        TargetZ = z,
+                    });
+                    MatchFeedback.Show("Patrol ordered");
+                }
+
+                CancelPatrolArm();
+                return;
+            }
+
+            if (rmb)
+                CancelPatrolArm();
         }
 
         private void HandleClickSelect(bool additive)
@@ -415,11 +615,20 @@ namespace Asterra.Gameplay.Player
 
         private void HandleHotkeys()
         {
+            HandleControlGroupHotkeys();
+
             if (UnityEngine.Input.GetKeyDown(KeyCode.B))
             {
                 if (HasSelectedBuilder())
-                    EnterPlaceMode();
+                    EnterPlaceMode(_roster.ProducerBuildingId);
             }
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.N) && HasSelectedBuilder())
+                EnterPlaceMode(_roster.TowerBuildingId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.M) && HasSelectedBuilder())
+                EnterPlaceMode(_roster.WallBuildingId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.O) && HasSelectedBuilder())
+                EnterPlaceMode(_roster.OutpostBuildingId);
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.T))
             {
@@ -461,15 +670,117 @@ namespace Asterra.Gameplay.Player
             if (UnityEngine.Input.GetKeyDown(KeyCode.A))
             {
                 CancelPlaceMode();
+                CancelPatrolArm();
                 _attackMoveArmed = true;
                 MatchFeedback.Show("Attack-move: click ground");
             }
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.P))
+            {
+                CancelPlaceMode();
+                CancelAttackMoveArm();
+                _patrolArmed = true;
+                MatchFeedback.Show("Patrol: click ground");
+            }
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.S))
+                StopSelected();
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.F))
+                SetSelectedStance(UnitStance.Aggressive);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.G))
+                SetSelectedStance(UnitStance.Defensive);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.H))
+                SetSelectedStance(UnitStance.Hold);
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Period) || UnityEngine.Input.GetKeyDown(KeyCode.I))
+                SelectIdleWorker();
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.R))
             {
                 _selectedBuilding = null;
                 AutoSelectOwnedUnits();
             }
+        }
+
+        private void HandleControlGroupHotkeys()
+        {
+            bool assign = UnityEngine.Input.GetKey(KeyCode.LeftControl)
+                          || UnityEngine.Input.GetKey(KeyCode.RightControl)
+                          || UnityEngine.Input.GetKey(KeyCode.LeftCommand)
+                          || UnityEngine.Input.GetKey(KeyCode.RightCommand);
+
+            for (int g = 1; g <= 9; g++)
+            {
+                var key = KeyCode.Alpha0 + g;
+                if (!UnityEngine.Input.GetKeyDown(key))
+                    continue;
+
+                if (assign)
+                {
+                    AssignControlGroup(g);
+                    MatchFeedback.Show($"Group {g} assigned");
+                }
+                else
+                {
+                    RecallControlGroup(g);
+                }
+            }
+        }
+
+        private void AssignControlGroup(int index)
+        {
+            if (index < 1 || index > 9 || _selection == null)
+                return;
+            var list = _controlGroups[index];
+            list.Clear();
+            for (int i = 0; i < _selection.Selected.Count; i++)
+                list.Add(_selection.Selected[i]);
+        }
+
+        private void RecallControlGroup(int index)
+        {
+            if (index < 1 || index > 9)
+                return;
+            var list = _controlGroups[index];
+            if (list.Count == 0)
+            {
+                MatchFeedback.Show($"Group {index} empty");
+                return;
+            }
+
+            // Prune dead / foreign.
+            var alive = new List<SimEntityId>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var id = list[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var unit = _world.Units[u];
+                    if (unit.Id != id || !unit.IsAlive || unit.Owner != _local)
+                        continue;
+                    alive.Add(id);
+                    break;
+                }
+            }
+
+            list.Clear();
+            list.AddRange(alive);
+            if (alive.Count == 0)
+            {
+                MatchFeedback.Show($"Group {index} empty");
+                return;
+            }
+
+            _selectedBuilding = null;
+            CancelPlaceMode();
+            _selection.Set(alive);
+
+            float now = Time.unscaledTime;
+            if (_lastGroupTapIndex == index && now - _lastGroupTapTime < 0.35f)
+                FocusOnSelection();
+            _lastGroupTapIndex = index;
+            _lastGroupTapTime = now;
         }
 
         private void UpdateGhost()
@@ -513,6 +824,12 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (_patrolArmed)
+            {
+                CurrentCursorMode = OrderCursorMode.Move;
+                return;
+            }
+
             if (_selectedBuilding.HasValue)
             {
                 CurrentCursorMode = OrderCursorMode.Train;
@@ -549,9 +866,12 @@ namespace Asterra.Gameplay.Player
             if (!HasSelectedBuilderNear(x, z))
                 return false;
 
-            if (match != null && match.Definitions != null && match.Wallet != null && _roster != null)
+            if (match != null && match.Definitions != null && match.Wallet != null)
             {
-                if (match.Definitions.TryGetBuilding(_roster.ProducerBuildingId, out var def))
+                string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                    ? (_roster != null ? _roster.ProducerBuildingId : null)
+                    : _placeBuildingDefId;
+                if (!string.IsNullOrEmpty(defId) && match.Definitions.TryGetBuilding(defId, out var def))
                 {
                     if (!match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost))
                         return false;
@@ -575,6 +895,26 @@ namespace Asterra.Gameplay.Player
                     var unit = _world.Units[u];
                     if (unit.Id == id && unit.IsAlive && unit.Owner == _local
                         && FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool HasSelectedCombatUnit()
+        {
+            if (_selection == null || _world == null)
+                return false;
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var unit = _world.Units[u];
+                    if (unit.Id != id || !unit.IsAlive || unit.Owner != _local)
+                        continue;
+                    if (!FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
                         return true;
                 }
             }
@@ -665,6 +1005,44 @@ namespace Asterra.Gameplay.Player
             }
 
             _ghost.SetActive(false);
+            ResizeGhostForCurrentBuilding();
+        }
+
+        private void ResizeGhostForCurrentBuilding()
+        {
+            if (_ghost == null)
+                return;
+            Vector3 scale = new Vector3(14f, 6f, 12f);
+            string defId = _placeBuildingDefId;
+            if (!string.IsNullOrEmpty(defId) && match != null && match.Definitions != null
+                && match.Definitions.TryGetBuilding(defId, out var def))
+            {
+                switch (def.Kind)
+                {
+                    case BuildingKind.Tower:
+                        scale = new Vector3(6f, 14f, 6f);
+                        break;
+                    case BuildingKind.Wall:
+                        scale = new Vector3(18f, 5f, 4f);
+                        break;
+                    case BuildingKind.Outpost:
+                        scale = new Vector3(8f, 7f, 8f);
+                        break;
+                    case BuildingKind.Producer:
+                        scale = new Vector3(14f, 6f, 12f);
+                        break;
+                    case BuildingKind.Keep:
+                        scale = new Vector3(16f, 10f, 16f);
+                        break;
+                    case BuildingKind.Generic:
+                        scale = new Vector3(10f, 6f, 10f);
+                        break;
+                    default:
+                        throw new System.ArgumentOutOfRangeException(nameof(def.Kind), def.Kind, null);
+                }
+            }
+
+            _ghost.transform.localScale = scale;
         }
 
         private static void SetMatColor(Material mat, Color color)

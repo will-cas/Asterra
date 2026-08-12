@@ -79,6 +79,18 @@ namespace Asterra.Core
         public float TargetZ;
     }
 
+    public sealed class StopCommand : GameCommand
+    {
+        public SimEntityId[] UnitIds;
+    }
+
+    public sealed class PatrolCommand : GameCommand
+    {
+        public SimEntityId[] UnitIds;
+        public float TargetX;
+        public float TargetZ;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {

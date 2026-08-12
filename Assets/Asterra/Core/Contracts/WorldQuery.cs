@@ -16,6 +16,8 @@ namespace Asterra.Core
         public readonly int CarryAmount;
         public readonly ResourceType CarryType;
         public readonly bool HasCarry;
+        public readonly bool IsIdle;
+        public readonly UnitStance Stance;
 
         public UnitSnapshot(
             SimEntityId id,
@@ -29,7 +31,9 @@ namespace Asterra.Core
             bool isAlive,
             int carryAmount,
             ResourceType carryType,
-            bool hasCarry)
+            bool hasCarry,
+            bool isIdle,
+            UnitStance stance)
         {
             Id = id;
             Owner = owner;
@@ -43,6 +47,8 @@ namespace Asterra.Core
             CarryAmount = carryAmount;
             CarryType = carryType;
             HasCarry = hasCarry;
+            IsIdle = isIdle;
+            Stance = stance;
         }
     }
 
@@ -62,10 +68,15 @@ namespace Asterra.Core
         public readonly float ProductionProgress;
         public readonly int QueueCount;
         public readonly string QueuedUnitDefId;
+        public readonly string Queue1DefId;
+        public readonly string Queue2DefId;
+        public readonly string Queue3DefId;
         public readonly float RallyX;
         public readonly float RallyZ;
         public readonly bool HasRally;
         public readonly float BuildProgress;
+        public readonly float SightRadius;
+        public readonly BuildingKind Kind;
 
         public BuildingSnapshot(
             SimEntityId id,
@@ -82,10 +93,15 @@ namespace Asterra.Core
             float productionProgress,
             int queueCount,
             string queuedUnitDefId,
+            string queue1DefId,
+            string queue2DefId,
+            string queue3DefId,
             float rallyX,
             float rallyZ,
             bool hasRally,
-            float buildProgress)
+            float buildProgress,
+            float sightRadius,
+            BuildingKind kind)
         {
             Id = id;
             Owner = owner;
@@ -101,10 +117,15 @@ namespace Asterra.Core
             ProductionProgress = productionProgress;
             QueueCount = queueCount;
             QueuedUnitDefId = queuedUnitDefId;
+            Queue1DefId = queue1DefId;
+            Queue2DefId = queue2DefId;
+            Queue3DefId = queue3DefId;
             RallyX = rallyX;
             RallyZ = rallyZ;
             HasRally = hasRally;
             BuildProgress = buildProgress;
+            SightRadius = sightRadius;
+            Kind = kind;
         }
     }
 
@@ -158,6 +179,22 @@ namespace Asterra.Core
         }
     }
 
+    public readonly struct ProjectileSnapshot
+    {
+        public readonly float X;
+        public readonly float Z;
+        public readonly float TargetX;
+        public readonly float TargetZ;
+
+        public ProjectileSnapshot(float x, float z, float targetX, float targetZ)
+        {
+            X = x;
+            Z = z;
+            TargetX = targetX;
+            TargetZ = targetZ;
+        }
+    }
+
     public interface IWorldQuery
     {
         IReadOnlyList<UnitSnapshot> Units { get; }
@@ -165,6 +202,7 @@ namespace Asterra.Core
         IReadOnlyList<TerritorySnapshot> Territories { get; }
         IReadOnlyList<ResourceSnapshot> Resources { get; }
         IReadOnlyList<CombatEvent> CombatEvents { get; }
+        IReadOnlyList<ProjectileSnapshot> Projectiles { get; }
         bool HasUpgrade(PlayerId player, string upgradeDefId);
     }
 

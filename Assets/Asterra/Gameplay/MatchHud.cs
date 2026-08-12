@@ -49,10 +49,8 @@ namespace Asterra.Gameplay
 
             GUI.Label(new Rect(12f, 12f, 900f, 22f), resources);
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);
-            GUI.Label(new Rect(12f, 56f, 1200f, 22f), BuildSelectionLabel());
-            GUI.Label(
-                new Rect(12f, 78f, 1200f, 22f),
-                "A then click = attack-move  |  Builder RMB resource = gather  |  B place producer  |  building RMB = rally");
+            GUI.Label(new Rect(12f, 56f, 1200f, 22f), BuildContextLine());
+            GUI.Label(new Rect(12f, 78f, 1400f, 22f), BuildHotkeyHint());
 
             if (MatchFeedback.Instance != null && MatchFeedback.Instance.HasActiveMessage)
             {
@@ -66,11 +64,63 @@ namespace Asterra.Gameplay
                 GUI.Label(new Rect(0f, 10f, Screen.width, 28f), toast, style);
             }
 
-            float panelY = Screen.height - 120f;
+            float panelY = Screen.height - 156f;
             float x = 12f;
-            const float btnW = 118f;
-            const float btnH = 32f;
-            const float gap = 6f;
+            const float btnW = 110f;
+            const float btnH = 28f;
+            const float gap = 5f;
+
+            bool hasBuilder = orders != null && (orders.HasBuilderSelected || orders.IsPlaceMode);
+            bool hasCombat = orders != null && orders.HasCombatUnitSelected;
+            bool showIdle = orders != null;
+
+            if (showIdle)
+            {
+                if (GUI.Button(new Rect(x, panelY, 100f, btnH), $"Idle ({orders.IdleWorkerCount})"))
+                    orders.SelectIdleWorker();
+                x += 100f + gap;
+            }
+
+            if (hasCombat)
+            {
+                if (GUI.Button(new Rect(x, panelY, 70f, btnH), "Stop"))
+                    orders.StopSelected();
+                x += 70f + gap;
+                if (GUI.Button(new Rect(x, panelY, 70f, btnH), "Aggro"))
+                    orders.SetSelectedStance(UnitStance.Aggressive);
+                x += 70f + gap;
+                if (GUI.Button(new Rect(x, panelY, 80f, btnH), "Defend"))
+                    orders.SetSelectedStance(UnitStance.Defensive);
+                x += 80f + gap;
+                if (GUI.Button(new Rect(x, panelY, 70f, btnH), "Hold"))
+                    orders.SetSelectedStance(UnitStance.Hold);
+                x += 70f + gap;
+            }
+
+            float buildY = panelY + 34f;
+            float bx = 12f;
+            if (orders != null && orders.IsPlaceMode)
+            {
+                if (GUI.Button(new Rect(bx, buildY, 160f, btnH), "Cancel Build (Esc)"))
+                    orders.CancelPlaceMode();
+                bx += 160f + gap;
+            }
+            else if (hasBuilder && match.PlayerRoster != null)
+            {
+                var roster = match.PlayerRoster;
+                if (GUI.Button(new Rect(bx, buildY, 120f, btnH), "Barracks (B)"))
+                    orders.EnterPlaceMode(roster.ProducerBuildingId);
+                bx += 120f + gap;
+                if (GUI.Button(new Rect(bx, buildY, 110f, btnH), "Tower (N)"))
+                    orders.EnterPlaceMode(roster.TowerBuildingId);
+                bx += 110f + gap;
+                if (GUI.Button(new Rect(bx, buildY, 100f, btnH), "Wall (M)"))
+                    orders.EnterPlaceMode(roster.WallBuildingId);
+                bx += 100f + gap;
+                if (GUI.Button(new Rect(bx, buildY, 120f, btnH), "Outpost (O)"))
+                    orders.EnterPlaceMode(roster.OutpostBuildingId);
+                bx += 120f + gap;
+            }
 
             if (orders != null && orders.SelectedBuilding.HasValue && match.World != null && match.PlayerRoster != null)
             {
@@ -87,52 +137,54 @@ namespace Asterra.Gameplay
 
                 if (foundBuilding)
                 {
-                    float progressPct = b.ProductionProgress * 100f;
-                    string prod = string.IsNullOrEmpty(b.ProductionUnitDefId)
-                        ? "Idle"
-                        : $"{ShortName(b.ProductionUnitDefId)} {progressPct:0}%  queue {b.QueueCount}";
-                    GUI.Label(new Rect(12f, panelY - 24f, 700f, 22f), $"Production: {prod}   (RMB set rally)");
+                    bool producing = !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0;
+                    if (producing)
+                        DrawProductionQueue(b, panelY - 70f);
 
+                    float trainX = bx;
+                    float trainY = buildY;
                     bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
+                    bool canTrain = isKeep || b.CanProduce
+                                    || !string.IsNullOrEmpty(b.ProductionUnitDefId)
+                                    || b.QueueCount > 0;
                     var roster = match.PlayerRoster;
 
-                    if (isKeep)
+                    if (canTrain)
                     {
-                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Builder"))
-                            orders.TrainUnit(roster.BuilderUnitId);
-                        x += btnW + gap;
-                    }
-                    else
-                    {
-                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Soldier"))
-                            orders.TrainUnit(roster.BasicUnitId);
-                        x += btnW + gap;
-                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Archer"))
-                            orders.TrainUnit(roster.RangedUnitId);
-                        x += btnW + gap;
-                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Cavalry"))
-                            orders.TrainUnit(roster.CavalryUnitId);
-                        x += btnW + gap;
-                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Siege"))
-                            orders.TrainUnit(roster.SiegeUnitId);
-                        x += btnW + gap;
-                    }
+                        if (isKeep)
+                        {
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Builder"))
+                                orders.TrainUnit(roster.BuilderUnitId);
+                            trainX += btnW + gap;
+                        }
+                        else if (b.CanProduce || !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0)
+                        {
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Soldier"))
+                                orders.TrainUnit(roster.BasicUnitId);
+                            trainX += btnW + gap;
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Archer"))
+                                orders.TrainUnit(roster.RangedUnitId);
+                            trainX += btnW + gap;
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Cavalry"))
+                                orders.TrainUnit(roster.CavalryUnitId);
+                            trainX += btnW + gap;
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Siege"))
+                                orders.TrainUnit(roster.SiegeUnitId);
+                            trainX += btnW + gap;
+                        }
 
-                    if (GUI.Button(new Rect(x, panelY, btnW + 20f, btnH), "Cancel Prod (X)"))
-                        orders.CancelProduction();
-                    x += btnW + 20f + gap;
+                        if (producing)
+                        {
+                            if (GUI.Button(new Rect(trainX, trainY, 120f, btnH), "Cancel (X)"))
+                                orders.CancelProduction();
+                            GUI.Label(new Rect(trainX + 128f, trainY + 4f, 220f, 22f), "Shift+train queues");
+                        }
+                        else if (canTrain)
+                        {
+                            GUI.Label(new Rect(trainX, trainY + 4f, 220f, 22f), "Shift+train queues");
+                        }
+                    }
                 }
-            }
-
-            if (orders != null && !orders.IsPlaceMode)
-            {
-                if (GUI.Button(new Rect(x, panelY, 160f, btnH), "Build Barracks (B)"))
-                    orders.EnterPlaceMode();
-            }
-            else if (orders != null && orders.IsPlaceMode)
-            {
-                if (GUI.Button(new Rect(x, panelY, 160f, btnH), "Cancel Build (Esc)"))
-                    orders.CancelPlaceMode();
             }
 
             if (!match.Result.IsOver)
@@ -146,14 +198,80 @@ namespace Asterra.Gameplay
             GUI.Box(new Rect(Screen.width * 0.5f - 160f, Screen.height * 0.38f, 320f, 90f), $"{title}\n{reason}");
         }
 
-        private string BuildSelectionLabel()
+        private void DrawProductionQueue(BuildingSnapshot b, float y)
         {
-            if (orders == null || orders.Selection == null || match.World == null)
-                return "Selected 0";
+            GUI.Label(new Rect(12f, y - 22f, 500f, 20f), "Production queue (click to jump):");
+            float qx = 12f;
+            const float qw = 72f;
+            const float qh = 40f;
+            const float gap = 4f;
+
+            if (!string.IsNullOrEmpty(b.ProductionUnitDefId))
+            {
+                string label = $"{ShortName(b.ProductionUnitDefId)}\n{(int)(b.ProductionProgress * 100f)}%";
+                if (GUI.Button(new Rect(qx, y, qw, qh), label))
+                    orders.JumpToBuilding(b.Id);
+                qx += qw + gap;
+            }
+
+            DrawQueueSlot(b.QueuedUnitDefId, ref qx, y, qw, qh, gap, b.Id);
+            DrawQueueSlot(b.Queue1DefId, ref qx, y, qw, qh, gap, b.Id);
+            DrawQueueSlot(b.Queue2DefId, ref qx, y, qw, qh, gap, b.Id);
+            DrawQueueSlot(b.Queue3DefId, ref qx, y, qw, qh, gap, b.Id);
+
+            if (string.IsNullOrEmpty(b.ProductionUnitDefId) && b.QueueCount <= 0)
+                GUI.Label(new Rect(12f, y + 8f, 200f, 22f), "Idle");
+        }
+
+        private void DrawQueueSlot(string defId, ref float qx, float y, float qw, float qh, float gap, SimEntityId buildingId)
+        {
+            if (string.IsNullOrEmpty(defId))
+                return;
+            if (GUI.Button(new Rect(qx, y, qw, qh), ShortName(defId)))
+                orders.JumpToBuilding(buildingId);
+            qx += qw + gap;
+        }
+
+        private string BuildContextLine()
+        {
+            if (orders == null || match.World == null)
+                return "No selection";
+
+            if (orders.IsPlaceMode)
+                return "Place mode — LMB place, Esc/RMB cancel, Shift keeps placing";
+
+            if (orders.IsAttackMoveArmed)
+                return "Attack-move armed — click ground";
+
+            if (orders.IsPatrolArmed)
+                return "Patrol armed — click ground";
+
+            if (orders.SelectedBuilding.HasValue)
+            {
+                for (int i = 0; i < match.World.Buildings.Count; i++)
+                {
+                    var b = match.World.Buildings[i];
+                    if (b.Id != orders.SelectedBuilding.Value)
+                        continue;
+                    string name = ShortName(b.DefinitionId);
+                    if (FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                        return $"Keep selected ({name}) — train builders";
+                    if (b.CanProduce || !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0)
+                        return $"Producer selected ({name}) — train combat units";
+                    return $"Building selected ({name})";
+                }
+
+                return "Building selected";
+            }
+
+            if (orders.Selection == null || orders.Selection.Selected.Count == 0)
+                return "No selection — click units or buildings";
 
             int total = orders.Selection.Selected.Count;
             int builders = 0;
             int combat = 0;
+            UnitStance? stance = null;
+            bool mixedStance = false;
             var local = match.Session.LocalPlayer;
             for (int i = 0; i < orders.Selection.Selected.Count; i++)
             {
@@ -167,13 +285,39 @@ namespace Asterra.Gameplay
                         builders++;
                     else
                         combat++;
+                    if (!stance.HasValue)
+                        stance = unit.Stance;
+                    else if (stance.Value != unit.Stance)
+                        mixedStance = true;
                     break;
                 }
             }
 
-            if (builders > 0 || combat > 0)
-                return $"Selected {total}  ({builders} builders, {combat} combat)";
-            return $"Selected {total}";
+            string stanceLabel = mixedStance ? "mixed" : (stance.HasValue ? stance.Value.ToString() : "-");
+            if (builders > 0 && combat == 0)
+                return builders == 1
+                    ? "Builder selected — B/N/M/O build, RMB gather"
+                    : $"{builders} builders selected — B/N/M/O build, RMB gather";
+            if (combat > 0 && builders == 0)
+                return $"{combat} combat unit{(combat == 1 ? "" : "s")} selected — S stop, P patrol, A attack-move  stance {stanceLabel}";
+            if (builders > 0 && combat > 0)
+                return $"{total} units ({builders} builders, {combat} combat) — build + combat orders  stance {stanceLabel}";
+            return $"{total} units selected";
+        }
+
+        private string BuildHotkeyHint()
+        {
+            if (orders == null)
+                return string.Empty;
+            if (orders.IsPlaceMode)
+                return "LMB place  Esc/RMB cancel  Shift keep placing";
+            if (orders.HasBuilderSelected)
+                return "B barracks  N tower  M wall  O outpost  . idle workers";
+            if (orders.HasCombatUnitSelected)
+                return "S stop  P patrol  A attack-move  F/G/H stance  Ctrl+1-9 groups";
+            if (orders.SelectedBuilding.HasValue)
+                return "Train buttons / T  X cancel production  RMB set rally";
+            return ". idle workers  Ctrl+1-9 groups  R reselect all";
         }
 
         private static string ShortName(string defId)

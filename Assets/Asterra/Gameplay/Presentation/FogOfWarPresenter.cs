@@ -88,7 +88,11 @@ namespace Asterra.Gameplay.Presentation
                 var b = buildings[i];
                 if (b.Owner != local || b.State == BuildingState.Destroyed)
                     continue;
-                float radius = AsterraMeshLibrary.IsKeep(b.DefinitionId) ? keepSightRadius : buildingSightRadius;
+                float radius = buildingSightRadius;
+                if (b.SightRadius > 1f)
+                    radius = b.SightRadius;
+                else if (AsterraMeshLibrary.IsKeep(b.DefinitionId))
+                    radius = keepSightRadius;
                 _visionCenters.Add(new Vector2(b.X, b.Z));
                 _visionRadii.Add(radius);
             }

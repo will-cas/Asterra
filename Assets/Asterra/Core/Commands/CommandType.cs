@@ -13,5 +13,7 @@ namespace Asterra.Core
         SetRally = 9,
         CancelProduction = 10,
         AttackMove = 11,
+        Stop = 12,
+        Patrol = 13,
     }
 }

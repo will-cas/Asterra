@@ -36,7 +36,24 @@ namespace Asterra.Gameplay.Presentation
         {
             if (IsKeep(definitionId))
                 return GetOrCreate("building_keep", BuildKeep);
+            if (!string.IsNullOrEmpty(definitionId))
+            {
+                if (definitionId.Contains("tower") || definitionId.Contains("watchtower"))
+                    return GetOrCreate("building_tower", BuildTower);
+                if (definitionId.Contains("palisade") || definitionId.Contains("wall"))
+                    return GetOrCreate("building_wall", BuildWall);
+                if (definitionId.Contains("outpost"))
+                    return GetOrCreate("building_outpost", BuildOutpost);
+            }
+
             return GetOrCreate("building_producer", BuildProducer);
+        }
+
+        public static Mesh GetResourceMesh(ResourceType type)
+        {
+            return type == ResourceType.Gold
+                ? GetOrCreate("resource_gold", BuildGoldNugget)
+                : GetOrCreate("resource_timber", BuildTimberLog);
         }
 
         public static bool IsKeep(string definitionId)
@@ -113,6 +130,13 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
+        public static Color ResourceColor(ResourceType type)
+        {
+            return type == ResourceType.Gold
+                ? new Color(0.98f, 0.84f, 0.18f)
+                : new Color(0.48f, 0.3f, 0.14f);
+        }
+
         private static Mesh GetOrCreate(string key, System.Func<Mesh> builder)
         {
             if (Cache.TryGetValue(key, out var mesh) && mesh != null)
@@ -123,87 +147,168 @@ namespace Asterra.Gameplay.Presentation
             return mesh;
         }
 
+        // --- Units: readable silhouettes at RTS camera distance ---
+
         private static Mesh BuildMilitia()
         {
+            // Compact infantry with shield + short spear.
             return Combine(
-                Box(0, 0, 0, 0.7f, 1.4f, 0.5f),
-                Box(0, 1.4f, 0, 0.45f, 0.45f, 0.45f),
-                Box(0.45f, 0.7f, 0, 0.15f, 0.15f, 1.2f));
+                Box(0, 0, 0, 0.75f, 1.35f, 0.55f),
+                Box(0, 1.35f, 0, 0.48f, 0.48f, 0.48f),
+                Box(-0.55f, 0.55f, 0.05f, 0.55f, 0.7f, 0.12f),
+                Box(0.5f, 0.75f, 0, 0.14f, 0.14f, 1.35f));
         }
 
         private static Mesh BuildBuilder()
         {
+            // Worker with hammer / tool silhouette.
             return Combine(
-                Box(0, 0, 0, 0.65f, 1.2f, 0.5f),
-                Box(0, 1.2f, 0, 0.4f, 0.4f, 0.4f),
-                Box(0.55f, 0.55f, 0, 0.9f, 0.18f, 0.18f),
-                Box(0.95f, 0.55f, 0, 0.25f, 0.45f, 0.25f));
+                Box(0, 0, 0, 0.7f, 1.15f, 0.55f),
+                Box(0, 1.15f, 0, 0.42f, 0.42f, 0.42f),
+                Box(0.7f, 0.55f, 0, 1.05f, 0.16f, 0.16f),
+                Box(1.15f, 0.55f, 0, 0.35f, 0.55f, 0.28f),
+                Box(-0.45f, 0.35f, 0.2f, 0.35f, 0.35f, 0.35f));
         }
 
         private static Mesh BuildArcher()
         {
+            // Slim body + vertical bow + horizontal string.
             return Combine(
-                Box(0, 0, 0, 0.55f, 1.35f, 0.45f),
-                Box(0, 1.35f, 0, 0.4f, 0.4f, 0.4f),
-                Box(0.05f, 0.85f, 0.35f, 0.12f, 0.12f, 1.1f),
-                Box(0.05f, 0.85f, -0.35f, 0.55f, 0.08f, 0.08f));
+                Box(0, 0, 0, 0.5f, 1.4f, 0.42f),
+                Box(0, 1.4f, 0, 0.38f, 0.38f, 0.38f),
+                Box(0.05f, 0.85f, 0.55f, 0.1f, 1.15f, 0.1f),
+                Box(0.05f, 0.85f, -0.55f, 0.1f, 1.15f, 0.1f),
+                Box(0.05f, 1.35f, 0, 0.08f, 0.08f, 1.1f),
+                Box(0.05f, 0.35f, 0, 0.08f, 0.08f, 1.1f),
+                Box(0.45f, 0.9f, 0, 0.55f, 0.08f, 0.08f));
         }
 
         private static Mesh BuildCavalry()
         {
+            // Longer horse body + rider.
             return Combine(
-                Box(0, 0, 0, 1.1f, 0.7f, 0.55f),
-                Box(0, 0.7f, 0, 0.55f, 0.9f, 0.45f),
-                Box(0, 1.55f, 0, 0.4f, 0.35f, 0.4f),
-                Box(0.55f, 0.35f, 0, 0.35f, 0.2f, 0.2f));
+                Box(0, 0.05f, 0, 1.55f, 0.65f, 0.55f),
+                Box(0.7f, 0.55f, 0, 0.4f, 0.4f, 0.4f),
+                Box(-0.15f, 0.7f, 0, 0.55f, 0.85f, 0.42f),
+                Box(-0.15f, 1.5f, 0, 0.38f, 0.35f, 0.38f),
+                Box(0.95f, 0.15f, 0, 0.25f, 0.2f, 0.2f),
+                Box(-0.7f, 0.0f, 0.22f, 0.18f, 0.35f, 0.18f),
+                Box(-0.7f, 0.0f, -0.22f, 0.18f, 0.35f, 0.18f),
+                Box(0.55f, 0.0f, 0.22f, 0.18f, 0.35f, 0.18f),
+                Box(0.55f, 0.0f, -0.22f, 0.18f, 0.35f, 0.18f));
         }
 
         private static Mesh BuildSiege()
         {
+            // Wagon chassis, wheels, and angled arm.
             return Combine(
-                Box(0, 0, 0, 1.4f, 0.55f, 0.9f),
-                Box(0, 0.55f, 0, 0.7f, 0.7f, 0.7f),
-                Box(0.55f, 0.9f, 0, 1.2f, 0.18f, 0.18f),
-                Box(-0.55f, 0.15f, 0.5f, 0.25f, 0.25f, 0.25f),
-                Box(-0.55f, 0.15f, -0.5f, 0.25f, 0.25f, 0.25f),
-                Box(0.55f, 0.15f, 0.5f, 0.25f, 0.25f, 0.25f),
-                Box(0.55f, 0.15f, -0.5f, 0.25f, 0.25f, 0.25f));
+                Box(0, 0.35f, 0, 1.6f, 0.5f, 1.0f),
+                Box(0, 0.85f, 0, 0.75f, 0.65f, 0.75f),
+                Box(0.35f, 1.15f, 0, 1.35f, 0.16f, 0.16f),
+                Box(0.95f, 1.25f, 0, 0.35f, 0.35f, 0.35f),
+                Box(-0.65f, 0.0f, 0.55f, 0.35f, 0.35f, 0.18f),
+                Box(-0.65f, 0.0f, -0.55f, 0.35f, 0.35f, 0.18f),
+                Box(0.65f, 0.0f, 0.55f, 0.35f, 0.35f, 0.18f),
+                Box(0.65f, 0.0f, -0.55f, 0.35f, 0.35f, 0.18f));
         }
 
         private static Mesh BuildDryad()
         {
             return Combine(
                 Box(0, 0, 0, 0.55f, 1.6f, 0.45f),
-                Box(0, 1.55f, 0, 0.7f, 0.35f, 0.7f));
+                Box(0, 1.55f, 0, 0.85f, 0.4f, 0.85f),
+                Box(0, 1.9f, 0, 0.45f, 0.35f, 0.45f));
         }
 
         private static Mesh BuildEmberRaider()
         {
             return Combine(
-                Box(0, 0, 0, 0.8f, 1.3f, 0.55f),
-                Box(0, 1.25f, 0, 0.4f, 0.4f, 0.4f),
-                Box(-0.55f, 1.0f, 0, 0.35f, 0.25f, 0.5f),
-                Box(0.55f, 1.0f, 0, 0.35f, 0.25f, 0.5f));
+                Box(0, 0, 0, 0.85f, 1.3f, 0.55f),
+                Box(0, 1.25f, 0, 0.42f, 0.42f, 0.42f),
+                Box(-0.6f, 1.0f, 0, 0.4f, 0.28f, 0.55f),
+                Box(0.6f, 1.0f, 0, 0.4f, 0.28f, 0.55f));
         }
+
+        // --- Buildings ---
 
         private static Mesh BuildKeep()
         {
+            // Wide base keep with corner battlements — largest silhouette.
             return Combine(
-                Box(0, 0, 0, 6f, 3f, 6f),
-                Box(0, 3f, 0, 3.5f, 5f, 3.5f),
-                Box(-1.5f, 8f, -1.5f, 1.2f, 1.2f, 1.2f),
-                Box(1.5f, 8f, -1.5f, 1.2f, 1.2f, 1.2f),
-                Box(-1.5f, 8f, 1.5f, 1.2f, 1.2f, 1.2f),
-                Box(1.5f, 8f, 1.5f, 1.2f, 1.2f, 1.2f));
+                Box(0, 0, 0, 7f, 3.2f, 7f),
+                Box(0, 3.2f, 0, 4.2f, 5.5f, 4.2f),
+                Box(0, 8.5f, 0, 2.2f, 1.8f, 2.2f),
+                Box(-2.0f, 8.7f, -2.0f, 1.4f, 1.6f, 1.4f),
+                Box(2.0f, 8.7f, -2.0f, 1.4f, 1.6f, 1.4f),
+                Box(-2.0f, 8.7f, 2.0f, 1.4f, 1.6f, 1.4f),
+                Box(2.0f, 8.7f, 2.0f, 1.4f, 1.6f, 1.4f));
         }
 
         private static Mesh BuildProducer()
         {
+            // Barracks / hall: wide roofed hall with twin chimneys.
             return Combine(
-                Box(0, 0, 0, 5f, 2.2f, 4f),
-                Box(0, 2.2f, 0, 3f, 1.5f, 3f),
-                Box(-2.2f, 0, -1.5f, 1f, 3.5f, 1f),
-                Box(2.2f, 0, -1.5f, 1f, 3.5f, 1f));
+                Box(0, 0, 0, 5.5f, 2.4f, 4.4f),
+                Box(0, 2.4f, 0, 4.2f, 1.2f, 3.4f),
+                Box(0, 3.5f, 0, 5.8f, 0.45f, 0.9f),
+                Box(-2.4f, 0, -1.6f, 1.1f, 4.2f, 1.1f),
+                Box(2.4f, 0, -1.6f, 1.1f, 4.2f, 1.1f),
+                Box(0, 0.2f, 2.3f, 1.6f, 2.0f, 0.35f));
+        }
+
+        private static Mesh BuildTower()
+        {
+            // Tall thin watchtower with lookout cupola.
+            return Combine(
+                Box(0, 0, 0, 2.6f, 1.6f, 2.6f),
+                Box(0, 1.6f, 0, 1.7f, 8.5f, 1.7f),
+                Box(0, 10.0f, 0, 2.6f, 1.0f, 2.6f),
+                Box(0, 11.0f, 0, 1.2f, 1.4f, 1.2f),
+                Box(0, 12.3f, 0, 0.35f, 1.2f, 0.35f));
+        }
+
+        private static Mesh BuildWall()
+        {
+            // Flat palisade segment with stake tops.
+            return Combine(
+                Box(0, 0, 0, 11f, 3.6f, 1.4f),
+                Box(-4.5f, 3.6f, 0, 0.9f, 1.4f, 0.9f),
+                Box(-1.5f, 3.6f, 0, 0.9f, 1.6f, 0.9f),
+                Box(1.5f, 3.6f, 0, 0.9f, 1.4f, 0.9f),
+                Box(4.5f, 3.6f, 0, 0.9f, 1.6f, 0.9f));
+        }
+
+        private static Mesh BuildOutpost()
+        {
+            // Medium post with flag-like top.
+            return Combine(
+                Box(0, 0, 0, 3.8f, 1.8f, 3.8f),
+                Box(0, 1.8f, 0, 2.4f, 2.8f, 2.4f),
+                Box(0, 4.6f, 0, 0.4f, 3.2f, 0.4f),
+                Box(0.7f, 6.8f, 0, 1.5f, 0.9f, 0.12f),
+                Box(0.15f, 7.4f, 0, 0.25f, 0.25f, 0.25f));
+        }
+
+        // --- Resources ---
+
+        private static Mesh BuildGoldNugget()
+        {
+            // Stacked / chunky gold crystals.
+            return Combine(
+                Box(0, 0, 0, 1.4f, 0.9f, 1.1f),
+                Box(0.45f, 0.7f, 0.15f, 0.9f, 0.85f, 0.75f),
+                Box(-0.4f, 0.55f, -0.25f, 0.7f, 0.7f, 0.65f),
+                Box(0.1f, 1.35f, 0, 0.55f, 0.55f, 0.5f));
+        }
+
+        private static Mesh BuildTimberLog()
+        {
+            // Horizontal log + stump.
+            return Combine(
+                Box(0, 0.35f, 0, 2.4f, 0.7f, 0.7f),
+                Box(-0.95f, 0.0f, 0, 0.55f, 0.7f, 0.55f),
+                Box(0.95f, 0.0f, 0, 0.55f, 0.7f, 0.55f),
+                Box(0.2f, 0.85f, 0.15f, 1.4f, 0.45f, 0.45f));
         }
 
         private static Mesh Combine(params MeshPart[] parts)

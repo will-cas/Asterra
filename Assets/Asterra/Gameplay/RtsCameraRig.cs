@@ -15,6 +15,19 @@ namespace Asterra.Gameplay
         [SerializeField] private float defaultHeight = 240f;
         [SerializeField] private float defaultBack = 42f;
 
+        /// <summary>Ground point the camera is currently looking at.</summary>
+        public Vector3 LookAtPoint => lookAt;
+
+        /// <summary>Current camera height above the ground plane.</summary>
+        public float CameraHeight =>
+            rigCamera != null ? rigCamera.transform.position.y : defaultHeight;
+
+        public void GetFocusXZ(out float x, out float z)
+        {
+            x = lookAt.x;
+            z = lookAt.z;
+        }
+
         private void Awake()
         {
             if (rigCamera == null)

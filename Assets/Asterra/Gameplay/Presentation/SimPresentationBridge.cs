@@ -21,10 +21,16 @@ namespace Asterra.Gameplay
         private readonly Dictionary<uint, EntityView> _buildingViews = new();
         private readonly Dictionary<uint, ResourceNodeView> _resourceViews = new();
         private System.Func<IReadOnlyList<SimEntityId>> _getSelected;
+        private System.Func<SimEntityId?> _getSelectedBuilding;
 
         public void BindSelection(System.Func<IReadOnlyList<SimEntityId>> getSelected)
         {
             _getSelected = getSelected;
+        }
+
+        public void BindSelectedBuilding(System.Func<SimEntityId?> getSelectedBuilding)
+        {
+            _getSelectedBuilding = getSelectedBuilding;
         }
 
         public bool TryGetEntityView(SimEntityId id, out EntityView view)
@@ -175,17 +181,23 @@ namespace Asterra.Gameplay
 
         private ResourceNodeView SpawnResource(ResourceSnapshot snap)
         {
-            bool gold = snap.Type == ResourceType.Gold;
-            var go = GameObject.CreatePrimitive(gold ? PrimitiveType.Cube : PrimitiveType.Cylinder);
-            go.name = $"Resource_{snap.Id.Value}";
+            var go = new GameObject($"Resource_{snap.Id.Value}");
             go.transform.SetParent(resourceRoot, false);
-            go.transform.localScale = gold ? new Vector3(8f, 8f, 8f) : new Vector3(7f, 5f, 7f);
 
-            var color = gold
-                ? new Color(0.95f, 0.82f, 0.2f)
-                : new Color(0.45f, 0.28f, 0.14f);
-            var rend = go.GetComponent<Renderer>();
-            rend.sharedMaterial = CreateColorMaterial(color);
+            var filter = go.AddComponent<MeshFilter>();
+            filter.sharedMesh = AsterraMeshLibrary.GetResourceMesh(snap.Type);
+            var rend = go.AddComponent<MeshRenderer>();
+            rend.sharedMaterial = CreateColorMaterial(AsterraMeshLibrary.ResourceColor(snap.Type));
+
+            // Gold nugget vs timber log: different world scales for silhouette.
+            bool gold = snap.Type == ResourceType.Gold;
+            go.transform.localScale = gold
+                ? new Vector3(7.5f, 7.5f, 7.5f)
+                : new Vector3(6.5f, 6.5f, 6.5f);
+
+            var sphere = go.AddComponent<SphereCollider>();
+            sphere.center = new Vector3(0f, 0.6f, 0f);
+            sphere.radius = gold ? 1.2f : 1.4f;
 
             var view = go.AddComponent<ResourceNodeView>();
             view.Initialize(snap.Id, snap.Type);
@@ -194,20 +206,37 @@ namespace Asterra.Gameplay
 
         private void RefreshSelectionHighlights()
         {
-            if (_getSelected == null)
-                return;
-            var selected = _getSelected();
             var selectedSet = new HashSet<uint>();
-            if (selected != null)
+            if (_getSelected != null)
             {
-                for (int i = 0; i < selected.Count; i++)
-                    selectedSet.Add(selected[i].Value);
+                var selected = _getSelected();
+                if (selected != null)
+                {
+                    for (int i = 0; i < selected.Count; i++)
+                        selectedSet.Add(selected[i].Value);
+                }
+            }
+
+            uint selectedBuilding = 0;
+            bool hasBuilding = false;
+            if (_getSelectedBuilding != null)
+            {
+                var bid = _getSelectedBuilding();
+                if (bid.HasValue)
+                {
+                    selectedBuilding = bid.Value.Value;
+                    hasBuilding = true;
+                }
             }
 
             foreach (var pair in _unitViews)
                 pair.Value.SetSelected(selectedSet.Contains(pair.Key));
             foreach (var pair in _buildingViews)
-                pair.Value.SetSelected(selectedSet.Contains(pair.Key));
+            {
+                bool selected = selectedSet.Contains(pair.Key)
+                                || (hasBuilding && pair.Key == selectedBuilding);
+                pair.Value.SetSelected(selected);
+            }
         }
 
         private static EntityView SpawnEntity(

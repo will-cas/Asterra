@@ -16,6 +16,9 @@ namespace Asterra.Gameplay.Content
         public string RangedUnitId;
         public string CavalryUnitId;
         public string SiegeUnitId;
+        public string TowerBuildingId;
+        public string WallBuildingId;
+        public string OutpostBuildingId;
         public string BasicUpgradeId;
         public string LoreBlurb;
     }
@@ -38,6 +41,11 @@ namespace Asterra.Gameplay.Content
         public const string BarracksId = "building_barracks";
         public const string IronKeepId = "building_iron_keep";
         public const string MilitiaTrainingId = "upgrade_militia_training";
+
+        // Shared fortifications
+        public const string WatchtowerId = "building_watchtower";
+        public const string PalisadeId = "building_palisade";
+        public const string OutpostId = "building_outpost";
 
         // Verdant Court
         public const string DryadId = "unit_dryad";
@@ -71,6 +79,9 @@ namespace Asterra.Gameplay.Content
             RangedUnitId = IronArcherId,
             CavalryUnitId = IronKnightId,
             SiegeUnitId = IronCatapultId,
+            TowerBuildingId = WatchtowerId,
+            WallBuildingId = PalisadeId,
+            OutpostBuildingId = OutpostId,
             BasicUpgradeId = MilitiaTrainingId,
             LoreBlurb = "Disciplined steel and drilled infantry.",
         };
@@ -87,6 +98,9 @@ namespace Asterra.Gameplay.Content
             RangedUnitId = VerdantArcherId,
             CavalryUnitId = VerdantKnightId,
             SiegeUnitId = VerdantCatapultId,
+            TowerBuildingId = WatchtowerId,
+            WallBuildingId = PalisadeId,
+            OutpostBuildingId = OutpostId,
             BasicUpgradeId = WildGrowthId,
             LoreBlurb = "Living wood and swift skirmishers.",
         };
@@ -103,6 +117,9 @@ namespace Asterra.Gameplay.Content
             RangedUnitId = AshenArcherId,
             CavalryUnitId = AshenKnightId,
             SiegeUnitId = AshenCatapultId,
+            TowerBuildingId = WatchtowerId,
+            WallBuildingId = PalisadeId,
+            OutpostBuildingId = OutpostId,
             BasicUpgradeId = EmberRitesId,
             LoreBlurb = "Raid doctrine and scorched-earth forges.",
         };
@@ -155,6 +172,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 50,
                 TrainSeconds = 4f,
                 Role = UnitRole.Infantry,
+                Armor = 1f,
             });
             registry.Register(new UnitDefData
             {
@@ -185,6 +203,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
                 Role = UnitRole.Ranged,
+                ProjectileSpeed = 48f,
             });
             registry.Register(new UnitDefData
             {
@@ -198,6 +217,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 105,
                 TrainSeconds = 6f,
                 Role = UnitRole.Cavalry,
+                Armor = 2f,
             });
             registry.Register(new UnitDefData
             {
@@ -212,6 +232,8 @@ namespace Asterra.Gameplay.Content
                 TrainSeconds = 9.5f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.5f,
+                Armor = 1f,
+                ProjectileSpeed = 32f,
             });
             registry.Register(new BuildingDefData
             {
@@ -223,6 +245,8 @@ namespace Asterra.Gameplay.Content
                 BuildSeconds = 6f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Producer,
+                SightRadius = 85f,
                 TrainableUnitIds = new[] { MilitiaId, IronArcherId, IronKnightId, IronCatapultId },
             });
             registry.Register(new BuildingDefData
@@ -232,6 +256,8 @@ namespace Asterra.Gameplay.Content
                 MaxHealth = 1200f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Keep,
+                SightRadius = 160f,
                 TrainableUnitIds = new[] { IronBuilderId },
             });
             registry.Register(new UpgradeDefData
@@ -256,6 +282,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 55,
                 TrainSeconds = 3.5f,
                 Role = UnitRole.Infantry,
+                Armor = 1f,
             });
             registry.Register(new UnitDefData
             {
@@ -286,6 +313,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 55,
                 TrainSeconds = 4f,
                 Role = UnitRole.Ranged,
+                ProjectileSpeed = 52f,
             });
             registry.Register(new UnitDefData
             {
@@ -299,6 +327,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 100,
                 TrainSeconds = 5.5f,
                 Role = UnitRole.Cavalry,
+                Armor = 2f,
             });
             registry.Register(new UnitDefData
             {
@@ -313,6 +342,8 @@ namespace Asterra.Gameplay.Content
                 TrainSeconds = 9f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.2f,
+                Armor = 1f,
+                ProjectileSpeed = 30f,
             });
             registry.Register(new BuildingDefData
             {
@@ -324,6 +355,8 @@ namespace Asterra.Gameplay.Content
                 BuildSeconds = 5f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Producer,
+                SightRadius = 85f,
                 TrainableUnitIds = new[] { DryadId, VerdantArcherId, VerdantKnightId, VerdantCatapultId },
             });
             registry.Register(new BuildingDefData
@@ -333,6 +366,8 @@ namespace Asterra.Gameplay.Content
                 MaxHealth = 1100f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Keep,
+                SightRadius = 160f,
                 TrainableUnitIds = new[] { VerdantBuilderId },
             });
             registry.Register(new UpgradeDefData
@@ -357,6 +392,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
                 Role = UnitRole.Infantry,
+                Armor = 1f,
             });
             registry.Register(new UnitDefData
             {
@@ -387,6 +423,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 65,
                 TrainSeconds = 4.8f,
                 Role = UnitRole.Ranged,
+                ProjectileSpeed = 50f,
             });
             registry.Register(new UnitDefData
             {
@@ -400,6 +437,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 110,
                 TrainSeconds = 6.2f,
                 Role = UnitRole.Cavalry,
+                Armor = 2f,
             });
             registry.Register(new UnitDefData
             {
@@ -414,6 +452,8 @@ namespace Asterra.Gameplay.Content
                 TrainSeconds = 10f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.8f,
+                Armor = 1f,
+                ProjectileSpeed = 28f,
             });
             registry.Register(new BuildingDefData
             {
@@ -425,6 +465,8 @@ namespace Asterra.Gameplay.Content
                 BuildSeconds = 7f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Producer,
+                SightRadius = 85f,
                 TrainableUnitIds = new[] { EmberRaiderId, AshenArcherId, AshenKnightId, AshenCatapultId },
             });
             registry.Register(new BuildingDefData
@@ -434,6 +476,8 @@ namespace Asterra.Gameplay.Content
                 MaxHealth = 1250f,
                 CanProduce = true,
                 QueueCapacity = 3,
+                Kind = BuildingKind.Keep,
+                SightRadius = 160f,
                 TrainableUnitIds = new[] { AshenBuilderId },
             });
             registry.Register(new UpgradeDefData
@@ -443,6 +487,51 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 160,
                 TrainTimeMultiplier = 0.85f,
                 UnitDamageMultiplier = 1.35f,
+            });
+
+            // Shared fortifications / economy
+            registry.Register(new BuildingDefData
+            {
+                Id = WatchtowerId,
+                DisplayName = "Watchtower",
+                MaxHealth = 450f,
+                GoldCost = 90,
+                TimberCost = 70,
+                BuildSeconds = 5f,
+                FootprintX = 5f,
+                FootprintZ = 5f,
+                Kind = BuildingKind.Tower,
+                AttackDamage = 14f,
+                AttackRange = 22f,
+                AttackCooldown = 1.4f,
+                SightRadius = 150f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = PalisadeId,
+                DisplayName = "Palisade",
+                MaxHealth = 700f,
+                GoldCost = 40,
+                TimberCost = 90,
+                BuildSeconds = 4f,
+                FootprintX = 14f,
+                FootprintZ = 4f,
+                Kind = BuildingKind.Wall,
+                SightRadius = 40f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = OutpostId,
+                DisplayName = "Outpost",
+                MaxHealth = 380f,
+                GoldCost = 110,
+                TimberCost = 50,
+                BuildSeconds = 5.5f,
+                FootprintX = 6f,
+                FootprintZ = 6f,
+                Kind = BuildingKind.Outpost,
+                SightRadius = 130f,
+                GoldPerSecond = 4,
             });
         }
     }

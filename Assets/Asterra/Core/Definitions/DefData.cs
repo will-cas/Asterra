@@ -9,6 +9,16 @@ namespace Asterra.Core
         Builder = 4,
     }
 
+    public enum BuildingKind : byte
+    {
+        Generic = 0,
+        Keep = 1,
+        Producer = 2,
+        Tower = 3,
+        Wall = 4,
+        Outpost = 5,
+    }
+
     /// <summary>Plain-data unit stats used by the lockstep sim (SO wrappers copy into these).</summary>
     public sealed class UnitDefData
     {
@@ -27,6 +37,8 @@ namespace Asterra.Core
         public float GatherRate = 4f;
         public UnitRole Role = UnitRole.Infantry;
         public float BuildingDamageMultiplier = 1f;
+        public float Armor;
+        public float ProjectileSpeed; // 0 = hitscan
     }
 
     public sealed class BuildingDefData
@@ -42,6 +54,12 @@ namespace Asterra.Core
         public bool CanProduce;
         public string[] TrainableUnitIds = System.Array.Empty<string>();
         public int QueueCapacity = 3;
+        public BuildingKind Kind = BuildingKind.Generic;
+        public float AttackDamage;
+        public float AttackRange;
+        public float AttackCooldown = 1.5f;
+        public float SightRadius;
+        public int GoldPerSecond;
     }
 
     public sealed class UpgradeDefData
@@ -51,5 +69,45 @@ namespace Asterra.Core
         public int GoldCost = 200;
         public float TrainTimeMultiplier = 1f;
         public float UnitDamageMultiplier = 1f;
+    }
+
+    /// <summary>Deterministic role vs role / building damage multipliers.</summary>
+    public static class CombatMath
+    {
+        public static float RoleMultiplier(UnitRole attacker, UnitRole defender)
+        {
+            switch (attacker)
+            {
+                case UnitRole.Infantry:
+                    return defender == UnitRole.Cavalry ? 0.85f
+                        : defender == UnitRole.Siege ? 1.25f
+                        : 1f;
+                case UnitRole.Ranged:
+                    return defender == UnitRole.Infantry ? 1.2f
+                        : defender == UnitRole.Cavalry ? 0.75f
+                        : defender == UnitRole.Siege ? 1.15f
+                        : 1f;
+                case UnitRole.Cavalry:
+                    return defender == UnitRole.Ranged ? 1.35f
+                        : defender == UnitRole.Siege ? 1.2f
+                        : defender == UnitRole.Infantry ? 0.9f
+                        : 1f;
+                case UnitRole.Siege:
+                    return defender == UnitRole.Infantry ? 0.7f
+                        : defender == UnitRole.Cavalry ? 0.65f
+                        : 1f;
+                case UnitRole.Builder:
+                    return 0.25f;
+                default:
+                    return 1f;
+            }
+        }
+
+        public static float ApplyArmor(float damage, float armor)
+        {
+            if (armor <= 0f)
+                return damage;
+            return System.Math.Max(1f, damage - armor);
+        }
     }
 }

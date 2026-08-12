@@ -92,6 +92,20 @@ namespace Asterra.Core
                         TargetX = 50f,
                         TargetZ = -20f,
                     },
+                    new StopCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        UnitIds = new[] { new SimEntityId(10) },
+                    },
+                    new PatrolCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        UnitIds = new[] { new SimEntityId(10) },
+                        TargetX = 80f,
+                        TargetZ = 12f,
+                    },
                 },
             };
 

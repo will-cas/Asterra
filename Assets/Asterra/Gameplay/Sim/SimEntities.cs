@@ -26,6 +26,8 @@ namespace Asterra.Gameplay.Sim
         public float GatherRate;
         public float BuildingDamageMultiplier;
         public UnitRole Role;
+        public float Armor;
+        public float ProjectileSpeed;
 
         public float? MoveTargetX;
         public float? MoveTargetZ;
@@ -35,6 +37,12 @@ namespace Asterra.Gameplay.Sim
         public int CarryAmount;
         public bool ReturningToDeposit;
         public bool AttackMoving;
+        public bool Patrolling;
+        public float PatrolAX;
+        public float PatrolAZ;
+        public float PatrolBX;
+        public float PatrolBZ;
+        public bool PatrolToB = true;
 
         public SimUnit(SimEntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
         {
@@ -53,6 +61,8 @@ namespace Asterra.Gameplay.Sim
             GatherRate = def.GatherRate > 0f ? def.GatherRate : 4f;
             BuildingDamageMultiplier = def.BuildingDamageMultiplier > 0f ? def.BuildingDamageMultiplier : 1f;
             Role = def.IsBuilder ? UnitRole.Builder : def.Role;
+            Armor = def.Armor;
+            ProjectileSpeed = def.ProjectileSpeed;
             X = x;
             Z = z;
         }
@@ -60,6 +70,13 @@ namespace Asterra.Gameplay.Sim
         public UnitSnapshot ToSnapshot()
         {
             bool hasCarry = CarryAmount > 0 && CarryType.HasValue;
+            bool idle = IsAlive
+                        && !MoveTargetX.HasValue
+                        && !AttackTargetId.HasValue
+                        && !GatherTargetId.HasValue
+                        && !Patrolling
+                        && !AttackMoving
+                        && !ReturningToDeposit;
             return new UnitSnapshot(
                 Id,
                 Owner,
@@ -72,7 +89,9 @@ namespace Asterra.Gameplay.Sim
                 IsAlive,
                 CarryAmount,
                 hasCarry ? CarryType.Value : ResourceType.Gold,
-                hasCarry);
+                hasCarry,
+                idle,
+                Stance);
         }
     }
 
@@ -103,6 +122,13 @@ namespace Asterra.Gameplay.Sim
         public int QueueCapacity;
         public float? RallyX;
         public float? RallyZ;
+        public BuildingKind Kind;
+        public float AttackDamage;
+        public float AttackRange;
+        public float AttackCooldown;
+        public float AttackCooldownRemaining;
+        public float SightRadius;
+        public int GoldPerSecond;
         public bool IsProducing => !string.IsNullOrEmpty(ProductionUnitDefId);
 
         private readonly bool _canProduce;
@@ -127,10 +153,18 @@ namespace Asterra.Gameplay.Sim
             FootprintRadius = MathF.Max(def.FootprintX, def.FootprintZ) * 0.65f;
             if (FootprintRadius < 6f)
                 FootprintRadius = 6f;
+            if (def.Kind == BuildingKind.Wall)
+                FootprintRadius = MathF.Max(FootprintRadius, 10f);
             _canProduce = def.CanProduce;
             TrainableUnitIds = def.TrainableUnitIds ?? System.Array.Empty<string>();
             QueueCapacity = def.QueueCapacity > 0 ? System.Math.Min(def.QueueCapacity, MaxQueue) : 3;
             BuildSecondsTotal = def.BuildSeconds;
+            Kind = def.Kind;
+            AttackDamage = def.AttackDamage;
+            AttackRange = def.AttackRange;
+            AttackCooldown = def.AttackCooldown > 0f ? def.AttackCooldown : 1.5f;
+            SightRadius = def.SightRadius;
+            GoldPerSecond = def.GoldPerSecond;
             if (startActive)
             {
                 State = BuildingState.Active;
@@ -167,10 +201,15 @@ namespace Asterra.Gameplay.Sim
                 prodProgress,
                 QueueCount + (IsProducing ? 1 : 0),
                 QueueCount > 0 ? Queue[0] : null,
+                QueueCount > 1 ? Queue[1] : null,
+                QueueCount > 2 ? Queue[2] : null,
+                QueueCount > 3 ? Queue[3] : null,
                 RallyX ?? (X + 18f),
                 RallyZ ?? Z,
                 RallyX.HasValue,
-                buildProgress);
+                buildProgress,
+                SightRadius,
+                Kind);
         }
     }
 

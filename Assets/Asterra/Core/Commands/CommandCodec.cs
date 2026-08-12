@@ -141,6 +141,16 @@ namespace Asterra.Core
                     WriteQuantized(writer, attackMove.TargetX);
                     WriteQuantized(writer, attackMove.TargetZ);
                     break;
+                case StopCommand stop:
+                    writer.Write((byte)CommandType.Stop);
+                    WriteEntityIds(writer, stop.UnitIds);
+                    break;
+                case PatrolCommand patrol:
+                    writer.Write((byte)CommandType.Patrol);
+                    WriteEntityIds(writer, patrol.UnitIds);
+                    WriteQuantized(writer, patrol.TargetX);
+                    WriteQuantized(writer, patrol.TargetZ);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -228,6 +238,20 @@ namespace Asterra.Core
                     break;
                 case CommandType.AttackMove:
                     command = new AttackMoveCommand
+                    {
+                        UnitIds = ReadEntityIds(reader),
+                        TargetX = ReadQuantized(reader),
+                        TargetZ = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.Stop:
+                    command = new StopCommand
+                    {
+                        UnitIds = ReadEntityIds(reader),
+                    };
+                    break;
+                case CommandType.Patrol:
+                    command = new PatrolCommand
                     {
                         UnitIds = ReadEntityIds(reader),
                         TargetX = ReadQuantized(reader),

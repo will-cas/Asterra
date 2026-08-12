@@ -16,9 +16,12 @@ namespace Asterra.Gameplay.Presentation
         public bool IsRevealed { get; private set; } = true;
 
         private Transform _selectionRing;
+        private Transform _selectionRingInner;
         private Renderer _renderer;
+        private Renderer _teamBandRenderer;
         private Collider _pickCollider;
         private Color _baseColor = Color.gray;
+        private Color _factionColor = Color.gray;
         private float _hitFlashUntil;
         private Transform _hpRoot;
         private Transform _hpFill;
@@ -33,17 +36,17 @@ namespace Asterra.Gameplay.Presentation
             DefinitionId = definitionId;
 
             float visualScale = isUnit ? UnitVisualScale : BuildingVisualScale;
+            _factionColor = AsterraMeshLibrary.FactionColor(factionIndex);
             if (isUnit)
             {
                 var role = AsterraMeshLibrary.InferRole(definitionId);
                 visualScale *= AsterraMeshLibrary.RoleScaleMultiplier(role);
-                Color faction = AsterraMeshLibrary.FactionColor(factionIndex);
                 Color accent = AsterraMeshLibrary.RoleAccent(role);
-                _baseColor = Color.Lerp(faction, accent, 0.35f);
+                _baseColor = Color.Lerp(_factionColor, accent, 0.35f);
             }
             else
             {
-                _baseColor = AsterraMeshLibrary.FactionColor(factionIndex);
+                _baseColor = _factionColor;
             }
 
             transform.localScale = Vector3.one * visualScale;
@@ -62,6 +65,8 @@ namespace Asterra.Gameplay.Presentation
 
             EnsurePickCollider(isUnit, filter.sharedMesh);
             EnsureSelectionRing(isUnit);
+            if (isUnit)
+                EnsureTeamBand();
             EnsureHealthBar(isUnit);
             SetSelected(false);
             SetRevealed(true);
@@ -104,6 +109,8 @@ namespace Asterra.Gameplay.Presentation
         {
             if (_selectionRing != null)
                 _selectionRing.gameObject.SetActive(selected && IsRevealed);
+            if (_selectionRingInner != null)
+                _selectionRingInner.gameObject.SetActive(selected && IsRevealed);
         }
 
         public void SetRevealed(bool revealed)
@@ -111,10 +118,18 @@ namespace Asterra.Gameplay.Presentation
             IsRevealed = revealed;
             if (_renderer != null)
                 _renderer.enabled = revealed;
+            if (_teamBandRenderer != null)
+                _teamBandRenderer.enabled = revealed;
             if (_pickCollider != null)
                 _pickCollider.enabled = revealed;
-            if (!revealed && _selectionRing != null)
-                _selectionRing.gameObject.SetActive(false);
+            if (!revealed)
+            {
+                if (_selectionRing != null)
+                    _selectionRing.gameObject.SetActive(false);
+                if (_selectionRingInner != null)
+                    _selectionRingInner.gameObject.SetActive(false);
+            }
+
             if (_hpRoot != null)
             {
                 float ratio = _maxHealth > 0f ? _health / _maxHealth : 1f;
@@ -152,16 +167,46 @@ namespace Asterra.Gameplay.Presentation
         {
             if (_selectionRing != null)
                 return;
+
+            // Outer bright ring + darker inner disc for readable selection at distance.
+            float outer = isUnit ? 2.8f : 6.2f;
+            float inner = isUnit ? 2.15f : 5.0f;
+
             var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             Object.Destroy(ring.GetComponent<Collider>());
             ring.name = "SelectionRing";
             ring.transform.SetParent(transform, false);
-            ring.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-            float scale = isUnit ? 2.4f : 5.5f;
-            ring.transform.localScale = new Vector3(scale, 0.04f, scale);
-            var rend = ring.GetComponent<Renderer>();
-            rend.sharedMaterial = CreateColorMaterial(new Color(1f, 0.85f, 0.2f, 0.9f));
+            ring.transform.localPosition = new Vector3(0f, 0.03f, 0f);
+            ring.transform.localScale = new Vector3(outer, 0.055f, outer);
+            ring.GetComponent<Renderer>().sharedMaterial = CreateColorMaterial(new Color(1f, 0.92f, 0.2f, 0.95f));
             _selectionRing = ring.transform;
+
+            var hole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            Object.Destroy(hole.GetComponent<Collider>());
+            hole.name = "SelectionRingInner";
+            hole.transform.SetParent(transform, false);
+            hole.transform.localPosition = new Vector3(0f, 0.04f, 0f);
+            hole.transform.localScale = new Vector3(inner, 0.04f, inner);
+            hole.GetComponent<Renderer>().sharedMaterial = CreateColorMaterial(new Color(0.05f, 0.08f, 0.05f, 0.55f));
+            _selectionRingInner = hole.transform;
+        }
+
+        private void EnsureTeamBand()
+        {
+            if (_teamBandRenderer != null)
+                return;
+
+            var band = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Object.Destroy(band.GetComponent<Collider>());
+            band.name = "TeamBand";
+            band.transform.SetParent(transform, false);
+            band.transform.localPosition = new Vector3(0f, 1.05f, 0f);
+            band.transform.localScale = new Vector3(0.95f, 0.18f, 0.55f);
+            _teamBandRenderer = band.GetComponent<Renderer>();
+            // Brighter stripe so faction reads on top of role-tinted body.
+            Color stripe = Color.Lerp(_factionColor, Color.white, 0.35f);
+            stripe.a = 1f;
+            _teamBandRenderer.sharedMaterial = CreateColorMaterial(stripe);
         }
 
         private void EnsureHealthBar(bool isUnit)
@@ -169,14 +214,14 @@ namespace Asterra.Gameplay.Presentation
             if (_hpRoot != null)
                 return;
 
-            float y = isUnit ? 2.2f : 9.5f;
-            float width = isUnit ? 1.4f : 3.2f;
+            float y = isUnit ? 2.35f : 10.5f;
+            float width = isUnit ? 1.5f : 3.4f;
 
             var root = new GameObject("HealthBar");
             root.transform.SetParent(transform, false);
             root.transform.localPosition = new Vector3(0f, y, 0f);
             root.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            root.transform.localScale = new Vector3(width, 0.16f, 1f);
+            root.transform.localScale = new Vector3(width, 0.18f, 1f);
             _hpRoot = root.transform;
 
             var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);

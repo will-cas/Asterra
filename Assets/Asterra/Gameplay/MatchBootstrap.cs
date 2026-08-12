@@ -259,6 +259,8 @@ namespace Asterra.Gameplay
                     gameObject.AddComponent<FogOfWarPresenter>();
                 if (FindFirstObjectByType<CombatFeedbackPresenter>() == null)
                     gameObject.AddComponent<CombatFeedbackPresenter>();
+                if (FindFirstObjectByType<ProjectilePresenter>() == null)
+                    gameObject.AddComponent<ProjectilePresenter>();
                 if (FindFirstObjectByType<MinimapPresenter>() == null)
                     gameObject.AddComponent<MinimapPresenter>();
             }

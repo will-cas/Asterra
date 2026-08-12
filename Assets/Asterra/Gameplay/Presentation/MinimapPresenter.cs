@@ -1,10 +1,9 @@
 using Asterra.Core;
-using Asterra.Gameplay.Content;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Presentation
 {
-    /// <summary>OnGUI minimap: units, buildings, resources, territory; click to pan camera.</summary>
+    /// <summary>OnGUI minimap: units, buildings, resources, territory, camera focus; click to pan.</summary>
     public sealed class MinimapPresenter : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
@@ -39,14 +38,24 @@ namespace Asterra.Gameplay.Presentation
             var local = match.Session.LocalPlayer;
             float half = MapBounds.PlayableHalfExtent;
 
-            // Territory circles
+            // Territory circles colored by controller / contested
             var territories = match.World.Territories;
             for (int i = 0; i < territories.Count; i++)
             {
                 var t = territories[i];
                 Vector2 c = WorldToMinimap(t.X, t.Z, mapRect, half);
                 float r = (t.Radius / (half * 2f)) * size;
-                DrawCircle(c, r, new Color(0.35f, 0.7f, 0.95f, 0.35f));
+                Color fill;
+                if (t.State == TerritoryState.Contested)
+                    fill = new Color(0.95f, 0.75f, 0.2f, 0.4f);
+                else if (t.State == TerritoryState.Controlled && t.HasController && t.Controller == local)
+                    fill = new Color(0.25f, 0.75f, 0.4f, 0.4f);
+                else if (t.State == TerritoryState.Controlled && t.HasController)
+                    fill = new Color(0.9f, 0.25f, 0.2f, 0.4f);
+                else
+                    fill = new Color(0.45f, 0.55f, 0.7f, 0.28f);
+
+                DrawCircle(c, r, fill);
             }
 
             // Resources
@@ -96,6 +105,8 @@ namespace Asterra.Gameplay.Presentation
                 DrawRect(new Rect(p.x - 2f, p.y - 2f, 4f, 4f), color);
             }
 
+            DrawCameraFocus(mapRect, half);
+
             // Click to pan
             var e = Event.current;
             if (e != null && e.type == EventType.MouseDown && e.button == 0 && mapRect.Contains(e.mousePosition))
@@ -110,6 +121,50 @@ namespace Asterra.Gameplay.Presentation
                     _cameraRig.FocusOn(wx, wz);
                 e.Use();
             }
+        }
+
+        private void DrawCameraFocus(Rect mapRect, float half)
+        {
+            if (_cameraRig == null)
+                return;
+
+            _cameraRig.GetFocusXZ(out float fx, out float fz);
+            Vector2 center = WorldToMinimap(fx, fz, mapRect, half);
+
+            // Approximate ground view box from camera height (steep RTS look-down).
+            float height = Mathf.Max(40f, _cameraRig.CameraHeight);
+            float viewHalfWorld = Mathf.Clamp(height * 0.42f, 55f, 220f);
+            float halfPxX = (viewHalfWorld / (half * 2f)) * mapRect.width;
+            float halfPxY = (viewHalfWorld * 0.75f / (half * 2f)) * mapRect.height;
+
+            Rect viewRect = new Rect(
+                center.x - halfPxX,
+                center.y - halfPxY,
+                halfPxX * 2f,
+                halfPxY * 2f);
+            viewRect = ClampRectTo(viewRect, mapRect);
+
+            DrawRect(viewRect, new Color(0.35f, 0.9f, 1f, 0.12f));
+            DrawRectBorder(viewRect, 2f, new Color(0.45f, 0.95f, 1f, 0.95f));
+
+            // Crosshair at look-at
+            const float arm = 7f;
+            const float thick = 2f;
+            var cross = new Color(1f, 0.95f, 0.35f, 1f);
+            DrawRect(new Rect(center.x - arm, center.y - thick * 0.5f, arm * 2f, thick), cross);
+            DrawRect(new Rect(center.x - thick * 0.5f, center.y - arm, thick, arm * 2f), cross);
+            DrawRect(new Rect(center.x - 3f, center.y - 3f, 6f, 6f), new Color(1f, 0.85f, 0.15f, 0.95f));
+        }
+
+        private static Rect ClampRectTo(Rect inner, Rect bounds)
+        {
+            float xMin = Mathf.Max(inner.xMin, bounds.xMin);
+            float yMin = Mathf.Max(inner.yMin, bounds.yMin);
+            float xMax = Mathf.Min(inner.xMax, bounds.xMax);
+            float yMax = Mathf.Min(inner.yMax, bounds.yMax);
+            if (xMax <= xMin || yMax <= yMin)
+                return new Rect(bounds.center.x - 4f, bounds.center.y - 4f, 8f, 8f);
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
         }
 
         private static Vector2 WorldToMinimap(float x, float z, Rect mapRect, float half)
