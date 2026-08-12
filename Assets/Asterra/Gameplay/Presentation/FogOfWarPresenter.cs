@@ -14,7 +14,7 @@ namespace Asterra.Gameplay.Presentation
         [SerializeField] private float unitSightRadius = 95f;
         [SerializeField] private float keepSightRadius = 140f;
         [SerializeField] private float buildingSightRadius = 75f;
-        [SerializeField] private float mapHalfExtent = 480f;
+        [SerializeField] private float mapHalfExtent = MapBounds.PlayableHalfExtent;
         [SerializeField] private float cellSize = 30f;
         [SerializeField] private float fogHeight = 0.4f;
 

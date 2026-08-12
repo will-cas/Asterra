@@ -15,7 +15,6 @@ namespace Asterra.Gameplay
         [SerializeField] private Transform buildingRoot;
         [SerializeField] private float yPosition;
         [SerializeField] private bool createGround = true;
-        [SerializeField] private float groundSize = 1200f;
 
         private readonly Dictionary<uint, EntityView> _unitViews = new();
         private readonly Dictionary<uint, EntityView> _buildingViews = new();
@@ -46,7 +45,7 @@ namespace Asterra.Gameplay
             }
 
             if (createGround)
-                EnsureGround();
+                MapBorderVisual.Ensure(transform);
         }
 
         private void LateUpdate()
@@ -147,32 +146,6 @@ namespace Asterra.Gameplay
             var view = go.AddComponent<EntityView>();
             view.Initialize(id, isUnit, owner, definitionId, factionIndex);
             return view;
-        }
-
-        private void EnsureGround()
-        {
-            if (GameObject.Find("AsterraGround") != null)
-                return;
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "AsterraGround";
-            ground.transform.SetParent(transform, false);
-            ground.transform.localScale = new Vector3(groundSize / 10f, 1f, groundSize / 10f);
-            ground.transform.position = Vector3.zero;
-            var rend = ground.GetComponent<Renderer>();
-            var shader = Shader.Find("Asterra/UnlitColor")
-                         ?? Shader.Find("Universal Render Pipeline/Unlit")
-                         ?? Shader.Find("Unlit/Color")
-                         ?? Shader.Find("Sprites/Default");
-            if (shader != null)
-            {
-                var mat = new Material(shader);
-                var color = new Color(0.28f, 0.36f, 0.22f);
-                if (mat.HasProperty("_BaseColor"))
-                    mat.SetColor("_BaseColor", color);
-                if (mat.HasProperty("_Color"))
-                    mat.SetColor("_Color", color);
-                rend.sharedMaterial = mat;
-            }
         }
 
         private static void RemoveMissing(Dictionary<uint, EntityView> views, HashSet<uint> alive)

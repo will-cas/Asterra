@@ -7,7 +7,8 @@ using UnityEngine;
 namespace Asterra.Gameplay.Player
 {
     /// <summary>
-    /// Keyboard orders plus click-to-select / right-click move or attack.
+    /// Keyboard orders plus click / drag-box select and right-click move or attack.
+    /// Mac: ⌘/Control additive select; Control-click or two-finger click = order.
     /// </summary>
     public sealed class LocalOrderController : MonoBehaviour
     {
@@ -16,6 +17,7 @@ namespace Asterra.Gameplay.Player
         [SerializeField] private LayerMask clickMask = ~0;
         [SerializeField] private float buildingSelectRadius = 90f;
         [SerializeField] private float screenPickPixels = 48f;
+        [SerializeField] private float dragThresholdPixels = 8f;
 
         private SelectionState _selection;
         private ICommandBus _commands;
@@ -23,6 +25,11 @@ namespace Asterra.Gameplay.Player
         private PlayerId _local;
         private FactionRoster _roster;
         private readonly RaycastHit[] _rayHits = new RaycastHit[32];
+
+        private bool _pointerDown;
+        private bool _isDragging;
+        private Vector3 _dragStartScreen;
+        private Vector3 _dragCurrentScreen;
 
         public SelectionState Selection => _selection;
 
@@ -58,6 +65,20 @@ namespace Asterra.Gameplay.Player
             HandleHotkeys();
         }
 
+        private void OnGUI()
+        {
+            if (!_isDragging)
+                return;
+
+            Rect rect = ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen);
+            // Unity GUI y is top-down; Input mouse y is bottom-up.
+            Rect guiRect = new Rect(rect.xMin, Screen.height - rect.yMax, rect.width, rect.height);
+            Color fill = new Color(0.2f, 0.75f, 0.35f, 0.18f);
+            Color edge = new Color(0.35f, 0.95f, 0.45f, 0.9f);
+            DrawScreenRect(guiRect, fill);
+            DrawScreenRectBorder(guiRect, 2f, edge);
+        }
+
         private void HandlePointer()
         {
             if (rigCamera == null)
@@ -65,32 +86,45 @@ namespace Asterra.Gameplay.Player
             if (rigCamera == null)
                 return;
 
-            // Left click: select
             if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
             {
-                if (TryPickEntity(out var view))
+                _pointerDown = true;
+                _isDragging = false;
+                _dragStartScreen = UnityEngine.Input.mousePosition;
+                _dragCurrentScreen = _dragStartScreen;
+            }
+
+            if (_pointerDown && UnityEngine.Input.GetMouseButton(0))
+            {
+                _dragCurrentScreen = UnityEngine.Input.mousePosition;
+                if (!_isDragging)
                 {
-                    if (view.IsUnit && view.Owner == _local)
-                    {
-                        if (UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift))
-                            _selection.Toggle(view.Id);
-                        else
-                            _selection.Set(new[] { view.Id });
-                    }
-                    else if (!view.IsUnit && view.Owner == _local)
-                    {
-                        // Select all units near own building as a convenience.
-                        SelectOwnedNear(view.transform.position.x, view.transform.position.z, buildingSelectRadius);
-                    }
-                }
-                else if (TryRaycastGround(out _, out _))
-                {
-                    if (!UnityEngine.Input.GetKey(KeyCode.LeftShift) && !UnityEngine.Input.GetKey(KeyCode.RightShift))
-                        _selection.Clear();
+                    float dx = _dragCurrentScreen.x - _dragStartScreen.x;
+                    float dy = _dragCurrentScreen.y - _dragStartScreen.y;
+                    if (dx * dx + dy * dy >= dragThresholdPixels * dragThresholdPixels)
+                        _isDragging = true;
                 }
             }
 
-            // Right click: move or attack
+            if (_pointerDown && UnityEngine.Input.GetMouseButtonUp(0))
+            {
+                bool additive = IsAdditiveModifierHeld();
+                if (_isDragging)
+                {
+                    SelectOwnedInScreenRect(
+                        ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen),
+                        additive);
+                }
+                else
+                {
+                    HandleClickSelect(additive);
+                }
+
+                _pointerDown = false;
+                _isDragging = false;
+            }
+
+            // Right click / Mac Control-click: move or attack
             if (UnityEngine.Input.GetMouseButtonDown(1) && !IsPointerOverUi())
             {
                 var unitIds = GetOrderUnitIds();
@@ -113,6 +147,8 @@ namespace Asterra.Gameplay.Player
 
                 if (TryRaycastGround(out float x, out float z))
                 {
+                    x = Mathf.Clamp(x, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                    z = Mathf.Clamp(z, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
                     _commands.SubmitLocal(new MoveCommand
                     {
                         Issuer = _local,
@@ -124,6 +160,53 @@ namespace Asterra.Gameplay.Player
             }
         }
 
+        private void HandleClickSelect(bool additive)
+        {
+            if (TryPickEntity(out var view))
+            {
+                if (view.IsUnit && view.Owner == _local)
+                {
+                    if (additive)
+                        _selection.Toggle(view.Id);
+                    else
+                        _selection.Set(new[] { view.Id });
+                    return;
+                }
+
+                if (!view.IsUnit && view.Owner == _local)
+                {
+                    SelectOwnedNear(view.transform.position.x, view.transform.position.z, buildingSelectRadius);
+                    return;
+                }
+            }
+
+            if (!additive && TryRaycastGround(out _, out _))
+                _selection.Clear();
+        }
+
+        private void SelectOwnedInScreenRect(Rect screenRect, bool additive)
+        {
+            var ids = additive ? new List<SimEntityId>(_selection.Selected) : new List<SimEntityId>();
+            var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var view = views[i];
+                if (view == null || !view.IsUnit || view.Owner != _local || !view.IsRevealed)
+                    continue;
+
+                Vector3 screen = rigCamera.WorldToScreenPoint(view.transform.position + Vector3.up * 4f);
+                if (screen.z <= 0f)
+                    continue;
+                if (!screenRect.Contains(new Vector2(screen.x, screen.y)))
+                    continue;
+
+                if (!ids.Contains(view.Id))
+                    ids.Add(view.Id);
+            }
+
+            _selection.Set(ids);
+        }
+
         private void HandleHotkeys()
         {
             if (UnityEngine.Input.GetKeyDown(KeyCode.B))
@@ -133,6 +216,9 @@ namespace Asterra.Gameplay.Player
                     x = -300f;
                     z = 30f;
                 }
+
+                x = Mathf.Clamp(x, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                z = Mathf.Clamp(z, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
 
                 _commands.SubmitLocal(new PlaceBuildingCommand
                 {
@@ -190,6 +276,15 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.R))
                 AutoSelectOwnedUnits();
+        }
+
+        private static bool IsAdditiveModifierHeld()
+        {
+            // Prefer Shift / ⌘ on Mac — Control-click is reserved for right-click orders.
+            return UnityEngine.Input.GetKey(KeyCode.LeftShift)
+                   || UnityEngine.Input.GetKey(KeyCode.RightShift)
+                   || UnityEngine.Input.GetKey(KeyCode.LeftCommand)
+                   || UnityEngine.Input.GetKey(KeyCode.RightCommand);
         }
 
         private bool TryPickEntity(out EntityView view)
@@ -288,6 +383,31 @@ namespace Asterra.Gameplay.Player
         private static bool IsPointerOverUi()
         {
             return false;
+        }
+
+        private static Rect ScreenRectFromPoints(Vector3 a, Vector3 b)
+        {
+            float xMin = Mathf.Min(a.x, b.x);
+            float xMax = Mathf.Max(a.x, b.x);
+            float yMin = Mathf.Min(a.y, b.y);
+            float yMax = Mathf.Max(a.y, b.y);
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        }
+
+        private static void DrawScreenRect(Rect rect, Color color)
+        {
+            var old = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            GUI.color = old;
+        }
+
+        private static void DrawScreenRectBorder(Rect rect, float thickness, Color color)
+        {
+            DrawScreenRect(new Rect(rect.xMin, rect.yMin, rect.width, thickness), color);
+            DrawScreenRect(new Rect(rect.xMin, rect.yMax - thickness, rect.width, thickness), color);
+            DrawScreenRect(new Rect(rect.xMin, rect.yMin, thickness, rect.height), color);
+            DrawScreenRect(new Rect(rect.xMax - thickness, rect.yMin, thickness, rect.height), color);
         }
 
         private SimEntityId[] GetOrderUnitIds()

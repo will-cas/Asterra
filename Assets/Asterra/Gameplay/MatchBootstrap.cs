@@ -238,7 +238,7 @@ namespace Asterra.Gameplay
                 var camRig = FindFirstObjectByType<RtsCameraRig>();
                 if (camRig == null)
                     camRig = gameObject.AddComponent<RtsCameraRig>();
-                camRig.FocusOn(-320f, 0f, height: 150f, back: 200f);
+                camRig.FocusOn(-320f, 0f, height: 240f, back: 42f);
             }
             var keepIds = new[]
             {
