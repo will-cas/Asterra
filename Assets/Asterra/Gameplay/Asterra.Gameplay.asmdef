@@ -3,7 +3,8 @@
   "rootNamespace": "Asterra.Gameplay",
   "references": [
     "Asterra.Core",
-    "Asterra.AI"
+    "Asterra.AI",
+    "Asterra.Net"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

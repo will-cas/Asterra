@@ -12,82 +12,81 @@ namespace Asterra.Net
         private ICommandBus _bus;
         private DesyncDetector _desync;
         private ReplayBuffer _replay;
+        private LockstepFrameGate _gate;
         private PlayerId _localPlayer;
+        private bool _useGate;
 
         public DesyncDetector Desync => _desync;
         public ReplayBuffer Replay => _replay;
+        public LockstepFrameGate Gate => _gate;
 
-        public void Bind(ICommandBus bus, PlayerId localPlayer, ReplayBuffer replay = null)
+        public void Bind(
+            ICommandBus bus,
+            PlayerId localPlayer,
+            ReplayBuffer replay = null,
+            LockstepFrameGate gate = null)
         {
             _bus = bus;
             _localPlayer = localPlayer;
             _replay = replay ?? new ReplayBuffer();
             _desync = new DesyncDetector();
+            _gate = gate;
+            _useGate = gate != null;
         }
 
         public void BroadcastFrame(CommandFrame frame)
         {
             if (frame == null)
                 return;
+
+            // Local apply once; RPC fans out to everyone else.
+            ApplyFrame(frame);
+            if (!IsSpawned)
+                return;
+
             byte[] payload = CommandCodec.SerializeFrame(frame);
-            _replay?.RecordPayload(payload);
-            if (IsSpawned)
-                SubmitCommandFrameRpc(frame.TargetTick.Value, frame.Player.Value, payload);
-            else
-                ApplyPayload(payload);
+            SubmitCommandFrameRpc(frame.TargetTick.Value, frame.Player.Value, payload);
         }
 
         public void BroadcastWorldHash(Tick tick, ulong hash)
         {
-            if (IsSpawned)
-                ReportWorldHashRpc(tick.Value, hash);
-            else
-                _desync?.Report(tick.Value, _localPlayer.Value, hash);
+            _desync?.Report(tick.Value, _localPlayer.Value, hash);
+            if (!IsSpawned)
+                return;
+            ReportWorldHashRpc(tick.Value, _localPlayer.Value, hash);
         }
 
-        [Rpc(SendTo.ClientsAndHost)]
-        public void SubmitCommandFrameRpc(uint targetTick, byte player, byte[] payload)
+        [Rpc(SendTo.NotMe)]
+        private void SubmitCommandFrameRpc(uint targetTick, byte player, byte[] payload)
         {
             _ = targetTick;
             _ = player;
-            ApplyPayload(payload);
-        }
-
-        [Rpc(SendTo.ClientsAndHost)]
-        public void ReportWorldHashRpc(uint tick, ulong hash)
-        {
-            // Issuer identity isn't on the RPC yet; host stamps channel peer later in Phase 3.
-            byte reporter = IsServer ? (byte)0 : _localPlayer.Value;
-            _desync?.Report(tick, reporter, hash);
-            if (_desync != null && _desync.TryGetDesync(tick, out ulong expected, out ulong actual))
-                Debug.LogError($"[Asterra] DESYNC tick={tick} expected={expected} actual={actual}");
-        }
-
-        private void ApplyPayload(byte[] payload)
-        {
-            if (payload == null || payload.Length == 0 || _bus == null)
+            if (payload == null || payload.Length == 0)
                 return;
-            var frame = CommandCodec.DeserializeFrame(payload);
-            _replay?.RecordPayload(payload);
-            _bus.EnqueueRemote(frame);
-        }
-    }
-
-    /// <summary>UGS Auth + Lobby + Relay bootstrap placeholder.</summary>
-    public sealed class MultiplayerSessionHost : MonoBehaviour
-    {
-        [SerializeField] private int maxPlayers = 8;
-
-        public async void HostSkirmishAsync(string lobbyName)
-        {
-            Debug.Log($"[Asterra] HostSkirmish placeholder ({lobbyName}, max {maxPlayers}).");
-            await System.Threading.Tasks.Task.CompletedTask;
+            ApplyFrame(CommandCodec.DeserializeFrame(payload));
         }
 
-        public async void JoinSkirmishAsync(string lobbyCode)
+        [Rpc(SendTo.NotMe)]
+        private void ReportWorldHashRpc(uint tick, byte player, ulong hash)
         {
-            Debug.Log($"[Asterra] JoinSkirmish placeholder ({lobbyCode}).");
-            await System.Threading.Tasks.Task.CompletedTask;
+            _desync?.Report(tick, player, hash);
+            if (_desync != null && _desync.TryGetDesync(tick, out ulong expected, out ulong actual))
+                Debug.LogError($"[Asterra] DESYNC tick={tick} player={player} expected={expected} actual={actual}");
+            _desync?.ForgetBefore(tick > 64 ? tick - 64 : 0);
+        }
+
+        private void ApplyFrame(CommandFrame frame)
+        {
+            if (frame == null)
+                return;
+            _replay?.Record(frame);
+            if (_useGate && _gate != null)
+            {
+                _gate.Submit(frame);
+                return;
+            }
+
+            _bus?.EnqueueRemote(frame);
         }
     }
 }

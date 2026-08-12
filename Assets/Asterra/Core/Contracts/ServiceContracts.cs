@@ -21,6 +21,7 @@ namespace Asterra.Core
     {
         void SubmitLocal(GameCommand command);
         void EnqueueRemote(CommandFrame frame);
+        void ScheduleLocal(Tick targetTick);
         IReadOnlyList<GameCommand> DrainForTick(Tick tick);
     }
 

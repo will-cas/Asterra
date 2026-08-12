@@ -43,7 +43,8 @@ Netcode for GameObjects, Lobby, Relay, Authentication, Entities/Burst/Collection
 
 ## Status
 
-Phase 1 **simulation** is in place (build / train / move / attack / capture / income / upgrade + dummy enemy). Scenes and presentation still need the Editor.
+Phase 1 **simulation** is in place (build / train / move / attack / capture / income / upgrade + dummy enemy).  
+Phase 3 **session/lockstep scaffolding** is in place (Lobby/Relay service, frame gate, coordinator, presentation bridge). Scenes still need the Editor.
 
 Headless check (needs [.NET 8 SDK](https://dotnet.microsoft.com/download)):
 
@@ -51,6 +52,6 @@ Headless check (needs [.NET 8 SDK](https://dotnet.microsoft.com/download)):
 dotnet run --project tools/Asterra.Smoke -- 2000
 ```
 
-See `Docs/ARCHITECTURE.md`, `Docs/ROADMAP.md`, `Docs/CONTROLS.md`.
+See `Docs/ARCHITECTURE.md`, `Docs/ROADMAP.md`, `Docs/CONTROLS.md`, `Docs/MULTIPLAYER.md`.
 
 **GitHub:** https://github.com/will-cas/Asterra

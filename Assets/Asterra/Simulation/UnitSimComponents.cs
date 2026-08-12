@@ -1,5 +1,5 @@
-using Unity.Entities;
 using Unity.Burst;
+using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Asterra.Simulation
@@ -47,7 +47,7 @@ namespace Asterra.Simulation
         public byte HasTarget;
     }
 
-    /// <summary>Advances units toward move targets. Combat port follows in a later Phase 2 slice.</summary>
+    /// <summary>Advances units toward move targets.</summary>
     [BurstCompile]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     public partial struct UnitMoveSystem : ISystem
@@ -86,6 +86,27 @@ namespace Asterra.Simulation
                     pos.ValueRW.X += dx / len * step;
                     pos.ValueRW.Z += dz / len * step;
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decrements attack cooldown and applies damage when attacker/target share a spatial query.
+    /// Full id→entity lookup lands with the Phase 2 world singleton map; this tick only cools down.
+    /// </summary>
+    [BurstCompile]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(UnitMoveSystem))]
+    public partial struct UnitCombatCooldownSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            float dt = SystemAPI.Time.DeltaTime;
+            foreach (var sim in SystemAPI.Query<RefRW<UnitSim>>())
+            {
+                if (sim.ValueRO.AttackCooldownRemaining > 0f)
+                    sim.ValueRW.AttackCooldownRemaining -= dt;
             }
         }
     }

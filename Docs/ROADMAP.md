@@ -34,11 +34,11 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 
 ## Phase 3 — Multiplayer skirmish (2 → 8)
 
-1. UGS Auth + Lobby + Relay join/host.
-2. NGO session; lockstep command RPCs.
-3. Faction pick (3 factions), ready-up, start match.
-4. 2-player lockstep soak; then 4; then 8.
-5. Desync detection UX (hash mismatch → leave).
+1. [x] UGS Auth + Lobby + Relay session service (`UnityGamingServicesSession`)
+2. [x] NGO lockstep bridge + `LockstepMatchCoordinator` + frame gate
+3. [ ] Faction pick UI / ready-up before seed sync
+4. [ ] 2-player lockstep soak; then 4; then 8
+5. [x] Desync detection hooks (`DesyncDetector` + hash RPC)
 
 ## Phase 4 — AI & identity
 
