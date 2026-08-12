@@ -38,6 +38,7 @@ namespace Asterra.Core
         bool CanAfford(PlayerId player, ResourceType type, int amount);
         bool TrySpend(PlayerId player, ResourceType type, int amount);
         void Add(PlayerId player, ResourceType type, int amount);
+        void Seed(PlayerId player, ResourceType type, int amount);
     }
 
     public interface ITerritoryMap

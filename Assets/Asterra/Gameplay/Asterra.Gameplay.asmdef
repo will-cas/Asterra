@@ -4,7 +4,8 @@
   "references": [
     "Asterra.Core",
     "Asterra.AI",
-    "Asterra.Net"
+    "Asterra.Net",
+    "Unity.Netcode.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
