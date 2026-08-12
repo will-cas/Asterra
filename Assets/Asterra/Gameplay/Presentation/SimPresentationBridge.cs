@@ -1,26 +1,36 @@
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Gameplay.Presentation;
 using UnityEngine;
 
 namespace Asterra.Gameplay
 {
     /// <summary>
-    /// Mirrors sim snapshots onto scene transforms. Safe no-op until prefabs are assigned in Editor.
+    /// Mirrors sim snapshots onto low-poly unit/building meshes with clickable colliders.
     /// </summary>
     public sealed class SimPresentationBridge : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
         [SerializeField] private Transform unitRoot;
         [SerializeField] private Transform buildingRoot;
-        [SerializeField] private GameObject fallbackUnitPrefab;
-        [SerializeField] private GameObject fallbackBuildingPrefab;
         [SerializeField] private float yPosition;
+        [SerializeField] private bool createGround = true;
+        [SerializeField] private float groundSize = 1200f;
 
-        private readonly Dictionary<uint, Transform> _unitViews = new();
-        private readonly Dictionary<uint, Transform> _buildingViews = new();
+        private readonly Dictionary<uint, EntityView> _unitViews = new();
+        private readonly Dictionary<uint, EntityView> _buildingViews = new();
+        private System.Func<IReadOnlyList<EntityId>> _getSelected;
+
+        public void BindSelection(System.Func<IReadOnlyList<EntityId>> getSelected)
+        {
+            _getSelected = getSelected;
+        }
 
         private void Awake()
         {
+            if (match == null)
+                match = FindFirstObjectByType<MatchBootstrap>();
+
             if (unitRoot == null)
             {
                 var go = new GameObject("Units");
@@ -34,6 +44,9 @@ namespace Asterra.Gameplay
                 go.transform.SetParent(transform, false);
                 buildingRoot = go.transform;
             }
+
+            if (createGround)
+                EnsureGround();
         }
 
         private void LateUpdate()
@@ -43,6 +56,7 @@ namespace Asterra.Gameplay
 
             SyncUnits(match.World.Units);
             SyncBuildings(match.World.Buildings);
+            RefreshSelectionHighlights();
         }
 
         private void SyncUnits(IReadOnlyList<UnitSnapshot> units)
@@ -56,11 +70,18 @@ namespace Asterra.Gameplay
                 alive.Add(snap.Id.Value);
                 if (!_unitViews.TryGetValue(snap.Id.Value, out var view))
                 {
-                    view = SpawnView(fallbackUnitPrefab, unitRoot, $"Unit_{snap.Id.Value}");
+                    view = SpawnEntity(
+                        unitRoot,
+                        $"Unit_{snap.Id.Value}",
+                        snap.Id,
+                        isUnit: true,
+                        snap.Owner,
+                        snap.DefinitionId,
+                        snap.Faction.Value);
                     _unitViews[snap.Id.Value] = view;
                 }
 
-                view.position = new Vector3(snap.X, yPosition, snap.Z);
+                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
             }
 
             RemoveMissing(_unitViews, alive);
@@ -77,33 +98,81 @@ namespace Asterra.Gameplay
                 alive.Add(snap.Id.Value);
                 if (!_buildingViews.TryGetValue(snap.Id.Value, out var view))
                 {
-                    view = SpawnView(fallbackBuildingPrefab, buildingRoot, $"Building_{snap.Id.Value}");
+                    view = SpawnEntity(
+                        buildingRoot,
+                        $"Building_{snap.Id.Value}",
+                        snap.Id,
+                        isUnit: false,
+                        snap.Owner,
+                        snap.DefinitionId,
+                        snap.Owner.Value);
                     _buildingViews[snap.Id.Value] = view;
                 }
 
-                view.position = new Vector3(snap.X, yPosition, snap.Z);
+                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
             }
 
             RemoveMissing(_buildingViews, alive);
         }
 
-        private static Transform SpawnView(GameObject prefab, Transform parent, string name)
+        private void RefreshSelectionHighlights()
         {
-            GameObject go;
-            if (prefab != null)
-                go = Instantiate(prefab, parent);
-            else
+            if (_getSelected == null)
+                return;
+            var selected = _getSelected();
+            var selectedSet = new HashSet<uint>();
+            if (selected != null)
             {
-                go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                go.transform.SetParent(parent, false);
-                go.transform.localScale = new Vector3(1.5f, 1.5f, 1.5f);
+                for (int i = 0; i < selected.Count; i++)
+                    selectedSet.Add(selected[i].Value);
             }
 
-            go.name = name;
-            return go.transform;
+            foreach (var pair in _unitViews)
+                pair.Value.SetSelected(selectedSet.Contains(pair.Key));
+            foreach (var pair in _buildingViews)
+                pair.Value.SetSelected(selectedSet.Contains(pair.Key));
         }
 
-        private static void RemoveMissing(Dictionary<uint, Transform> views, HashSet<uint> alive)
+        private static EntityView SpawnEntity(
+            Transform parent,
+            string name,
+            EntityId id,
+            bool isUnit,
+            PlayerId owner,
+            string definitionId,
+            byte factionIndex)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var view = go.AddComponent<EntityView>();
+            view.Initialize(id, isUnit, owner, definitionId, factionIndex);
+            return view;
+        }
+
+        private void EnsureGround()
+        {
+            if (GameObject.Find("AsterraGround") != null)
+                return;
+            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            ground.name = "AsterraGround";
+            ground.transform.SetParent(transform, false);
+            ground.transform.localScale = new Vector3(groundSize / 10f, 1f, groundSize / 10f);
+            ground.transform.position = Vector3.zero;
+            var rend = ground.GetComponent<Renderer>();
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            if (shader != null)
+            {
+                var mat = new Material(shader);
+                var color = new Color(0.22f, 0.28f, 0.18f);
+                if (mat.HasProperty("_BaseColor"))
+                    mat.SetColor("_BaseColor", color);
+                if (mat.HasProperty("_Color"))
+                    mat.SetColor("_Color", color);
+                rend.sharedMaterial = mat;
+            }
+        }
+
+        private static void RemoveMissing(Dictionary<uint, EntityView> views, HashSet<uint> alive)
         {
             var stale = new List<uint>();
             foreach (var pair in views)

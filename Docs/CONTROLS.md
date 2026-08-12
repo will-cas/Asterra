@@ -1,19 +1,27 @@
-# Phase 1 — Local controls (dev)
+# Demo controls
 
-Add `MatchBootstrap` to any scene GameObject. Offline AI skirmish auto-starts (play mode OfflineVsAi). `LocalOrderController` attaches automatically.
+## Pointer
+| Input | Action |
+|-------|--------|
+| **LMB** | Select owned unit |
+| **Shift+LMB** | Toggle unit in selection |
+| **LMB** on own building | Select nearby owned units |
+| **LMB** on ground | Clear selection |
+| **RMB** on ground | Move selected units |
+| **RMB** on enemy | Attack target |
 
+## Hotkeys
 | Key | Order |
 |-----|--------|
-| **B** | Place your faction's producer near the keep |
-| **T** | Train your faction's basic unit |
-| **M** | Move selected (or all owned) units to map center |
-| **C** | Capture order → march to center territory |
-| **A** | Attack first hostile unit/building |
-| **U** | Buy your faction's basic upgrade |
-| **R** | Reselect all owned living units |
+| **B** | Place producer at cursor (or default spot) |
+| **T** | Train basic unit |
+| **C** | March to capture center territory |
+| **U** | Buy faction upgrade |
+| **A** | Attack first hostile |
+| **R** | Select all owned units |
+| **WASD** / edge | Pan camera |
+| **Scroll** | Zoom |
 
-On `MatchBootstrap`, set **Player Faction Index** / **Enemy Faction Index** (0 Iron Covenant, 1 Verdant Court, 2 Ashen Legion).
-
-## Lobby (online)
-
-Use `LobbyHud` / `MatchLobbyController`: Claim → Faction → Ready → Host Start (after `MultiplayerMenu` host/join).
+## Win / lose
+- Destroy the enemy **keep**, or
+- Hold the center territory for **90s** continuously (configurable on `MatchBootstrap`)

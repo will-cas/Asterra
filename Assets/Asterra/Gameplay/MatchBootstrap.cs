@@ -36,6 +36,9 @@ namespace Asterra.Gameplay
         [SerializeField] private LockstepMatchCoordinator coordinator;
         [SerializeField] private LockstepNetworkBridge networkBridge;
         [SerializeField] private bool autoStartOffline = true;
+        [SerializeField] private float territoryHoldSecondsToWin = 90f;
+        [SerializeField] private bool attachPresentation = true;
+        [SerializeField] private bool attachCameraRig = true;
 
         public IMatchSession Session { get; private set; }
         public ILockstepClock Clock => coordinator != null ? coordinator.Clock : null;
@@ -52,6 +55,8 @@ namespace Asterra.Gameplay
         public MatchLobbyState Lobby { get; private set; }
         public MatchPlayMode PlayMode => playMode;
         public bool IsMatchRunning { get; private set; }
+        public MatchResult Result { get; private set; } = MatchResult.None;
+        public VictoryEvaluator Victory { get; private set; }
 
         private CommandBus _commandBus;
         private SkirmishWorldSim _sim;
@@ -214,8 +219,28 @@ namespace Asterra.Gameplay
                 _orders.Bind(this);
             }
 
-            if (reportHashEveryTick)
-                coordinator.TickAdvanced += OnTickAdvanced;
+            if (attachPresentation)
+            {
+                var presentation = FindFirstObjectByType<SimPresentationBridge>();
+                if (presentation == null)
+                    presentation = gameObject.AddComponent<SimPresentationBridge>();
+            }
+
+            if (GetComponent<MatchHud>() == null)
+                gameObject.AddComponent<MatchHud>();
+
+            if (attachCameraRig && FindFirstObjectByType<RtsCameraRig>() == null)
+                gameObject.AddComponent<RtsCameraRig>();
+
+            var keepIds = new[]
+            {
+                FactionDefaultContent.IronKeepId,
+                FactionDefaultContent.HeartwoodId,
+                FactionDefaultContent.AshCitadelId,
+            };
+            Victory = new VictoryEvaluator(keepIds, territoryHoldSecondsToWin);
+            Result = MatchResult.None;
+            coordinator.TickAdvanced += OnTickAdvanced;
 
             IsMatchRunning = true;
             Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} players={_participants.Count}");
@@ -223,8 +248,21 @@ namespace Asterra.Gameplay
 
         private void OnTickAdvanced(Tick tick, ulong hash)
         {
-            if (tick.Value % 20 == 0)
+            if (reportHashEveryTick && tick.Value % 20 == 0)
                 Debug.Log($"[Asterra] tick={tick.Value} hash={hash}");
+
+            if (Result.IsOver || Victory == null || World == null || coordinator == null)
+                return;
+
+            float dt = coordinator.Clock.FixedDeltaSeconds;
+            var result = Victory.Evaluate(World, dt, _participants);
+            if (!result.IsOver)
+                return;
+
+            Result = result;
+            IsMatchRunning = false;
+            coordinator.Stop();
+            Debug.Log($"[Asterra] MATCH OVER winner=P{result.Winner.Value} reason={result.Reason}");
         }
 
         private void OnDestroy()

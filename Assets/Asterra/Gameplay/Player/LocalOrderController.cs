@@ -1,16 +1,19 @@
 using Asterra.Core;
 using Asterra.Gameplay.Content;
+using Asterra.Gameplay.Presentation;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Player
 {
     /// <summary>
-    /// Issues local lockstep commands from simple keyboard shortcuts (no scene raycasts required).
-    /// Keys are intentionally crude for headless/dev iteration before UI polish.
+    /// Keyboard orders plus click-to-select / right-click move or attack.
     /// </summary>
     public sealed class LocalOrderController : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
+        [SerializeField] private Camera rigCamera;
+        [SerializeField] private LayerMask clickMask = ~0;
+        [SerializeField] private float doubleClickSelectRadius = 8f;
 
         private SelectionState _selection;
         private ICommandBus _commands;
@@ -28,22 +31,106 @@ namespace Asterra.Gameplay.Player
             _world = bootstrap.World;
             _local = bootstrap.Session.LocalPlayer;
             _roster = bootstrap.PlayerRoster ?? FactionDefaultContent.IronCovenant;
+            if (rigCamera == null)
+                rigCamera = Camera.main;
             AutoSelectOwnedUnits();
+
+            var bridge = FindFirstObjectByType<SimPresentationBridge>();
+            if (bridge != null)
+                bridge.BindSelection(() => _selection.Selected);
         }
 
         private void Update()
         {
-            if (match == null || _commands == null)
+            if (match == null || _commands == null || match.Result.IsOver)
                 return;
 
+            HandlePointer();
+            HandleHotkeys();
+        }
+
+        private void HandlePointer()
+        {
+            if (rigCamera == null)
+                rigCamera = Camera.main;
+            if (rigCamera == null)
+                return;
+
+            // Left click: select
+            if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
+            {
+                if (TryRaycastEntity(out var view))
+                {
+                    if (view.IsUnit && view.Owner == _local)
+                    {
+                        if (UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift))
+                            _selection.Toggle(view.Id);
+                        else
+                            _selection.Set(new[] { view.Id });
+                    }
+                    else if (!view.IsUnit && view.Owner == _local)
+                    {
+                        // Select all units near own building as a convenience.
+                        SelectOwnedNear(view.transform.position.x, view.transform.position.z, doubleClickSelectRadius);
+                    }
+                }
+                else if (TryRaycastGround(out _, out _))
+                {
+                    if (!UnityEngine.Input.GetKey(KeyCode.LeftShift) && !UnityEngine.Input.GetKey(KeyCode.RightShift))
+                        _selection.Clear();
+                }
+            }
+
+            // Right click: move or attack
+            if (UnityEngine.Input.GetMouseButtonDown(1) && !IsPointerOverUi())
+            {
+                var unitIds = GetOrderUnitIds();
+                if (unitIds.Length == 0)
+                    return;
+
+                if (TryRaycastEntity(out var targetView))
+                {
+                    if (targetView.Owner != _local)
+                    {
+                        _commands.SubmitLocal(new AttackCommand
+                        {
+                            Issuer = _local,
+                            UnitIds = unitIds,
+                            TargetId = targetView.Id,
+                        });
+                        return;
+                    }
+                }
+
+                if (TryRaycastGround(out float x, out float z))
+                {
+                    _commands.SubmitLocal(new MoveCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetX = x,
+                        TargetZ = z,
+                    });
+                }
+            }
+        }
+
+        private void HandleHotkeys()
+        {
             if (UnityEngine.Input.GetKeyDown(KeyCode.B))
             {
+                if (!TryRaycastGround(out float x, out float z))
+                {
+                    x = -300f;
+                    z = 30f;
+                }
+
                 _commands.SubmitLocal(new PlaceBuildingCommand
                 {
                     Issuer = _local,
                     BuildingDefId = _roster.ProducerBuildingId,
-                    X = -300f,
-                    Z = 30f,
+                    X = x,
+                    Z = z,
                     YawDegrees = 0f,
                 });
             }
@@ -92,19 +179,58 @@ namespace Asterra.Gameplay.Player
                 }
             }
 
-            if (UnityEngine.Input.GetKeyDown(KeyCode.M))
-            {
-                _commands.SubmitLocal(new MoveCommand
-                {
-                    Issuer = _local,
-                    UnitIds = GetOrderUnitIds(),
-                    TargetX = 0f,
-                    TargetZ = 0f,
-                });
-            }
-
             if (UnityEngine.Input.GetKeyDown(KeyCode.R))
                 AutoSelectOwnedUnits();
+        }
+
+        private bool TryRaycastEntity(out EntityView view)
+        {
+            view = null;
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            if (!Physics.Raycast(ray, out RaycastHit hit, 5000f, clickMask))
+                return false;
+            view = hit.collider.GetComponentInParent<EntityView>();
+            return view != null;
+        }
+
+        private bool TryRaycastGround(out float x, out float z)
+        {
+            x = 0f;
+            z = 0f;
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var plane = new Plane(Vector3.up, Vector3.zero);
+            if (plane.Raycast(ray, out float enter))
+            {
+                var point = ray.GetPoint(enter);
+                x = point.x;
+                z = point.z;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void SelectOwnedNear(float x, float z, float radius)
+        {
+            var ids = new System.Collections.Generic.List<EntityId>();
+            float r2 = radius * radius;
+            for (int i = 0; i < _world.Units.Count; i++)
+            {
+                var u = _world.Units[i];
+                if (u.Owner != _local || !u.IsAlive)
+                    continue;
+                float dx = u.X - x;
+                float dz = u.Z - z;
+                if (dx * dx + dz * dz <= r2)
+                    ids.Add(u.Id);
+            }
+
+            _selection.Set(ids);
+        }
+
+        private static bool IsPointerOverUi()
+        {
+            return false;
         }
 
         private EntityId[] GetOrderUnitIds()

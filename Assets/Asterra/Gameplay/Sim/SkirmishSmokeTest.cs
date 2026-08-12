@@ -138,6 +138,7 @@ namespace Asterra.Gameplay
             sb.Append(codecReport);
             sb.Append(LockstepFrameGateSelfTest.Run());
             sb.Append(MatchLobbyStateSelfTest.Run());
+            sb.Append(VictoryEvaluatorSelfTest.Run());
             sb.AppendLine("[Asterra Smoke]");
             sb.AppendLine($"factions={playerFaction.DisplayName} vs {enemyFaction.DisplayName}");
             sb.AppendLine($"ticks={ticks} hash={sim.ComputeWorldHash()} replayFrames={replay.Count}");
