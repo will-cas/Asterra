@@ -71,22 +71,27 @@ namespace Asterra.Gameplay.Presentation
 
         private static Material CreateColorMaterial(Color color)
         {
-            // Prefer Unlit so units stay visible even before lighting is set up.
-            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            var shader = Shader.Find("Asterra/UnlitColor");
+            if (shader == null)
+                shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null)
                 shader = Shader.Find("Unlit/Color");
             if (shader == null)
-                shader = Shader.Find("Universal Render Pipeline/Lit");
+                shader = Shader.Find("Sprites/Default");
             if (shader == null)
-                shader = Shader.Find("Standard");
+                shader = Shader.Find("Hidden/InternalColored");
+
             if (shader == null)
-                shader = Shader.Find("Diffuse");
+            {
+                Debug.LogError("[Asterra] No usable color shader found.");
+                return new Material(Shader.Find("Hidden/InternalErrorShader"));
+            }
 
             var mat = new Material(shader);
-            if (mat.HasProperty("_BaseColor"))
-                mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Color"))
                 mat.SetColor("_Color", color);
+            if (mat.HasProperty("_BaseColor"))
+                mat.SetColor("_BaseColor", color);
             return mat;
         }
     }
