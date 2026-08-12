@@ -10,8 +10,10 @@
 [Rr]ecordings/
 
 *.csproj
+!tools/**/*.csproj
 *.unityproj
 *.sln
+!tools/**/*.sln
 *.suo
 *.tmp
 *.user

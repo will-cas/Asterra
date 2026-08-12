@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Asterra.Smoke</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pure C# slice (no UnityEngine) for CI / pre-Editor validation -->
+    <Compile Include="../../Assets/Asterra/Core/**/*.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Services/ResourceWallet.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Services/CommandBus.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Services/LockstepClock.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Sim/**/*.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishDefaultContent.cs" />
+  </ItemGroup>
+</Project>
