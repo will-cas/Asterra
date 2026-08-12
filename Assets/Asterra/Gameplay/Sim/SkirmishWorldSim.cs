@@ -506,7 +506,7 @@ namespace Asterra.Gameplay
                     }
 
                     unit.ReturningToDeposit = false;
-                    if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value, out var node) || node.IsDepleted)
+                    if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value.Value, out var node) || node.IsDepleted)
                     {
                         unit.GatherTargetId = null;
                         continue;
@@ -515,7 +515,7 @@ namespace Asterra.Gameplay
                     continue;
                 }
 
-                if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value, out var resource) || resource.IsDepleted)
+                if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value.Value, out var resource) || resource.IsDepleted)
                 {
                     unit.GatherTargetId = null;
                     continue;
