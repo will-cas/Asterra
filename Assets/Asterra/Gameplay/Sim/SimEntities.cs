@@ -101,7 +101,7 @@ namespace Asterra.Gameplay.Sim
 
         public BuildingSnapshot ToSnapshot()
         {
-            return new BuildingSnapshot(Id, Owner, DefinitionId, X, Z, State, CanProduce);
+            return new BuildingSnapshot(Id, Owner, Faction, DefinitionId, X, Z, State, CanProduce);
         }
     }
 

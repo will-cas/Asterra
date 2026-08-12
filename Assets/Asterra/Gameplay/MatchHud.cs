@@ -43,8 +43,8 @@ namespace Asterra.Gameplay
             GUI.Label(new Rect(12f, 12f, 900f, 22f), resources);
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);
             GUI.Label(
-                new Rect(12f, 56f, 1000f, 22f),
-                "LMB select (Shift+LMB toggle)  |  RMB move/attack  |  B build  |  T train  |  C capture  |  U upgrade");
+                new Rect(12f, 56f, 1100f, 22f),
+                "LMB select  |  RMB move/attack  |  R select all  |  B build  |  T train  |  C capture  |  fog hides unseen enemies");
 
             if (!match.Result.IsOver)
                 return;

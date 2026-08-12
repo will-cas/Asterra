@@ -41,6 +41,7 @@ namespace Asterra.Core
     {
         public readonly SimEntityId Id;
         public readonly PlayerId Owner;
+        public readonly FactionId Faction;
         public readonly string DefinitionId;
         public readonly float X;
         public readonly float Z;
@@ -50,6 +51,7 @@ namespace Asterra.Core
         public BuildingSnapshot(
             SimEntityId id,
             PlayerId owner,
+            FactionId faction,
             string definitionId,
             float x,
             float z,
@@ -58,6 +60,7 @@ namespace Asterra.Core
         {
             Id = id;
             Owner = owner;
+            Faction = faction;
             DefinitionId = definitionId;
             X = x;
             Z = z;

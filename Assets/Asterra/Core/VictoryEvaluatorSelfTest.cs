@@ -57,6 +57,7 @@ namespace Asterra.Core
                 _buildings.Add(new BuildingSnapshot(
                     new SimEntityId((uint)(_buildings.Count + 1)),
                     owner,
+                    new FactionId(0),
                     def,
                     0f,
                     0f,

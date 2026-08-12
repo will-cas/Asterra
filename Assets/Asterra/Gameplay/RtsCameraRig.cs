@@ -6,12 +6,12 @@ namespace Asterra.Gameplay
     public sealed class RtsCameraRig : MonoBehaviour
     {
         [SerializeField] private Camera rigCamera;
-        [SerializeField] private float panSpeed = 120f;
-        [SerializeField] private float zoomSpeed = 250f;
-        [SerializeField] private float minHeight = 60f;
+        [SerializeField] private float panSpeed = 160f;
+        [SerializeField] private float zoomSpeed = 280f;
+        [SerializeField] private float minHeight = 40f;
         [SerializeField] private float maxHeight = 420f;
         [SerializeField] private float edgePanPixels = 12f;
-        [SerializeField] private Vector3 lookAt = new Vector3(-80f, 0f, 0f);
+        [SerializeField] private Vector3 lookAt = new Vector3(-320f, 0f, 0f);
 
         private void Awake()
         {
@@ -25,11 +25,22 @@ namespace Asterra.Gameplay
                 go.AddComponent<AudioListener>();
             }
 
-            // Frame west keep + center territory for the offline 1v1 layout.
             rigCamera.fieldOfView = 50f;
             rigCamera.nearClipPlane = 0.3f;
-            rigCamera.farClipPlane = 2000f;
-            rigCamera.transform.position = new Vector3(-180f, 220f, -260f);
+            rigCamera.farClipPlane = 2500f;
+            FocusOn(lookAt.x, lookAt.z, height: 150f, back: 200f);
+        }
+
+        /// <summary>Point the camera at a ground position (typically the local army).</summary>
+        public void FocusOn(float x, float z, float height = 150f, float back = 200f)
+        {
+            if (rigCamera == null)
+                rigCamera = Camera.main;
+            if (rigCamera == null)
+                return;
+
+            lookAt = new Vector3(x, 0f, z);
+            rigCamera.transform.position = new Vector3(x, height, z - back);
             rigCamera.transform.LookAt(lookAt);
         }
 

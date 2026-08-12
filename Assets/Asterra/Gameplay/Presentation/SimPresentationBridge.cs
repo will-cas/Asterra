@@ -105,7 +105,7 @@ namespace Asterra.Gameplay
                         isUnit: false,
                         snap.Owner,
                         snap.DefinitionId,
-                        snap.Owner.Value);
+                        snap.Faction.Value);
                     _buildingViews[snap.Id.Value] = view;
                 }
 

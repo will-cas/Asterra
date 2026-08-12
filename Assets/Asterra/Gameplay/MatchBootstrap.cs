@@ -3,6 +3,7 @@ using Asterra.AI;
 using Asterra.Core;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Player;
+using Asterra.Gameplay.Presentation;
 using Asterra.Gameplay.Sim;
 using Asterra.Net;
 using UnityEngine;
@@ -211,6 +212,16 @@ namespace Asterra.Gameplay
                 coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
             }
 
+            if (attachPresentation)
+            {
+                var presentation = FindFirstObjectByType<SimPresentationBridge>();
+                if (presentation == null)
+                    presentation = gameObject.AddComponent<SimPresentationBridge>();
+
+                if (FindFirstObjectByType<FogOfWarPresenter>() == null)
+                    gameObject.AddComponent<FogOfWarPresenter>();
+            }
+
             if (attachLocalOrders)
             {
                 _orders = gameObject.GetComponent<LocalOrderController>();
@@ -219,19 +230,16 @@ namespace Asterra.Gameplay
                 _orders.Bind(this);
             }
 
-            if (attachPresentation)
-            {
-                var presentation = FindFirstObjectByType<SimPresentationBridge>();
-                if (presentation == null)
-                    presentation = gameObject.AddComponent<SimPresentationBridge>();
-            }
-
             if (GetComponent<MatchHud>() == null)
                 gameObject.AddComponent<MatchHud>();
 
-            if (attachCameraRig && FindFirstObjectByType<RtsCameraRig>() == null)
-                gameObject.AddComponent<RtsCameraRig>();
-
+            if (attachCameraRig)
+            {
+                var camRig = FindFirstObjectByType<RtsCameraRig>();
+                if (camRig == null)
+                    camRig = gameObject.AddComponent<RtsCameraRig>();
+                camRig.FocusOn(-320f, 0f, height: 150f, back: 200f);
+            }
             var keepIds = new[]
             {
                 FactionDefaultContent.IronKeepId,

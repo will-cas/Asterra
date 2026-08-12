@@ -8,7 +8,7 @@
 | **LMB** on own building | Select nearby owned units |
 | **LMB** on ground | Clear selection |
 | **RMB** on ground | Move selected units |
-| **RMB** on enemy | Attack target |
+| **RMB** on revealed enemy | Attack target |
 
 ## Hotkeys
 | Key | Order |
@@ -17,10 +17,15 @@
 | **T** | Train basic unit |
 | **C** | March to capture center territory |
 | **U** | Buy faction upgrade |
-| **A** | Attack first hostile |
+| **A** | Attack first *visible* hostile |
 | **R** | Select all owned units |
 | **WASD** / edge | Pan camera |
 | **Scroll** | Zoom |
+
+## Fog of war
+- Vision radiates from your units and buildings
+- Unexplored map is dark; explored-but-out-of-sight is dim
+- Enemy units/buildings only appear while inside your vision
 
 ## Win / lose
 - Destroy the enemy **keep**, or

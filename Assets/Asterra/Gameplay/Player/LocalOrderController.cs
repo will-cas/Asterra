@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Asterra.Core;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Presentation;
@@ -13,13 +14,15 @@ namespace Asterra.Gameplay.Player
         [SerializeField] private MatchBootstrap match;
         [SerializeField] private Camera rigCamera;
         [SerializeField] private LayerMask clickMask = ~0;
-        [SerializeField] private float doubleClickSelectRadius = 8f;
+        [SerializeField] private float buildingSelectRadius = 90f;
+        [SerializeField] private float screenPickPixels = 48f;
 
         private SelectionState _selection;
         private ICommandBus _commands;
         private IWorldQuery _world;
         private PlayerId _local;
         private FactionRoster _roster;
+        private readonly RaycastHit[] _rayHits = new RaycastHit[32];
 
         public SelectionState Selection => _selection;
 
@@ -34,7 +37,13 @@ namespace Asterra.Gameplay.Player
             if (rigCamera == null)
                 rigCamera = Camera.main;
             AutoSelectOwnedUnits();
+            BindPresentationSelection();
+        }
 
+        public void BindPresentationSelection()
+        {
+            if (_selection == null)
+                return;
             var bridge = FindFirstObjectByType<SimPresentationBridge>();
             if (bridge != null)
                 bridge.BindSelection(() => _selection.Selected);
@@ -59,7 +68,7 @@ namespace Asterra.Gameplay.Player
             // Left click: select
             if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
             {
-                if (TryRaycastEntity(out var view))
+                if (TryPickEntity(out var view))
                 {
                     if (view.IsUnit && view.Owner == _local)
                     {
@@ -71,7 +80,7 @@ namespace Asterra.Gameplay.Player
                     else if (!view.IsUnit && view.Owner == _local)
                     {
                         // Select all units near own building as a convenience.
-                        SelectOwnedNear(view.transform.position.x, view.transform.position.z, doubleClickSelectRadius);
+                        SelectOwnedNear(view.transform.position.x, view.transform.position.z, buildingSelectRadius);
                     }
                 }
                 else if (TryRaycastGround(out _, out _))
@@ -88,9 +97,9 @@ namespace Asterra.Gameplay.Player
                 if (unitIds.Length == 0)
                     return;
 
-                if (TryRaycastEntity(out var targetView))
+                if (TryPickEntity(out var targetView))
                 {
-                    if (targetView.Owner != _local)
+                    if (targetView.Owner != _local && targetView.IsRevealed)
                     {
                         _commands.SubmitLocal(new AttackCommand
                         {
@@ -183,13 +192,61 @@ namespace Asterra.Gameplay.Player
                 AutoSelectOwnedUnits();
         }
 
-        private bool TryRaycastEntity(out EntityView view)
+        private bool TryPickEntity(out EntityView view)
         {
             view = null;
-            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
-            if (!Physics.Raycast(ray, out RaycastHit hit, 5000f, clickMask))
+            if (rigCamera == null)
                 return false;
-            view = hit.collider.GetComponentInParent<EntityView>();
+
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, 5000f, clickMask, QueryTriggerInteraction.Ignore);
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var candidate = _rayHits[i].collider.GetComponentInParent<EntityView>();
+                if (candidate == null || !candidate.IsRevealed)
+                    continue;
+                if (_rayHits[i].distance < bestDist)
+                {
+                    bestDist = _rayHits[i].distance;
+                    view = candidate;
+                }
+            }
+
+            if (view != null)
+                return true;
+
+            return TryScreenPickEntity(out view);
+        }
+
+        private bool TryScreenPickEntity(out EntityView view)
+        {
+            view = null;
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float maxPx2 = screenPickPixels * screenPickPixels;
+            float bestPx2 = maxPx2;
+            var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null || !candidate.IsRevealed)
+                    continue;
+
+                Vector3 world = candidate.transform.position + Vector3.up * (candidate.IsUnit ? 4f : 8f);
+                Vector3 screen = rigCamera.WorldToScreenPoint(world);
+                if (screen.z <= 0f)
+                    continue;
+
+                float dx = screen.x - mouse.x;
+                float dy = screen.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < bestPx2)
+                {
+                    bestPx2 = d2;
+                    view = candidate;
+                }
+            }
+
             return view != null;
         }
 
@@ -212,7 +269,7 @@ namespace Asterra.Gameplay.Player
 
         private void SelectOwnedNear(float x, float z, float radius)
         {
-            var ids = new System.Collections.Generic.List<SimEntityId>();
+            var ids = new List<SimEntityId>();
             float r2 = radius * radius;
             for (int i = 0; i < _world.Units.Count; i++)
             {
@@ -252,7 +309,7 @@ namespace Asterra.Gameplay.Player
 
         private void AutoSelectOwnedUnits()
         {
-            var ids = new System.Collections.Generic.List<SimEntityId>();
+            var ids = new List<SimEntityId>();
             for (int i = 0; i < _world.Units.Count; i++)
             {
                 var u = _world.Units[i];
@@ -281,24 +338,27 @@ namespace Asterra.Gameplay.Player
 
         private bool TryFindHostile(out SimEntityId targetId)
         {
+            var fog = FindFirstObjectByType<FogOfWarPresenter>();
             for (int i = 0; i < _world.Units.Count; i++)
             {
                 var u = _world.Units[i];
-                if (u.IsAlive && u.Owner != _local)
-                {
-                    targetId = u.Id;
-                    return true;
-                }
+                if (!u.IsAlive || u.Owner == _local)
+                    continue;
+                if (fog != null && !fog.IsWorldVisible(u.X, u.Z))
+                    continue;
+                targetId = u.Id;
+                return true;
             }
 
             for (int i = 0; i < _world.Buildings.Count; i++)
             {
                 var b = _world.Buildings[i];
-                if (b.Owner != _local && b.State != BuildingState.Destroyed)
-                {
-                    targetId = b.Id;
-                    return true;
-                }
+                if (b.Owner == _local || b.State == BuildingState.Destroyed)
+                    continue;
+                if (fog != null && !fog.IsWorldVisible(b.X, b.Z))
+                    continue;
+                targetId = b.Id;
+                return true;
             }
 
             targetId = default;
