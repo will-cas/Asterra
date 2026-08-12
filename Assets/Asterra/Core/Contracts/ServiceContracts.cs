@@ -24,7 +24,7 @@ namespace Asterra.Core
         IReadOnlyList<GameCommand> DrainForTick(Tick tick);
     }
 
-    public interface IWorldSim
+    public interface IWorldSim : IWorldQuery
     {
         void ApplyCommands(IReadOnlyList<GameCommand> commands);
         void Tick(float deltaSeconds);

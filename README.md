@@ -43,6 +43,14 @@ Netcode for GameObjects, Lobby, Relay, Authentication, Entities/Burst/Collection
 
 ## Status
 
-Foundations scaffolded. Next: open in Editor, create `Boot` / `Skirmish` scenes, author 3 faction ScriptableObjects, then Phase 1 local skirmish loop (see roadmap).
+Phase 1 **simulation** is in place (build / train / move / attack / capture / income / upgrade + dummy enemy). Scenes and presentation still need the Editor.
+
+Headless check (needs [.NET 8 SDK](https://dotnet.microsoft.com/download)):
+
+```bash
+dotnet run --project tools/Asterra.Smoke -- 2000
+```
+
+See `Docs/ARCHITECTURE.md`, `Docs/ROADMAP.md`, `Docs/CONTROLS.md`.
 
 **GitHub:** https://github.com/will-cas/Asterra

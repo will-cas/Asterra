@@ -2,7 +2,8 @@
   "name": "Asterra.Gameplay",
   "rootNamespace": "Asterra.Gameplay",
   "references": [
-    "Asterra.Core"
+    "Asterra.Core",
+    "Asterra.AI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

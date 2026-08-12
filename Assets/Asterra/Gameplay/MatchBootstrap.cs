@@ -1,10 +1,14 @@
+using Asterra.AI;
 using Asterra.Core;
+using Asterra.Gameplay.Content;
+using Asterra.Gameplay.Player;
+using Asterra.Gameplay.Sim;
 using UnityEngine;
 
 namespace Asterra.Gameplay
 {
     /// <summary>
-    /// Composition root for a local skirmish. Wire Netcode session later without rewriting gameplay.
+    /// Composition root for a local 1v1 skirmish sandbox (player 0 vs dummy enemy 1).
     /// </summary>
     public sealed class MatchBootstrap : MonoBehaviour
     {
@@ -13,6 +17,9 @@ namespace Asterra.Gameplay
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 500;
         [SerializeField] private int startingTimber = 300;
+        [SerializeField] private int enemyStartingGold = 500;
+        [SerializeField] private bool attachLocalOrders = true;
+        [SerializeField] private bool runSmokeOnAwake;
 
         public IMatchSession Session { get; private set; }
         public ILockstepClock Clock { get; private set; }
@@ -21,9 +28,13 @@ namespace Asterra.Gameplay
         public IResourceWallet Wallet { get; private set; }
         public IFactionCatalog Factions { get; private set; }
         public IIdFactory Ids { get; private set; }
+        public DefinitionRegistry Definitions { get; private set; }
 
         private CommandBus _commandBus;
+        private SkirmishWorldSim _sim;
+        private IArmyBrain _enemyBrain;
         private float _accum;
+        private LocalOrderController _orders;
 
         private void Awake()
         {
@@ -32,13 +43,35 @@ namespace Asterra.Gameplay
             _commandBus = new CommandBus();
             Commands = _commandBus;
             Clock = new LockstepClock(1f / Mathf.Max(1f, tickHz), commandDelayTicks);
-            World = new SkirmishWorldSim(Wallet);
+            Definitions = SkirmishDefaultContent.CreateRegistry();
+            _sim = new SkirmishWorldSim(Wallet, Ids, Definitions);
+            World = _sim;
             Factions = new FactionCatalog(factions);
-            Session = new LocalMatchSession(new PlayerId(0), playerCount: 1);
+            Session = new LocalMatchSession(new PlayerId(0), playerCount: 2);
 
             var local = Session.LocalPlayer;
+            var enemy = new PlayerId(1);
             Wallet.Seed(local, ResourceType.Gold, startingGold);
             Wallet.Seed(local, ResourceType.Timber, startingTimber);
+            Wallet.Seed(enemy, ResourceType.Gold, enemyStartingGold);
+            Wallet.Seed(enemy, ResourceType.Timber, startingTimber);
+
+            SkirmishDefaultContent.PopulateInitialWorld(_sim, Ids);
+            _enemyBrain = new DummyEnemyCamp(
+                enemy,
+                SkirmishDefaultContent.KeepId,
+                SkirmishDefaultContent.MilitiaId);
+
+            if (attachLocalOrders)
+            {
+                _orders = gameObject.GetComponent<LocalOrderController>();
+                if (_orders == null)
+                    _orders = gameObject.AddComponent<LocalOrderController>();
+                _orders.Bind(this);
+            }
+
+            if (runSmokeOnAwake)
+                Debug.Log(SkirmishSmokeTest.Run());
         }
 
         private void Update()
@@ -55,6 +88,25 @@ namespace Asterra.Gameplay
         private void SimulateOneTick()
         {
             var target = new Tick(Clock.CurrentTick.Value + (uint)Clock.CommandDelayTicks);
+
+            var aiCommands = _enemyBrain.Think(new ArmyBrainContext(Clock.CurrentTick, World, Wallet));
+            if (aiCommands.Count > 0)
+            {
+                var copy = new GameCommand[aiCommands.Count];
+                for (int i = 0; i < aiCommands.Count; i++)
+                {
+                    copy[i] = aiCommands[i];
+                    copy[i].IssueTick = target;
+                }
+
+                _commandBus.EnqueueRemote(new CommandFrame
+                {
+                    TargetTick = target,
+                    Player = _enemyBrain.Player,
+                    Commands = copy,
+                });
+            }
+
             _commandBus.ScheduleLocal(target);
 
             var frameCommands = Commands.DrainForTick(Clock.CurrentTick);

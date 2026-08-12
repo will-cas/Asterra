@@ -1,0 +1,146 @@
+using System.Text;
+using Asterra.Core;
+using Asterra.Gameplay.Content;
+using Asterra.Gameplay.Sim;
+
+namespace Asterra.Gameplay
+{
+    /// <summary>
+    /// Editor-free regression driver: advances a skirmish for N ticks and reports summary stats.
+    /// Call from MatchBootstrap (runSmokeOnAwake) or later from an Editor menu.
+    /// </summary>
+    public static class SkirmishSmokeTest
+    {
+        public static string Run(int ticks = 2000)
+        {
+            var ids = new SequentialIdFactory();
+            var wallet = new ResourceWallet();
+            var defs = SkirmishDefaultContent.CreateRegistry();
+            var sim = new SkirmishWorldSim(wallet, ids, defs);
+            var clock = new LockstepClock(0.05f, commandDelayTicks: 2);
+            var bus = new CommandBus();
+
+            var player = new PlayerId(0);
+            var enemy = new PlayerId(1);
+            wallet.Seed(player, ResourceType.Gold, 500);
+            wallet.Seed(player, ResourceType.Timber, 300);
+            wallet.Seed(enemy, ResourceType.Gold, 500);
+            wallet.Seed(enemy, ResourceType.Timber, 300);
+            SkirmishDefaultContent.PopulateInitialWorld(sim, ids);
+
+            var owned = new System.Collections.Generic.List<EntityId>();
+            for (int i = 0; i < sim.Units.Count; i++)
+            {
+                if (sim.Units[i].Owner == player)
+                    owned.Add(sim.Units[i].Id);
+            }
+
+            bus.EnqueueRemote(new CommandFrame
+            {
+                TargetTick = new Tick(2),
+                Player = player,
+                Commands = new GameCommand[]
+                {
+                    new PlaceBuildingCommand
+                    {
+                        Issuer = player,
+                        BuildingDefId = SkirmishDefaultContent.BarracksId,
+                        X = -300f,
+                        Z = 25f,
+                    },
+                    new MoveCommand
+                    {
+                        Issuer = player,
+                        UnitIds = owned.ToArray(),
+                        TargetX = 0f,
+                        TargetZ = 0f,
+                    },
+                },
+            });
+            bus.EnqueueRemote(new CommandFrame
+            {
+                TargetTick = new Tick(40),
+                Player = player,
+                Commands = new GameCommand[]
+                {
+                    new CaptureTerritoryCommand
+                    {
+                        Issuer = player,
+                        TerritoryNodeId = sim.Territories[0].Id,
+                    },
+                },
+            });
+            bus.EnqueueRemote(new CommandFrame
+            {
+                TargetTick = new Tick(200),
+                Player = player,
+                Commands = new GameCommand[]
+                {
+                    new ChooseUpgradeCommand
+                    {
+                        Issuer = player,
+                        UpgradeDefId = SkirmishDefaultContent.MilitiaTrainingId,
+                    },
+                },
+            });
+
+            for (int i = 0; i < ticks; i++)
+            {
+                // Mid-match: train once barracks should be active.
+                if (clock.CurrentTick.Value == 160)
+                {
+                    EntityId barracks = default;
+                    bool found = false;
+                    for (int b = 0; b < sim.Buildings.Count; b++)
+                    {
+                        if (sim.Buildings[b].DefinitionId == SkirmishDefaultContent.BarracksId
+                            && sim.Buildings[b].Owner == player)
+                        {
+                            barracks = sim.Buildings[b].Id;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                    {
+                        bus.EnqueueRemote(new CommandFrame
+                        {
+                            TargetTick = clock.CurrentTick,
+                            Player = player,
+                            Commands = new GameCommand[]
+                            {
+                                new TrainUnitCommand
+                                {
+                                    Issuer = player,
+                                    BuildingId = barracks,
+                                    UnitDefId = SkirmishDefaultContent.MilitiaId,
+                                },
+                            },
+                        });
+                    }
+                }
+
+                var commands = bus.DrainForTick(clock.CurrentTick);
+                sim.ApplyCommands(commands);
+                sim.Tick(clock.FixedDeltaSeconds);
+                clock.Advance();
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("[Asterra Smoke]");
+            sb.AppendLine($"ticks={ticks} hash={sim.ComputeWorldHash()}");
+            sb.AppendLine($"units={sim.Units.Count} buildings={sim.Buildings.Count}");
+            sb.AppendLine($"goldP0={wallet.Get(player, ResourceType.Gold)} goldP1={wallet.Get(enemy, ResourceType.Gold)}");
+            if (sim.Territories.Count > 0)
+            {
+                var t = sim.Territories[0];
+                sb.AppendLine(
+                    $"territory state={t.State} controller={(t.HasController ? t.Controller.ToString() : "none")} progress={t.CaptureProgress:0.00}");
+            }
+
+            sb.AppendLine($"upgradeP0={sim.HasUpgrade(player, SkirmishDefaultContent.MilitiaTrainingId)}");
+            return sb.ToString();
+        }
+    }
+}

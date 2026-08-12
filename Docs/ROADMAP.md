@@ -2,7 +2,7 @@
 
 Skirmish-first vertical slice. Persist campaign / world mutation **after** multiplayer skirmish feels good.
 
-## Phase 0 — Project hygiene (done in repo scaffold)
+## Phase 0 — Project hygiene
 
 - [x] Unity 6.3 LTS project stub + Git
 - [x] Asmdefs + Core interfaces
@@ -10,14 +10,16 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 - [ ] Open in Hub, let Unity regenerate `.meta` / resolve packages
 - [ ] Steamworks.NET / Facepunch Steamworks (defer until build pipeline)
 
-## Phase 1 — Local skirmish sandbox (playable solo)
+## Phase 1 — Local skirmish sandbox (code complete; needs Editor scene)
 
-1. Boot → Skirmish scene, fixed 1 km-ish play space, 3 spawn points.
-2. One faction playable: place 1 building, train 1 unit type.
-3. Select / move units (local commands → `IWorldSim`).
-4. One enemy dummy camp (scripted, not full AI).
-5. Capture **one** territory node; tick **one** resource type.
-6. One upgrade choice that buffs production or unit stats (choice → world flag).
+1. [x] ~1 km play space data + keeps at ±350, center territory (no scene asset yet)
+2. [x] Place barracks + train militia via commands / `SkirmishDefaultContent`
+3. [x] Select / move / attack through `LocalOrderController` → lockstep bus → `SkirmishWorldSim`
+4. [x] `DummyEnemyCamp` scripted opponent
+5. [x] Territory capture + gold income tick
+6. [x] `upgrade_militia_training` (faster train + damage buff)
+7. [x] `SkirmishSmokeTest` headless driver (enable `runSmokeOnAwake` on `MatchBootstrap`)
+8. [ ] Create `Skirmish.unity`, ground, camera; flip smoke off for play
 
 **Exit criteria:** 5-minute loop: build → train → fight → capture → gather → upgrade.
 
@@ -48,16 +50,3 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 2. Unity Cloud Build → Steam depot.
 3. Analytics events for funnel + balance.
 4. Only then: campaign map, persistent world changes, commander progression saves.
-
-## What to build first (short list)
-
-| Order | Deliverable |
-|------:|-------------|
-| 1 | `MatchBootstrap` + Core command types |
-| 2 | Resource wallet + territory node |
-| 3 | Building placement + production queue |
-| 4 | Unit spawn/move/attack (GO, then Entities) |
-| 5 | Selection + camera |
-| 6 | Lockstep shell (local multi-peer in editor) |
-| 7 | Lobby/Relay host-join |
-| 8 | Second & third factions as data only |
