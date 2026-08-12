@@ -2,16 +2,16 @@ using UnityEngine;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Simple RTS camera: WASD/edge pan, scroll zoom, middle-mouse orbit yaw.</summary>
+    /// <summary>Simple RTS camera: WASD/edge pan, scroll zoom.</summary>
     public sealed class RtsCameraRig : MonoBehaviour
     {
         [SerializeField] private Camera rigCamera;
-        [SerializeField] private float panSpeed = 80f;
-        [SerializeField] private float zoomSpeed = 200f;
-        [SerializeField] private float minHeight = 40f;
-        [SerializeField] private float maxHeight = 280f;
+        [SerializeField] private float panSpeed = 120f;
+        [SerializeField] private float zoomSpeed = 250f;
+        [SerializeField] private float minHeight = 60f;
+        [SerializeField] private float maxHeight = 420f;
         [SerializeField] private float edgePanPixels = 12f;
-        [SerializeField] private Vector3 lookAt = new Vector3(0f, 0f, 0f);
+        [SerializeField] private Vector3 lookAt = new Vector3(-80f, 0f, 0f);
 
         private void Awake()
         {
@@ -22,9 +22,14 @@ namespace Asterra.Gameplay
                 var go = new GameObject("AsterraCamera");
                 rigCamera = go.AddComponent<Camera>();
                 go.tag = "MainCamera";
+                go.AddComponent<AudioListener>();
             }
 
-            rigCamera.transform.position = new Vector3(-120f, 140f, -180f);
+            // Frame west keep + center territory for the offline 1v1 layout.
+            rigCamera.fieldOfView = 50f;
+            rigCamera.nearClipPlane = 0.3f;
+            rigCamera.farClipPlane = 2000f;
+            rigCamera.transform.position = new Vector3(-180f, 220f, -260f);
             rigCamera.transform.LookAt(lookAt);
         }
 
@@ -47,7 +52,8 @@ namespace Asterra.Gameplay
             if (UnityEngine.Input.GetKey(KeyCode.A) || UnityEngine.Input.mousePosition.x <= edgePanPixels)
                 move -= flatRight;
 
-            t.position += move.normalized * (panSpeed * Time.deltaTime);
+            if (move.sqrMagnitude > 0f)
+                t.position += move.normalized * (panSpeed * Time.deltaTime);
 
             float scroll = UnityEngine.Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.01f)

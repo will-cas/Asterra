@@ -159,11 +159,14 @@ namespace Asterra.Gameplay
             ground.transform.localScale = new Vector3(groundSize / 10f, 1f, groundSize / 10f);
             ground.transform.position = Vector3.zero;
             var rend = ground.GetComponent<Renderer>();
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                         ?? Shader.Find("Unlit/Color")
+                         ?? Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard");
             if (shader != null)
             {
                 var mat = new Material(shader);
-                var color = new Color(0.22f, 0.28f, 0.18f);
+                var color = new Color(0.28f, 0.36f, 0.22f);
                 if (mat.HasProperty("_BaseColor"))
                     mat.SetColor("_BaseColor", color);
                 if (mat.HasProperty("_Color"))
