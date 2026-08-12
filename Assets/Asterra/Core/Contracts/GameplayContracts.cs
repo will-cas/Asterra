@@ -2,7 +2,7 @@ namespace Asterra.Core
 {
     public interface IUnit
     {
-        EntityId Id { get; }
+        SimEntityId Id { get; }
         PlayerId Owner { get; }
         FactionId Faction { get; }
         string DefinitionId { get; }
@@ -14,7 +14,7 @@ namespace Asterra.Core
 
     public interface IBuilding
     {
-        EntityId Id { get; }
+        SimEntityId Id { get; }
         PlayerId Owner { get; }
         FactionId Faction { get; }
         string DefinitionId { get; }
@@ -26,7 +26,7 @@ namespace Asterra.Core
 
     public interface IResourceNode
     {
-        EntityId Id { get; }
+        SimEntityId Id { get; }
         ResourceType Type { get; }
         int Remaining { get; }
         bool IsDepleted { get; }
@@ -41,7 +41,7 @@ namespace Asterra.Core
 
     public interface ICommander
     {
-        EntityId Id { get; }
+        SimEntityId Id { get; }
         PlayerId Owner { get; }
         FactionId Faction { get; }
         string DefinitionId { get; }
@@ -50,7 +50,7 @@ namespace Asterra.Core
 
     public interface ITerritoryNode
     {
-        EntityId Id { get; }
+        SimEntityId Id { get; }
         TerritoryState State { get; }
         PlayerId? Controller { get; }
         float CaptureProgress { get; }

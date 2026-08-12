@@ -55,7 +55,7 @@ namespace Asterra.Core
             public void AddBuilding(PlayerId owner, string def)
             {
                 _buildings.Add(new BuildingSnapshot(
-                    new EntityId((uint)(_buildings.Count + 1)),
+                    new SimEntityId((uint)(_buildings.Count + 1)),
                     owner,
                     def,
                     0f,
@@ -73,7 +73,7 @@ namespace Asterra.Core
             {
                 _territories.Clear();
                 _territories.Add(new TerritorySnapshot(
-                    new EntityId(99),
+                    new SimEntityId(99),
                     0f,
                     0f,
                     40f,

@@ -6,7 +6,7 @@ namespace Asterra.Gameplay.Presentation
     /// <summary>Clickable view bound to a sim entity.</summary>
     public sealed class EntityView : MonoBehaviour
     {
-        public EntityId Id { get; private set; }
+        public SimEntityId Id { get; private set; }
         public bool IsUnit { get; private set; }
         public PlayerId Owner { get; private set; }
         public string DefinitionId { get; private set; }
@@ -14,7 +14,7 @@ namespace Asterra.Gameplay.Presentation
         private Transform _selectionRing;
         private Renderer _renderer;
 
-        public void Initialize(EntityId id, bool isUnit, PlayerId owner, string definitionId, byte factionIndex)
+        public void Initialize(SimEntityId id, bool isUnit, PlayerId owner, string definitionId, byte factionIndex)
         {
             Id = id;
             IsUnit = isUnit;

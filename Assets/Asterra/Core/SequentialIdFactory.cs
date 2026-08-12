@@ -4,6 +4,6 @@ namespace Asterra.Core
     {
         private uint _next = 1;
 
-        public EntityId Next() => new EntityId(_next++);
+        public SimEntityId Next() => new SimEntityId(_next++);
     }
 }

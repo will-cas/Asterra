@@ -19,9 +19,9 @@ namespace Asterra.Gameplay
 
         private readonly Dictionary<uint, EntityView> _unitViews = new();
         private readonly Dictionary<uint, EntityView> _buildingViews = new();
-        private System.Func<IReadOnlyList<EntityId>> _getSelected;
+        private System.Func<IReadOnlyList<SimEntityId>> _getSelected;
 
-        public void BindSelection(System.Func<IReadOnlyList<EntityId>> getSelected)
+        public void BindSelection(System.Func<IReadOnlyList<SimEntityId>> getSelected)
         {
             _getSelected = getSelected;
         }
@@ -136,7 +136,7 @@ namespace Asterra.Gameplay
         private static EntityView SpawnEntity(
             Transform parent,
             string name,
-            EntityId id,
+            SimEntityId id,
             bool isUnit,
             PlayerId owner,
             string definitionId,

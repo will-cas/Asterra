@@ -5,7 +5,7 @@ using Unity.Mathematics;
 namespace Asterra.Simulation
 {
     /// <summary>
-    /// DOTS unit representation. Presentation stays in Gameplay via EntityId bridging.
+    /// DOTS unit representation. Presentation stays in Gameplay via SimEntityId bridging.
     /// Mirrors <c>Asterra.Gameplay.Sim.SimUnit</c> fields for the Phase 2 port.
     /// </summary>
     public struct UnitSim : IComponentData

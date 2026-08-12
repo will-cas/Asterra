@@ -146,7 +146,7 @@ namespace Asterra.Core
                     command = new AttackCommand
                     {
                         UnitIds = ReadEntityIds(reader),
-                        TargetId = new EntityId(reader.ReadUInt32()),
+                        TargetId = new SimEntityId(reader.ReadUInt32()),
                     };
                     break;
                 case CommandType.PlaceBuilding:
@@ -161,14 +161,14 @@ namespace Asterra.Core
                 case CommandType.TrainUnit:
                     command = new TrainUnitCommand
                     {
-                        BuildingId = new EntityId(reader.ReadUInt32()),
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
                         UnitDefId = ReadString(reader),
                     };
                     break;
                 case CommandType.CaptureTerritory:
                     command = new CaptureTerritoryCommand
                     {
-                        TerritoryNodeId = new EntityId(reader.ReadUInt32()),
+                        TerritoryNodeId = new SimEntityId(reader.ReadUInt32()),
                     };
                     break;
                 case CommandType.ChooseUpgrade:
@@ -193,7 +193,7 @@ namespace Asterra.Core
             return command;
         }
 
-        private static void WriteEntityIds(BinaryWriter writer, EntityId[] ids)
+        private static void WriteEntityIds(BinaryWriter writer, SimEntityId[] ids)
         {
             int count = ids?.Length ?? 0;
             if (count > 1024)
@@ -203,14 +203,14 @@ namespace Asterra.Core
                 writer.Write(ids[i].Value);
         }
 
-        private static EntityId[] ReadEntityIds(BinaryReader reader)
+        private static SimEntityId[] ReadEntityIds(BinaryReader reader)
         {
             int count = reader.ReadInt32();
             if (count < 0 || count > 1024)
                 throw new InvalidDataException($"Unit id count out of range: {count}");
-            var ids = new EntityId[count];
+            var ids = new SimEntityId[count];
             for (int i = 0; i < count; i++)
-                ids[i] = new EntityId(reader.ReadUInt32());
+                ids[i] = new SimEntityId(reader.ReadUInt32());
             return ids;
         }
 

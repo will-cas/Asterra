@@ -7,7 +7,7 @@ namespace Asterra.Gameplay
     {
         [SerializeField] private BuildingDefinition definition;
 
-        public EntityId Id { get; private set; }
+        public SimEntityId Id { get; private set; }
         public PlayerId Owner { get; private set; }
         public FactionId Faction { get; private set; }
         public string DefinitionId => definition != null ? definition.Id : string.Empty;
@@ -16,7 +16,7 @@ namespace Asterra.Gameplay
         public float MaxHealth { get; private set; }
         public bool CanProduce => State == BuildingState.Active && definition != null && definition.CanProduce;
 
-        public void Initialize(EntityId id, PlayerId owner, FactionId faction, BuildingDefinition def)
+        public void Initialize(SimEntityId id, PlayerId owner, FactionId faction, BuildingDefinition def)
         {
             Id = id;
             Owner = owner;

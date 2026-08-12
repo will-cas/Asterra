@@ -17,7 +17,7 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        UnitIds = new[] { new EntityId(10), new EntityId(11) },
+                        UnitIds = new[] { new SimEntityId(10), new SimEntityId(11) },
                         TargetX = 12.5f,
                         TargetZ = -3.25f,
                     },
@@ -25,8 +25,8 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        UnitIds = new[] { new EntityId(10) },
-                        TargetId = new EntityId(99),
+                        UnitIds = new[] { new SimEntityId(10) },
+                        TargetId = new SimEntityId(99),
                     },
                     new PlaceBuildingCommand
                     {
@@ -41,14 +41,14 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        BuildingId = new EntityId(7),
+                        BuildingId = new SimEntityId(7),
                         UnitDefId = "unit_militia",
                     },
                     new CaptureTerritoryCommand
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        TerritoryNodeId = new EntityId(5),
+                        TerritoryNodeId = new SimEntityId(5),
                     },
                     new ChooseUpgradeCommand
                     {
@@ -60,7 +60,7 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        UnitIds = new[] { new EntityId(10) },
+                        UnitIds = new[] { new SimEntityId(10) },
                         Stance = UnitStance.Hold,
                     },
                 },

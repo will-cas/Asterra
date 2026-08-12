@@ -5,12 +5,12 @@ namespace Asterra.Gameplay
 {
     public sealed class TerritoryNodeRuntime : MonoBehaviour, ITerritoryNode
     {
-        public EntityId Id { get; private set; }
+        public SimEntityId Id { get; private set; }
         public TerritoryState State { get; private set; } = TerritoryState.Neutral;
         public PlayerId? Controller { get; private set; }
         public float CaptureProgress { get; private set; }
 
-        public void Initialize(EntityId id)
+        public void Initialize(SimEntityId id)
         {
             Id = id;
             State = TerritoryState.Neutral;

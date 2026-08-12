@@ -33,7 +33,7 @@ namespace Asterra.Gameplay
             wallet.Seed(enemy, ResourceType.Timber, 300);
             SkirmishDefaultContent.PopulateInitialWorld(sim, ids, playerFaction, enemyFaction);
 
-            var owned = new System.Collections.Generic.List<EntityId>();
+            var owned = new System.Collections.Generic.List<SimEntityId>();
             for (int i = 0; i < sim.Units.Count; i++)
             {
                 if (sim.Units[i].Owner == player)
@@ -96,7 +96,7 @@ namespace Asterra.Gameplay
             {
                 if (clock.CurrentTick.Value == 160)
                 {
-                    EntityId barracks = default;
+                    SimEntityId barracks = default;
                     bool found = false;
                     for (int b = 0; b < sim.Buildings.Count; b++)
                     {

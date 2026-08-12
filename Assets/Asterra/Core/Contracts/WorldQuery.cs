@@ -4,7 +4,7 @@ namespace Asterra.Core
 {
     public readonly struct UnitSnapshot
     {
-        public readonly EntityId Id;
+        public readonly SimEntityId Id;
         public readonly PlayerId Owner;
         public readonly FactionId Faction;
         public readonly string DefinitionId;
@@ -15,7 +15,7 @@ namespace Asterra.Core
         public readonly bool IsAlive;
 
         public UnitSnapshot(
-            EntityId id,
+            SimEntityId id,
             PlayerId owner,
             FactionId faction,
             string definitionId,
@@ -39,7 +39,7 @@ namespace Asterra.Core
 
     public readonly struct BuildingSnapshot
     {
-        public readonly EntityId Id;
+        public readonly SimEntityId Id;
         public readonly PlayerId Owner;
         public readonly string DefinitionId;
         public readonly float X;
@@ -48,7 +48,7 @@ namespace Asterra.Core
         public readonly bool CanProduce;
 
         public BuildingSnapshot(
-            EntityId id,
+            SimEntityId id,
             PlayerId owner,
             string definitionId,
             float x,
@@ -68,7 +68,7 @@ namespace Asterra.Core
 
     public readonly struct TerritorySnapshot
     {
-        public readonly EntityId Id;
+        public readonly SimEntityId Id;
         public readonly float X;
         public readonly float Z;
         public readonly float Radius;
@@ -78,7 +78,7 @@ namespace Asterra.Core
         public readonly float CaptureProgress;
 
         public TerritorySnapshot(
-            EntityId id,
+            SimEntityId id,
             float x,
             float z,
             float radius,

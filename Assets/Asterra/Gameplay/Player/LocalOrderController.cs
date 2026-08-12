@@ -212,7 +212,7 @@ namespace Asterra.Gameplay.Player
 
         private void SelectOwnedNear(float x, float z, float radius)
         {
-            var ids = new System.Collections.Generic.List<EntityId>();
+            var ids = new System.Collections.Generic.List<SimEntityId>();
             float r2 = radius * radius;
             for (int i = 0; i < _world.Units.Count; i++)
             {
@@ -233,18 +233,18 @@ namespace Asterra.Gameplay.Player
             return false;
         }
 
-        private EntityId[] GetOrderUnitIds()
+        private SimEntityId[] GetOrderUnitIds()
         {
             if (_selection.Selected.Count > 0)
             {
-                var arr = new EntityId[_selection.Selected.Count];
+                var arr = new SimEntityId[_selection.Selected.Count];
                 for (int i = 0; i < _selection.Selected.Count; i++)
                     arr[i] = _selection.Selected[i];
                 return arr;
             }
 
             AutoSelectOwnedUnits();
-            var fallback = new EntityId[_selection.Selected.Count];
+            var fallback = new SimEntityId[_selection.Selected.Count];
             for (int i = 0; i < _selection.Selected.Count; i++)
                 fallback[i] = _selection.Selected[i];
             return fallback;
@@ -252,7 +252,7 @@ namespace Asterra.Gameplay.Player
 
         private void AutoSelectOwnedUnits()
         {
-            var ids = new System.Collections.Generic.List<EntityId>();
+            var ids = new System.Collections.Generic.List<SimEntityId>();
             for (int i = 0; i < _world.Units.Count; i++)
             {
                 var u = _world.Units[i];
@@ -263,7 +263,7 @@ namespace Asterra.Gameplay.Player
             _selection.Set(ids);
         }
 
-        private bool TryFindOwnedProducer(out EntityId buildingId)
+        private bool TryFindOwnedProducer(out SimEntityId buildingId)
         {
             for (int i = 0; i < _world.Buildings.Count; i++)
             {
@@ -279,7 +279,7 @@ namespace Asterra.Gameplay.Player
             return false;
         }
 
-        private bool TryFindHostile(out EntityId targetId)
+        private bool TryFindHostile(out SimEntityId targetId)
         {
             for (int i = 0; i < _world.Units.Count; i++)
             {

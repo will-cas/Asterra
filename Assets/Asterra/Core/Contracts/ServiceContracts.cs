@@ -42,9 +42,9 @@ namespace Asterra.Core
 
     public interface ITerritoryMap
     {
-        ITerritoryNode Get(EntityId id);
+        ITerritoryNode Get(SimEntityId id);
         IReadOnlyList<ITerritoryNode> All { get; }
-        void SetController(EntityId id, PlayerId controller);
+        void SetController(SimEntityId id, PlayerId controller);
     }
 
     public interface IFactionCatalog
@@ -55,7 +55,7 @@ namespace Asterra.Core
 
     public interface IProductionQueue
     {
-        bool TryEnqueue(EntityId buildingId, string unitDefId, PlayerId payer);
+        bool TryEnqueue(SimEntityId buildingId, string unitDefId, PlayerId payer);
         void Tick(float deltaSeconds);
     }
 
@@ -67,6 +67,6 @@ namespace Asterra.Core
 
     public interface IIdFactory
     {
-        EntityId Next();
+        SimEntityId Next();
     }
 }

@@ -13,15 +13,15 @@ namespace Asterra.Core
 
     public sealed class MoveCommand : GameCommand
     {
-        public EntityId[] UnitIds;
+        public SimEntityId[] UnitIds;
         public float TargetX;
         public float TargetZ;
     }
 
     public sealed class AttackCommand : GameCommand
     {
-        public EntityId[] UnitIds;
-        public EntityId TargetId;
+        public SimEntityId[] UnitIds;
+        public SimEntityId TargetId;
     }
 
     public sealed class PlaceBuildingCommand : GameCommand
@@ -34,13 +34,13 @@ namespace Asterra.Core
 
     public sealed class TrainUnitCommand : GameCommand
     {
-        public EntityId BuildingId;
+        public SimEntityId BuildingId;
         public string UnitDefId;
     }
 
     public sealed class CaptureTerritoryCommand : GameCommand
     {
-        public EntityId TerritoryNodeId;
+        public SimEntityId TerritoryNodeId;
     }
 
     public sealed class ChooseUpgradeCommand : GameCommand
@@ -50,7 +50,7 @@ namespace Asterra.Core
 
     public sealed class SetStanceCommand : GameCommand
     {
-        public EntityId[] UnitIds;
+        public SimEntityId[] UnitIds;
         public UnitStance Stance;
     }
 

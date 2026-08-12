@@ -7,7 +7,7 @@ namespace Asterra.Gameplay
     {
         [SerializeField] private UnitDefinition definition;
 
-        public EntityId Id { get; private set; }
+        public SimEntityId Id { get; private set; }
         public PlayerId Owner { get; private set; }
         public FactionId Faction { get; private set; }
         public string DefinitionId => definition != null ? definition.Id : string.Empty;
@@ -16,7 +16,7 @@ namespace Asterra.Gameplay
         public UnitStance Stance { get; private set; } = UnitStance.Aggressive;
         public bool IsAlive => Health > 0f;
 
-        public void Initialize(EntityId id, PlayerId owner, FactionId faction, UnitDefinition def)
+        public void Initialize(SimEntityId id, PlayerId owner, FactionId faction, UnitDefinition def)
         {
             Id = id;
             Owner = owner;

@@ -4,7 +4,7 @@ namespace Asterra.Gameplay.Sim
 {
     public sealed class SimUnit : IUnit
     {
-        public EntityId Id { get; }
+        public SimEntityId Id { get; }
         public PlayerId Owner { get; }
         public FactionId Faction { get; }
         public string DefinitionId { get; }
@@ -23,9 +23,9 @@ namespace Asterra.Gameplay.Sim
 
         public float? MoveTargetX;
         public float? MoveTargetZ;
-        public EntityId? AttackTargetId;
+        public SimEntityId? AttackTargetId;
 
-        public SimUnit(EntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
+        public SimUnit(SimEntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
         {
             Id = id;
             Owner = owner;
@@ -49,7 +49,7 @@ namespace Asterra.Gameplay.Sim
 
     public sealed class SimBuilding : IBuilding
     {
-        public EntityId Id { get; }
+        public SimEntityId Id { get; }
         public PlayerId Owner { get; }
         public FactionId Faction { get; }
         public string DefinitionId { get; }
@@ -69,7 +69,7 @@ namespace Asterra.Gameplay.Sim
         private readonly bool _canProduce;
 
         public SimBuilding(
-            EntityId id,
+            SimEntityId id,
             PlayerId owner,
             FactionId faction,
             BuildingDefData def,
@@ -107,7 +107,7 @@ namespace Asterra.Gameplay.Sim
 
     public sealed class SimTerritory : ITerritoryNode
     {
-        public EntityId Id { get; }
+        public SimEntityId Id { get; }
         public TerritoryState State { get; set; } = TerritoryState.Neutral;
         public PlayerId? Controller { get; set; }
         public float CaptureProgress { get; set; }
@@ -117,7 +117,7 @@ namespace Asterra.Gameplay.Sim
         public float Radius;
         public int GoldPerSecondWhenControlled = 5;
 
-        public SimTerritory(EntityId id, float x, float z, float radius)
+        public SimTerritory(SimEntityId id, float x, float z, float radius)
         {
             Id = id;
             X = x;
@@ -142,7 +142,7 @@ namespace Asterra.Gameplay.Sim
 
     public sealed class SimResourceNode : IResourceNode
     {
-        public EntityId Id { get; }
+        public SimEntityId Id { get; }
         public ResourceType Type { get; }
         public int Remaining { get; private set; }
         public bool IsDepleted => Remaining <= 0;
@@ -150,7 +150,7 @@ namespace Asterra.Gameplay.Sim
         public float X;
         public float Z;
 
-        public SimResourceNode(EntityId id, ResourceType type, int amount, float x, float z)
+        public SimResourceNode(SimEntityId id, ResourceType type, int amount, float x, float z)
         {
             Id = id;
             Type = type;

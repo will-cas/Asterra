@@ -45,7 +45,7 @@ namespace Asterra.Gameplay
 
         public bool HasUpgrade(PlayerId player, string upgradeDefId) => _upgrades.Has(player, upgradeDefId);
 
-        public SimUnit SpawnUnit(EntityId id, PlayerId owner, FactionId faction, string unitDefId, float x, float z)
+        public SimUnit SpawnUnit(SimEntityId id, PlayerId owner, FactionId faction, string unitDefId, float x, float z)
         {
             if (!_defs.TryGetUnit(unitDefId, out var def))
                 throw new InvalidOperationException($"Unknown unit def '{unitDefId}'.");
@@ -59,7 +59,7 @@ namespace Asterra.Gameplay
         }
 
         public SimBuilding SpawnBuilding(
-            EntityId id,
+            SimEntityId id,
             PlayerId owner,
             FactionId faction,
             string buildingDefId,
@@ -77,7 +77,7 @@ namespace Asterra.Gameplay
             return building;
         }
 
-        public void AddTerritory(EntityId id, float x, float z, float radius, int goldPerSecond)
+        public void AddTerritory(SimEntityId id, float x, float z, float radius, int goldPerSecond)
         {
             var node = new SimTerritory(id, x, z, radius)
             {
@@ -88,7 +88,7 @@ namespace Asterra.Gameplay
             RebuildSnapshots();
         }
 
-        public void AddResourceNode(EntityId id, ResourceType type, int amount, float x, float z)
+        public void AddResourceNode(SimEntityId id, ResourceType type, int amount, float x, float z)
         {
             _resources.Add(new SimResourceNode(id, type, amount, x, z));
         }
@@ -500,7 +500,7 @@ namespace Asterra.Gameplay
             }
         }
 
-        private bool TryGetAttackTargetPosition(EntityId id, out float x, out float z)
+        private bool TryGetAttackTargetPosition(SimEntityId id, out float x, out float z)
         {
             if (_unitsById.TryGetValue(id.Value, out var unit) && unit.IsAlive)
             {
@@ -522,7 +522,7 @@ namespace Asterra.Gameplay
         }
 
         private bool TryGetDamageable(
-            EntityId id,
+            SimEntityId id,
             out Action<float> applyDamage,
             out float x,
             out float z,

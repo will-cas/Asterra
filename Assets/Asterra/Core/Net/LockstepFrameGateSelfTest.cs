@@ -21,7 +21,7 @@ namespace Asterra.Core
                     new MoveCommand
                     {
                         Issuer = new PlayerId(0),
-                        UnitIds = new[] { new EntityId(1) },
+                        UnitIds = new[] { new SimEntityId(1) },
                         TargetX = 1f,
                         TargetZ = 2f,
                     },

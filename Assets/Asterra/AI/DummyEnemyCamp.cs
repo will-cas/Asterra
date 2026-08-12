@@ -33,7 +33,7 @@ namespace Asterra.AI
             var world = context.World;
             var tick = (int)context.Tick.Value;
 
-            EntityId? keepId = null;
+            SimEntityId? keepId = null;
             float keepX = 0f;
             float keepZ = 0f;
             for (int i = 0; i < world.Buildings.Count; i++)
@@ -62,7 +62,7 @@ namespace Asterra.AI
                 _lastTrainTick = tick;
             }
 
-            var myUnits = new List<EntityId>();
+            var myUnits = new List<SimEntityId>();
             for (int i = 0; i < world.Units.Count; i++)
             {
                 var u = world.Units[i];
@@ -73,7 +73,7 @@ namespace Asterra.AI
             if (myUnits.Count == 0)
                 return commands;
 
-            EntityId? hostile = null;
+            SimEntityId? hostile = null;
             for (int i = 0; i < world.Units.Count; i++)
             {
                 var u = world.Units[i];

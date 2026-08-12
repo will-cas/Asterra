@@ -1,19 +1,19 @@
 namespace Asterra.Core
 {
     /// <summary>Stable identity for networked / saved entities. Not a Unity InstanceID.</summary>
-    public readonly struct EntityId : System.IEquatable<EntityId>
+    public readonly struct SimEntityId : System.IEquatable<SimEntityId>
     {
         public readonly uint Value;
 
-        public EntityId(uint value) => Value = value;
+        public SimEntityId(uint value) => Value = value;
 
-        public bool Equals(EntityId other) => Value == other.Value;
-        public override bool Equals(object obj) => obj is EntityId other && Equals(other);
+        public bool Equals(SimEntityId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is SimEntityId other && Equals(other);
         public override int GetHashCode() => (int)Value;
         public override string ToString() => $"Id:{Value}";
 
-        public static bool operator ==(EntityId a, EntityId b) => a.Value == b.Value;
-        public static bool operator !=(EntityId a, EntityId b) => a.Value != b.Value;
+        public static bool operator ==(SimEntityId a, SimEntityId b) => a.Value == b.Value;
+        public static bool operator !=(SimEntityId a, SimEntityId b) => a.Value != b.Value;
     }
 
     public readonly struct PlayerId : System.IEquatable<PlayerId>
