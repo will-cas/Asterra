@@ -9,5 +9,8 @@ namespace Asterra.Core
         CaptureTerritory = 5,
         ChooseUpgrade = 6,
         SetStance = 7,
+        Gather = 8,
+        SetRally = 9,
+        CancelProduction = 10,
     }
 }

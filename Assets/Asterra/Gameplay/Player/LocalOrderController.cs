@@ -14,10 +14,11 @@ namespace Asterra.Gameplay.Player
         Build = 3,
         Invalid = 4,
         Train = 5,
+        Gather = 6,
     }
 
     /// <summary>
-    /// Click/drag select, keep train builders, builder place mode, context orders.
+    /// Click/drag select, keep train builders, builder place mode, gather/rally, context orders.
     /// </summary>
     public sealed class LocalOrderController : MonoBehaviour
     {
@@ -93,7 +94,7 @@ namespace Asterra.Gameplay.Player
 
         public void TrainFromSelectedBuilding()
         {
-            if (!_selectedBuilding.HasValue || _commands == null || _roster == null)
+            if (!_selectedBuilding.HasValue || _roster == null)
                 return;
 
             string unitId = _roster.BasicUnitId;
@@ -108,11 +109,31 @@ namespace Asterra.Gameplay.Player
                 break;
             }
 
+            TrainUnit(unitId);
+        }
+
+        public void TrainUnit(string defId)
+        {
+            if (!_selectedBuilding.HasValue || _commands == null || string.IsNullOrEmpty(defId))
+                return;
+
             _commands.SubmitLocal(new TrainUnitCommand
             {
                 Issuer = _local,
                 BuildingId = _selectedBuilding.Value,
-                UnitDefId = unitId,
+                UnitDefId = defId,
+            });
+        }
+
+        public void CancelProduction()
+        {
+            if (!_selectedBuilding.HasValue || _commands == null)
+                return;
+
+            _commands.SubmitLocal(new CancelProductionCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
             });
         }
 
@@ -222,9 +243,39 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetMouseButtonDown(1) && !IsPointerOverUi())
             {
+                // Building selected: RMB ground sets rally.
+                if (_selectedBuilding.HasValue && TryRaycastGround(out float rx, out float rz))
+                {
+                    rx = Mathf.Clamp(rx, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                    rz = Mathf.Clamp(rz, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                    _commands.SubmitLocal(new SetRallyCommand
+                    {
+                        Issuer = _local,
+                        BuildingId = _selectedBuilding.Value,
+                        TargetX = rx,
+                        TargetZ = rz,
+                    });
+                    return;
+                }
+
                 var unitIds = GetOrderUnitIds();
                 if (unitIds.Length == 0)
                     return;
+
+                if (TryPickResource(out var resource))
+                {
+                    var builders = GetSelectedBuilderIds();
+                    if (builders.Length > 0)
+                    {
+                        _commands.SubmitLocal(new GatherCommand
+                        {
+                            Issuer = _local,
+                            UnitIds = builders,
+                            ResourceNodeId = resource.Id,
+                        });
+                        return;
+                    }
+                }
 
                 if (TryPickEntity(out var targetView))
                 {
@@ -332,6 +383,9 @@ namespace Asterra.Gameplay.Player
                 }
             }
 
+            if (UnityEngine.Input.GetKeyDown(KeyCode.X) && _selectedBuilding.HasValue)
+                CancelProduction();
+
             if (UnityEngine.Input.GetKeyDown(KeyCode.C) && _world.Territories.Count > 0)
             {
                 _commands.SubmitLocal(new CaptureTerritoryCommand
@@ -413,6 +467,12 @@ namespace Asterra.Gameplay.Player
 
             if (_selection != null && _selection.Selected.Count > 0)
             {
+                if (HasSelectedBuilder() && TryPickResource(out _))
+                {
+                    CurrentCursorMode = OrderCursorMode.Gather;
+                    return;
+                }
+
                 if (TryPickEntity(out var hover) && hover.Owner != _local && hover.IsRevealed)
                 {
                     CurrentCursorMode = OrderCursorMode.Attack;
@@ -466,6 +526,29 @@ namespace Asterra.Gameplay.Player
             }
 
             return false;
+        }
+
+        private SimEntityId[] GetSelectedBuilderIds()
+        {
+            var list = new List<SimEntityId>();
+            if (_selection == null)
+                return list.ToArray();
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var unit = _world.Units[u];
+                    if (unit.Id == id && unit.IsAlive && unit.Owner == _local
+                        && FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
+                    {
+                        list.Add(id);
+                        break;
+                    }
+                }
+            }
+
+            return list.ToArray();
         }
 
         private bool HasSelectedBuilderNear(float x, float z)
@@ -546,6 +629,64 @@ namespace Asterra.Gameplay.Player
                    || UnityEngine.Input.GetKey(KeyCode.RightShift)
                    || UnityEngine.Input.GetKey(KeyCode.LeftCommand)
                    || UnityEngine.Input.GetKey(KeyCode.RightCommand);
+        }
+
+        private bool TryPickResource(out ResourceNodeView view)
+        {
+            view = null;
+            if (rigCamera == null)
+                return false;
+
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, 5000f, clickMask, QueryTriggerInteraction.Ignore);
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var candidate = _rayHits[i].collider.GetComponentInParent<ResourceNodeView>();
+                if (candidate == null)
+                    continue;
+                if (_rayHits[i].distance < bestDist)
+                {
+                    bestDist = _rayHits[i].distance;
+                    view = candidate;
+                }
+            }
+
+            if (view != null)
+                return true;
+
+            return TryScreenPickResource(out view);
+        }
+
+        private bool TryScreenPickResource(out ResourceNodeView view)
+        {
+            view = null;
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float maxPx2 = screenPickPixels * screenPickPixels;
+            float bestPx2 = maxPx2;
+            var views = FindObjectsByType<ResourceNodeView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null)
+                    continue;
+
+                Vector3 world = candidate.transform.position + Vector3.up * 2f;
+                Vector3 screen = rigCamera.WorldToScreenPoint(world);
+                if (screen.z <= 0f)
+                    continue;
+
+                float dx = screen.x - mouse.x;
+                float dy = screen.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < bestPx2)
+                {
+                    bestPx2 = d2;
+                    view = candidate;
+                }
+            }
+
+            return view != null;
         }
 
         private bool TryPickEntity(out EntityView view)

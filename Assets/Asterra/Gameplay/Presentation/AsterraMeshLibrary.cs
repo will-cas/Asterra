@@ -13,11 +13,20 @@ namespace Asterra.Gameplay.Presentation
 
         public static Mesh GetUnitMesh(string definitionId)
         {
-            if (definitionId != null && definitionId.Contains("builder"))
+            if (string.IsNullOrEmpty(definitionId))
+                return GetOrCreate("unit_militia", BuildMilitia);
+
+            if (definitionId.Contains("builder"))
                 return GetOrCreate("unit_builder", BuildBuilder);
-            if (definitionId != null && definitionId.Contains("dryad"))
+            if (definitionId.Contains("archer"))
+                return GetOrCreate("unit_archer", BuildArcher);
+            if (definitionId.Contains("knight") || definitionId.Contains("cavalry"))
+                return GetOrCreate("unit_cavalry", BuildCavalry);
+            if (definitionId.Contains("catapult") || definitionId.Contains("siege") || definitionId.Contains("mortar"))
+                return GetOrCreate("unit_siege", BuildSiege);
+            if (definitionId.Contains("dryad"))
                 return GetOrCreate("unit_dryad", BuildDryad);
-            if (definitionId != null && definitionId.Contains("ember"))
+            if (definitionId.Contains("ember"))
                 return GetOrCreate("unit_ember_raider", BuildEmberRaider);
             return GetOrCreate("unit_militia", BuildMilitia);
         }
@@ -74,6 +83,36 @@ namespace Asterra.Gameplay.Presentation
                 Box(0, 1.2f, 0, 0.4f, 0.4f, 0.4f),
                 Box(0.55f, 0.55f, 0, 0.9f, 0.18f, 0.18f),
                 Box(0.95f, 0.55f, 0, 0.25f, 0.45f, 0.25f));
+        }
+
+        private static Mesh BuildArcher()
+        {
+            return Combine(
+                Box(0, 0, 0, 0.55f, 1.35f, 0.45f),
+                Box(0, 1.35f, 0, 0.4f, 0.4f, 0.4f),
+                Box(0.05f, 0.85f, 0.35f, 0.12f, 0.12f, 1.1f),
+                Box(0.05f, 0.85f, -0.35f, 0.55f, 0.08f, 0.08f));
+        }
+
+        private static Mesh BuildCavalry()
+        {
+            return Combine(
+                Box(0, 0, 0, 1.1f, 0.7f, 0.55f),
+                Box(0, 0.7f, 0, 0.55f, 0.9f, 0.45f),
+                Box(0, 1.55f, 0, 0.4f, 0.35f, 0.4f),
+                Box(0.55f, 0.35f, 0, 0.35f, 0.2f, 0.2f));
+        }
+
+        private static Mesh BuildSiege()
+        {
+            return Combine(
+                Box(0, 0, 0, 1.4f, 0.55f, 0.9f),
+                Box(0, 0.55f, 0, 0.7f, 0.7f, 0.7f),
+                Box(0.55f, 0.9f, 0, 1.2f, 0.18f, 0.18f),
+                Box(-0.55f, 0.15f, 0.5f, 0.25f, 0.25f, 0.25f),
+                Box(-0.55f, 0.15f, -0.5f, 0.25f, 0.25f, 0.25f),
+                Box(0.55f, 0.15f, 0.5f, 0.25f, 0.25f, 0.25f),
+                Box(0.55f, 0.15f, -0.5f, 0.25f, 0.25f, 0.25f));
         }
 
         private static Mesh BuildDryad()

@@ -210,7 +210,9 @@ namespace Asterra.Gameplay
                     EnemyRoster.KeepBuildingId,
                     EnemyRoster.ProducerBuildingId,
                     EnemyRoster.BuilderUnitId,
-                    EnemyRoster.BasicUnitId);
+                    EnemyRoster.BasicUnitId,
+                    EnemyRoster.RangedUnitId,
+                    EnemyRoster.CavalryUnitId);
                 coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
             }
 
@@ -222,6 +224,10 @@ namespace Asterra.Gameplay
 
                 if (FindFirstObjectByType<FogOfWarPresenter>() == null)
                     gameObject.AddComponent<FogOfWarPresenter>();
+                if (FindFirstObjectByType<CombatFeedbackPresenter>() == null)
+                    gameObject.AddComponent<CombatFeedbackPresenter>();
+                if (FindFirstObjectByType<MinimapPresenter>() == null)
+                    gameObject.AddComponent<MinimapPresenter>();
             }
 
             if (attachLocalOrders)

@@ -51,38 +51,74 @@ namespace Asterra.Gameplay
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);
             GUI.Label(
                 new Rect(12f, 56f, 1200f, 22f),
-                "Click keep → Train Builder  |  select builder → B place barracks  |  drag-select  |  RMB move/attack");
+                "Builder RMB resource = gather  |  B place producer  |  building RMB = rally  |  minimap click to pan");
 
-            float panelY = Screen.height - 78f;
-            if (orders != null && orders.SelectedBuilding.HasValue)
+            float panelY = Screen.height - 120f;
+            float x = 12f;
+            const float btnW = 118f;
+            const float btnH = 32f;
+            const float gap = 6f;
+
+            if (orders != null && orders.SelectedBuilding.HasValue && match.World != null && match.PlayerRoster != null)
             {
-                string label = "Train";
-                if (match.World != null && match.PlayerRoster != null)
+                bool foundBuilding = false;
+                BuildingSnapshot b = default;
+                for (int i = 0; i < match.World.Buildings.Count; i++)
                 {
-                    for (int i = 0; i < match.World.Buildings.Count; i++)
-                    {
-                        var b = match.World.Buildings[i];
-                        if (b.Id != orders.SelectedBuilding.Value)
-                            continue;
-                        label = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
-                            ? "Train Builder (T)"
-                            : "Train Soldier (T)";
-                        break;
-                    }
+                    if (match.World.Buildings[i].Id != orders.SelectedBuilding.Value)
+                        continue;
+                    b = match.World.Buildings[i];
+                    foundBuilding = true;
+                    break;
                 }
 
-                if (GUI.Button(new Rect(12f, panelY, 180f, 36f), label))
-                    orders.TrainFromSelectedBuilding();
+                if (foundBuilding)
+                {
+                    float progressPct = b.ProductionProgress * 100f;
+                    string prod = string.IsNullOrEmpty(b.ProductionUnitDefId)
+                        ? "Idle"
+                        : $"{ShortName(b.ProductionUnitDefId)} {progressPct:0}%  queue {b.QueueCount}";
+                    GUI.Label(new Rect(12f, panelY - 24f, 700f, 22f), $"Production: {prod}   (RMB set rally)");
+
+                    bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
+                    var roster = match.PlayerRoster;
+
+                    if (isKeep)
+                    {
+                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Builder"))
+                            orders.TrainUnit(roster.BuilderUnitId);
+                        x += btnW + gap;
+                    }
+                    else
+                    {
+                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Soldier"))
+                            orders.TrainUnit(roster.BasicUnitId);
+                        x += btnW + gap;
+                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Archer"))
+                            orders.TrainUnit(roster.RangedUnitId);
+                        x += btnW + gap;
+                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Cavalry"))
+                            orders.TrainUnit(roster.CavalryUnitId);
+                        x += btnW + gap;
+                        if (GUI.Button(new Rect(x, panelY, btnW, btnH), "Train Siege"))
+                            orders.TrainUnit(roster.SiegeUnitId);
+                        x += btnW + gap;
+                    }
+
+                    if (GUI.Button(new Rect(x, panelY, btnW + 20f, btnH), "Cancel Prod (X)"))
+                        orders.CancelProduction();
+                    x += btnW + 20f + gap;
+                }
             }
 
             if (orders != null && !orders.IsPlaceMode)
             {
-                if (GUI.Button(new Rect(202f, panelY, 200f, 36f), "Build Barracks (B)"))
+                if (GUI.Button(new Rect(x, panelY, 160f, btnH), "Build Barracks (B)"))
                     orders.EnterPlaceMode();
             }
             else if (orders != null && orders.IsPlaceMode)
             {
-                if (GUI.Button(new Rect(202f, panelY, 200f, 36f), "Cancel Build (Esc)"))
+                if (GUI.Button(new Rect(x, panelY, 160f, btnH), "Cancel Build (Esc)"))
                     orders.CancelPlaceMode();
             }
 
@@ -95,6 +131,14 @@ namespace Asterra.Gameplay
                 ? "Enemy keep destroyed"
                 : "Territory held long enough";
             GUI.Box(new Rect(Screen.width * 0.5f - 160f, Screen.height * 0.38f, 320f, 90f), $"{title}\n{reason}");
+        }
+
+        private static string ShortName(string defId)
+        {
+            if (string.IsNullOrEmpty(defId))
+                return "?";
+            int idx = defId.LastIndexOf('_');
+            return idx >= 0 && idx + 1 < defId.Length ? defId.Substring(idx + 1) : defId;
         }
     }
 }

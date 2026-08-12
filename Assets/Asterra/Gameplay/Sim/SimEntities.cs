@@ -1,3 +1,4 @@
+using System;
 using Asterra.Core;
 
 namespace Asterra.Gameplay.Sim
@@ -20,10 +21,19 @@ namespace Asterra.Gameplay.Sim
         public float AttackRange;
         public float AttackCooldown;
         public float AttackCooldownRemaining;
+        public bool CanGather;
+        public int CarryCapacity;
+        public float GatherRate;
+        public float BuildingDamageMultiplier;
+        public UnitRole Role;
 
         public float? MoveTargetX;
         public float? MoveTargetZ;
         public SimEntityId? AttackTargetId;
+        public SimEntityId? GatherTargetId;
+        public ResourceType? CarryType;
+        public int CarryAmount;
+        public bool ReturningToDeposit;
 
         public SimUnit(SimEntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
         {
@@ -37,18 +47,38 @@ namespace Asterra.Gameplay.Sim
             AttackDamage = def.AttackDamage;
             AttackRange = def.AttackRange;
             AttackCooldown = def.AttackCooldown;
+            CanGather = def.CanGather || def.IsBuilder;
+            CarryCapacity = def.CarryCapacity > 0 ? def.CarryCapacity : 10;
+            GatherRate = def.GatherRate > 0f ? def.GatherRate : 4f;
+            BuildingDamageMultiplier = def.BuildingDamageMultiplier > 0f ? def.BuildingDamageMultiplier : 1f;
+            Role = def.IsBuilder ? UnitRole.Builder : def.Role;
             X = x;
             Z = z;
         }
 
         public UnitSnapshot ToSnapshot()
         {
-            return new UnitSnapshot(Id, Owner, Faction, DefinitionId, X, Z, Health, MaxHealth, IsAlive);
+            bool hasCarry = CarryAmount > 0 && CarryType.HasValue;
+            return new UnitSnapshot(
+                Id,
+                Owner,
+                Faction,
+                DefinitionId,
+                X,
+                Z,
+                Health,
+                MaxHealth,
+                IsAlive,
+                CarryAmount,
+                hasCarry ? CarryType.Value : ResourceType.Gold,
+                hasCarry);
         }
     }
 
     public sealed class SimBuilding : IBuilding
     {
+        public const int MaxQueue = 4;
+
         public SimEntityId Id { get; }
         public PlayerId Owner { get; }
         public FactionId Faction { get; }
@@ -60,10 +90,18 @@ namespace Asterra.Gameplay.Sim
 
         public float X;
         public float Z;
+        public float FootprintRadius;
+        public float BuildSecondsTotal;
         public float BuildSecondsRemaining;
         public string[] TrainableUnitIds;
         public string ProductionUnitDefId;
         public float ProductionSecondsRemaining;
+        public float ProductionSecondsTotal;
+        public readonly string[] Queue = new string[MaxQueue];
+        public int QueueCount;
+        public int QueueCapacity;
+        public float? RallyX;
+        public float? RallyZ;
         public bool IsProducing => !string.IsNullOrEmpty(ProductionUnitDefId);
 
         private readonly bool _canProduce;
@@ -85,8 +123,13 @@ namespace Asterra.Gameplay.Sim
             Health = def.MaxHealth;
             X = x;
             Z = z;
+            FootprintRadius = MathF.Max(def.FootprintX, def.FootprintZ) * 0.65f;
+            if (FootprintRadius < 6f)
+                FootprintRadius = 6f;
             _canProduce = def.CanProduce;
             TrainableUnitIds = def.TrainableUnitIds ?? System.Array.Empty<string>();
+            QueueCapacity = def.QueueCapacity > 0 ? System.Math.Min(def.QueueCapacity, MaxQueue) : 3;
+            BuildSecondsTotal = def.BuildSeconds;
             if (startActive)
             {
                 State = BuildingState.Active;
@@ -101,7 +144,32 @@ namespace Asterra.Gameplay.Sim
 
         public BuildingSnapshot ToSnapshot()
         {
-            return new BuildingSnapshot(Id, Owner, Faction, DefinitionId, X, Z, State, CanProduce);
+            float prodProgress = 0f;
+            if (IsProducing && ProductionSecondsTotal > 0.001f)
+                prodProgress = 1f - (ProductionSecondsRemaining / ProductionSecondsTotal);
+            float buildProgress = 1f;
+            if (State == BuildingState.Constructing && BuildSecondsTotal > 0.001f)
+                buildProgress = 1f - (BuildSecondsRemaining / BuildSecondsTotal);
+
+            return new BuildingSnapshot(
+                Id,
+                Owner,
+                Faction,
+                DefinitionId,
+                X,
+                Z,
+                State,
+                CanProduce,
+                Health,
+                MaxHealth,
+                ProductionUnitDefId,
+                prodProgress,
+                QueueCount + (IsProducing ? 1 : 0),
+                QueueCount > 0 ? Queue[0] : null,
+                RallyX ?? (X + 18f),
+                RallyZ ?? Z,
+                RallyX.HasValue,
+                buildProgress);
         }
     }
 
@@ -164,6 +232,11 @@ namespace Asterra.Gameplay.Sim
             int taken = requested > Remaining ? Remaining : requested;
             Remaining -= taken;
             return taken;
+        }
+
+        public ResourceSnapshot ToSnapshot()
+        {
+            return new ResourceSnapshot(Id, Type, Remaining, X, Z);
         }
     }
 }

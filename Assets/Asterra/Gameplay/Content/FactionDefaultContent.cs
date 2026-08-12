@@ -13,6 +13,9 @@ namespace Asterra.Gameplay.Content
         public string ProducerBuildingId;
         public string BasicUnitId;
         public string BuilderUnitId;
+        public string RangedUnitId;
+        public string CavalryUnitId;
+        public string SiegeUnitId;
         public string BasicUpgradeId;
         public string LoreBlurb;
     }
@@ -29,6 +32,9 @@ namespace Asterra.Gameplay.Content
         // Iron Covenant
         public const string MilitiaId = "unit_militia";
         public const string IronBuilderId = "unit_iron_builder";
+        public const string IronArcherId = "unit_iron_archer";
+        public const string IronKnightId = "unit_iron_knight";
+        public const string IronCatapultId = "unit_iron_catapult";
         public const string BarracksId = "building_barracks";
         public const string IronKeepId = "building_iron_keep";
         public const string MilitiaTrainingId = "upgrade_militia_training";
@@ -36,6 +42,9 @@ namespace Asterra.Gameplay.Content
         // Verdant Court
         public const string DryadId = "unit_dryad";
         public const string VerdantBuilderId = "unit_verdant_builder";
+        public const string VerdantArcherId = "unit_verdant_archer";
+        public const string VerdantKnightId = "unit_verdant_knight";
+        public const string VerdantCatapultId = "unit_verdant_catapult";
         public const string GroveId = "building_grove";
         public const string HeartwoodId = "building_heartwood";
         public const string WildGrowthId = "upgrade_wild_growth";
@@ -43,6 +52,9 @@ namespace Asterra.Gameplay.Content
         // Ashen Legion
         public const string EmberRaiderId = "unit_ember_raider";
         public const string AshenBuilderId = "unit_ashen_builder";
+        public const string AshenArcherId = "unit_ashen_archer";
+        public const string AshenKnightId = "unit_ashen_knight";
+        public const string AshenCatapultId = "unit_ashen_catapult";
         public const string ForgeId = "building_forge";
         public const string AshCitadelId = "building_ash_citadel";
         public const string EmberRitesId = "upgrade_ember_rites";
@@ -56,6 +68,9 @@ namespace Asterra.Gameplay.Content
             ProducerBuildingId = BarracksId,
             BasicUnitId = MilitiaId,
             BuilderUnitId = IronBuilderId,
+            RangedUnitId = IronArcherId,
+            CavalryUnitId = IronKnightId,
+            SiegeUnitId = IronCatapultId,
             BasicUpgradeId = MilitiaTrainingId,
             LoreBlurb = "Disciplined steel and drilled infantry.",
         };
@@ -69,6 +84,9 @@ namespace Asterra.Gameplay.Content
             ProducerBuildingId = GroveId,
             BasicUnitId = DryadId,
             BuilderUnitId = VerdantBuilderId,
+            RangedUnitId = VerdantArcherId,
+            CavalryUnitId = VerdantKnightId,
+            SiegeUnitId = VerdantCatapultId,
             BasicUpgradeId = WildGrowthId,
             LoreBlurb = "Living wood and swift skirmishers.",
         };
@@ -82,6 +100,9 @@ namespace Asterra.Gameplay.Content
             ProducerBuildingId = ForgeId,
             BasicUnitId = EmberRaiderId,
             BuilderUnitId = AshenBuilderId,
+            RangedUnitId = AshenArcherId,
+            CavalryUnitId = AshenKnightId,
+            SiegeUnitId = AshenCatapultId,
             BasicUpgradeId = EmberRitesId,
             LoreBlurb = "Raid doctrine and scorched-earth forges.",
         };
@@ -133,6 +154,7 @@ namespace Asterra.Gameplay.Content
                 AttackCooldown = 1f,
                 GoldCost = 50,
                 TrainSeconds = 4f,
+                Role = UnitRole.Infantry,
             });
             registry.Register(new UnitDefData
             {
@@ -146,6 +168,50 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 40,
                 TrainSeconds = 3f,
                 IsBuilder = true,
+                CanGather = true,
+                CarryCapacity = 15,
+                GatherRate = 5f,
+                Role = UnitRole.Builder,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = IronArcherId,
+                DisplayName = "Longbow",
+                MaxHealth = 65f,
+                MoveSpeed = 4.8f,
+                AttackDamage = 14f,
+                AttackRange = 14f,
+                AttackCooldown = 1.2f,
+                GoldCost = 60,
+                TrainSeconds = 4.5f,
+                Role = UnitRole.Ranged,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = IronKnightId,
+                DisplayName = "Knight",
+                MaxHealth = 120f,
+                MoveSpeed = 8f,
+                AttackDamage = 16f,
+                AttackRange = 1.6f,
+                AttackCooldown = 1.05f,
+                GoldCost = 90,
+                TrainSeconds = 6f,
+                Role = UnitRole.Cavalry,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = IronCatapultId,
+                DisplayName = "Catapult",
+                MaxHealth = 90f,
+                MoveSpeed = 2.8f,
+                AttackDamage = 22f,
+                AttackRange = 10f,
+                AttackCooldown = 2.2f,
+                GoldCost = 140,
+                TrainSeconds = 8f,
+                Role = UnitRole.Siege,
+                BuildingDamageMultiplier = 3.5f,
             });
             registry.Register(new BuildingDefData
             {
@@ -156,7 +222,8 @@ namespace Asterra.Gameplay.Content
                 TimberCost = 80,
                 BuildSeconds = 6f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { MilitiaId },
+                QueueCapacity = 3,
+                TrainableUnitIds = new[] { MilitiaId, IronArcherId, IronKnightId, IronCatapultId },
             });
             registry.Register(new BuildingDefData
             {
@@ -164,6 +231,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Iron Keep",
                 MaxHealth = 1200f,
                 CanProduce = true,
+                QueueCapacity = 3,
                 TrainableUnitIds = new[] { IronBuilderId },
             });
             registry.Register(new UpgradeDefData
@@ -187,6 +255,7 @@ namespace Asterra.Gameplay.Content
                 AttackCooldown = 0.9f,
                 GoldCost = 55,
                 TrainSeconds = 3.5f,
+                Role = UnitRole.Infantry,
             });
             registry.Register(new UnitDefData
             {
@@ -200,6 +269,50 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 35,
                 TrainSeconds = 2.8f,
                 IsBuilder = true,
+                CanGather = true,
+                CarryCapacity = 15,
+                GatherRate = 5f,
+                Role = UnitRole.Builder,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = VerdantArcherId,
+                DisplayName = "Thornbow",
+                MaxHealth = 55f,
+                MoveSpeed = 5.5f,
+                AttackDamage = 12f,
+                AttackRange = 15f,
+                AttackCooldown = 1.1f,
+                GoldCost = 55,
+                TrainSeconds = 4f,
+                Role = UnitRole.Ranged,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = VerdantKnightId,
+                DisplayName = "Stag Rider",
+                MaxHealth = 100f,
+                MoveSpeed = 8.5f,
+                AttackDamage = 14f,
+                AttackRange = 1.8f,
+                AttackCooldown = 0.95f,
+                GoldCost = 85,
+                TrainSeconds = 5.5f,
+                Role = UnitRole.Cavalry,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = VerdantCatapultId,
+                DisplayName = "Bramble Engine",
+                MaxHealth = 80f,
+                MoveSpeed = 3f,
+                AttackDamage = 20f,
+                AttackRange = 10f,
+                AttackCooldown = 2f,
+                GoldCost = 130,
+                TrainSeconds = 7.5f,
+                Role = UnitRole.Siege,
+                BuildingDamageMultiplier = 3.2f,
             });
             registry.Register(new BuildingDefData
             {
@@ -210,7 +323,8 @@ namespace Asterra.Gameplay.Content
                 TimberCost = 120,
                 BuildSeconds = 5f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { DryadId },
+                QueueCapacity = 3,
+                TrainableUnitIds = new[] { DryadId, VerdantArcherId, VerdantKnightId, VerdantCatapultId },
             });
             registry.Register(new BuildingDefData
             {
@@ -218,6 +332,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Heartwood",
                 MaxHealth = 1100f,
                 CanProduce = true,
+                QueueCapacity = 3,
                 TrainableUnitIds = new[] { VerdantBuilderId },
             });
             registry.Register(new UpgradeDefData
@@ -241,6 +356,7 @@ namespace Asterra.Gameplay.Content
                 AttackCooldown = 1.1f,
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
+                Role = UnitRole.Infantry,
             });
             registry.Register(new UnitDefData
             {
@@ -254,6 +370,50 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 45,
                 TrainSeconds = 3.2f,
                 IsBuilder = true,
+                CanGather = true,
+                CarryCapacity = 15,
+                GatherRate = 5f,
+                Role = UnitRole.Builder,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = AshenArcherId,
+                DisplayName = "Cinder Bow",
+                MaxHealth = 60f,
+                MoveSpeed = 5f,
+                AttackDamage = 15f,
+                AttackRange = 13f,
+                AttackCooldown = 1.15f,
+                GoldCost = 65,
+                TrainSeconds = 4.8f,
+                Role = UnitRole.Ranged,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = AshenKnightId,
+                DisplayName = "Ash Rider",
+                MaxHealth = 110f,
+                MoveSpeed = 8.2f,
+                AttackDamage = 17f,
+                AttackRange = 1.5f,
+                AttackCooldown = 1f,
+                GoldCost = 95,
+                TrainSeconds = 6.2f,
+                Role = UnitRole.Cavalry,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = AshenCatapultId,
+                DisplayName = "Ember Mortar",
+                MaxHealth = 95f,
+                MoveSpeed = 2.6f,
+                AttackDamage = 24f,
+                AttackRange = 10.5f,
+                AttackCooldown = 2.4f,
+                GoldCost = 150,
+                TrainSeconds = 8.5f,
+                Role = UnitRole.Siege,
+                BuildingDamageMultiplier = 3.8f,
             });
             registry.Register(new BuildingDefData
             {
@@ -264,7 +424,8 @@ namespace Asterra.Gameplay.Content
                 TimberCost = 60,
                 BuildSeconds = 7f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { EmberRaiderId },
+                QueueCapacity = 3,
+                TrainableUnitIds = new[] { EmberRaiderId, AshenArcherId, AshenKnightId, AshenCatapultId },
             });
             registry.Register(new BuildingDefData
             {
@@ -272,6 +433,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Ash Citadel",
                 MaxHealth = 1250f,
                 CanProduce = true,
+                QueueCapacity = 3,
                 TrainableUnitIds = new[] { AshenBuilderId },
             });
             registry.Register(new UpgradeDefData

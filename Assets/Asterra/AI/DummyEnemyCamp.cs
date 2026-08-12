@@ -4,17 +4,22 @@ using Asterra.Core;
 namespace Asterra.AI
 {
     /// <summary>
-    /// Scripted opponent: train builders from keep, raise a producer, train combat, contest center.
+    /// Scripted opponent: gather, train builders/producer/combat mix, rally center, attack in force.
     /// </summary>
     public sealed class DummyEnemyCamp : IArmyBrain
     {
         private readonly string _keepDefId;
         private readonly string _producerDefId;
         private readonly string _builderDefId;
-        private readonly string _combatUnitDefId;
+        private readonly string _infantryDefId;
+        private readonly string _rangedDefId;
+        private readonly string _cavalryDefId;
         private readonly int _trainEveryTicks;
         private int _lastTrainTick = -999;
         private int _lastBuildTick = -999;
+        private int _lastGatherTick = -999;
+        private int _lastRallyTick = -999;
+        private int _combatCycle;
 
         public DummyEnemyCamp(
             PlayerId player,
@@ -23,12 +28,35 @@ namespace Asterra.AI
             string builderDefId,
             string combatUnitDefId,
             int trainEveryTicks = 80)
+            : this(
+                player,
+                keepDefId,
+                producerDefId,
+                builderDefId,
+                combatUnitDefId,
+                combatUnitDefId,
+                combatUnitDefId,
+                trainEveryTicks)
+        {
+        }
+
+        public DummyEnemyCamp(
+            PlayerId player,
+            string keepDefId,
+            string producerDefId,
+            string builderDefId,
+            string infantryDefId,
+            string rangedDefId,
+            string cavalryDefId,
+            int trainEveryTicks = 80)
         {
             Player = player;
             _keepDefId = keepDefId;
             _producerDefId = producerDefId;
             _builderDefId = builderDefId;
-            _combatUnitDefId = combatUnitDefId;
+            _infantryDefId = infantryDefId;
+            _rangedDefId = string.IsNullOrEmpty(rangedDefId) ? infantryDefId : rangedDefId;
+            _cavalryDefId = string.IsNullOrEmpty(cavalryDefId) ? infantryDefId : cavalryDefId;
             _trainEveryTicks = trainEveryTicks;
         }
 
@@ -36,7 +64,7 @@ namespace Asterra.AI
 
         public IReadOnlyList<GameCommand> Think(in ArmyBrainContext context)
         {
-            var commands = new List<GameCommand>(4);
+            var commands = new List<GameCommand>(8);
             var world = context.World;
             var tick = (int)context.Tick.Value;
 
@@ -46,6 +74,8 @@ namespace Asterra.AI
             SimEntityId? producerId = null;
             int builderCount = 0;
             int combatCount = 0;
+            var builders = new List<SimEntityId>();
+            var myCombat = new List<SimEntityId>();
 
             for (int i = 0; i < world.Buildings.Count; i++)
             {
@@ -70,11 +100,60 @@ namespace Asterra.AI
                 if (u.Owner != Player || !u.IsAlive)
                     continue;
                 if (u.DefinitionId == _builderDefId)
+                {
                     builderCount++;
+                    builders.Add(u.Id);
+                }
                 else
+                {
                     combatCount++;
+                    myCombat.Add(u.Id);
+                }
             }
 
+            // Builders gather nearest resource (never send into combat).
+            if (builders.Count > 0 && tick - _lastGatherTick >= 40)
+            {
+                if (TryFindNearestResource(world, keepX, keepZ, out var nodeId))
+                {
+                    commands.Add(new GatherCommand
+                    {
+                        Issuer = Player,
+                        UnitIds = builders.ToArray(),
+                        ResourceNodeId = nodeId,
+                    });
+                    _lastGatherTick = tick;
+                }
+            }
+
+            // Rally producer / keep toward center.
+            if (tick - _lastRallyTick >= 200)
+            {
+                if (producerId.HasValue)
+                {
+                    commands.Add(new SetRallyCommand
+                    {
+                        Issuer = Player,
+                        BuildingId = producerId.Value,
+                        TargetX = 0f,
+                        TargetZ = 0f,
+                    });
+                    _lastRallyTick = tick;
+                }
+                else if (keepId.HasValue)
+                {
+                    commands.Add(new SetRallyCommand
+                    {
+                        Issuer = Player,
+                        BuildingId = keepId.Value,
+                        TargetX = keepX * 0.5f,
+                        TargetZ = 0f,
+                    });
+                    _lastRallyTick = tick;
+                }
+            }
+
+            // Train builders, then raise producer, then cycle combat mix.
             if (keepId.HasValue && builderCount < 2 && tick - _lastTrainTick >= _trainEveryTicks)
             {
                 commands.Add(new TrainUnitCommand
@@ -85,60 +164,54 @@ namespace Asterra.AI
                 });
                 _lastTrainTick = tick;
             }
-            else if (producerId.HasValue && tick - _lastTrainTick >= _trainEveryTicks)
-            {
-                commands.Add(new TrainUnitCommand
-                {
-                    Issuer = Player,
-                    BuildingId = producerId.Value,
-                    UnitDefId = _combatUnitDefId,
-                });
-                _lastTrainTick = tick;
-            }
             else if (!producerId.HasValue && builderCount > 0 && tick - _lastBuildTick >= 120)
             {
+                float placeX = keepX > 0f ? keepX - 35f : keepX + 35f;
                 commands.Add(new PlaceBuildingCommand
                 {
                     Issuer = Player,
                     BuildingDefId = _producerDefId,
-                    X = keepX - 35f,
+                    X = placeX,
                     Z = keepZ + 25f,
                     YawDegrees = 0f,
                 });
                 _lastBuildTick = tick;
             }
-
-            var myCombat = new List<SimEntityId>();
-            for (int i = 0; i < world.Units.Count; i++)
+            else if (producerId.HasValue && tick - _lastTrainTick >= _trainEveryTicks)
             {
-                var u = world.Units[i];
-                if (u.Owner != Player || !u.IsAlive)
-                    continue;
-                if (u.DefinitionId == _builderDefId)
-                    continue;
-                myCombat.Add(u.Id);
+                string unitId = NextCombatUnitId();
+                commands.Add(new TrainUnitCommand
+                {
+                    Issuer = Player,
+                    BuildingId = producerId.Value,
+                    UnitDefId = unitId,
+                });
+                _lastTrainTick = tick;
             }
 
             if (myCombat.Count == 0)
                 return commands;
 
-            SimEntityId? hostile = null;
-            for (int i = 0; i < world.Units.Count; i++)
+            // Attack when combat force is ready; otherwise hold / contest center.
+            if (combatCount >= 4)
             {
-                var u = world.Units[i];
-                if (!u.IsAlive || u.Owner == Player)
-                    continue;
-                hostile = u.Id;
-                break;
-            }
+                if (TryFindEnemyKeep(world, out var enemyKeep))
+                {
+                    commands.Add(new AttackCommand
+                    {
+                        Issuer = Player,
+                        UnitIds = myCombat.ToArray(),
+                        TargetId = enemyKeep,
+                    });
+                    return commands;
+                }
 
-            if (hostile.HasValue)
-            {
-                commands.Add(new AttackCommand
+                commands.Add(new MoveCommand
                 {
                     Issuer = Player,
                     UnitIds = myCombat.ToArray(),
-                    TargetId = hostile.Value,
+                    TargetX = 0f,
+                    TargetZ = 0f,
                 });
                 return commands;
             }
@@ -158,14 +231,92 @@ namespace Asterra.AI
                 }
             }
 
+            float holdX = keepX > 0f ? keepX - 10f : keepX + 10f;
             commands.Add(new MoveCommand
             {
                 Issuer = Player,
                 UnitIds = myCombat.ToArray(),
-                TargetX = keepX - 10f,
+                TargetX = holdX,
                 TargetZ = keepZ,
             });
             return commands;
+        }
+
+        private string NextCombatUnitId()
+        {
+            string id;
+            switch (_combatCycle % 3)
+            {
+                case 0:
+                    id = _infantryDefId;
+                    break;
+                case 1:
+                    id = _rangedDefId;
+                    break;
+                default:
+                    id = _cavalryDefId;
+                    break;
+            }
+
+            _combatCycle++;
+            return id;
+        }
+
+        private static bool TryFindNearestResource(
+            IWorldQuery world,
+            float fromX,
+            float fromZ,
+            out SimEntityId nodeId)
+        {
+            nodeId = default;
+            if (world.Resources == null || world.Resources.Count == 0)
+                return false;
+
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < world.Resources.Count; i++)
+            {
+                var r = world.Resources[i];
+                if (r.Remaining <= 0)
+                    continue;
+                float dx = r.X - fromX;
+                float dz = r.Z - fromZ;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < best)
+                {
+                    best = d2;
+                    nodeId = r.Id;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        private bool TryFindEnemyKeep(IWorldQuery world, out SimEntityId keepId)
+        {
+            keepId = default;
+            for (int i = 0; i < world.Buildings.Count; i++)
+            {
+                var b = world.Buildings[i];
+                if (b.Owner == Player || b.State == BuildingState.Destroyed)
+                    continue;
+                if (!LooksLikeKeep(b.DefinitionId))
+                    continue;
+                keepId = b.Id;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool LooksLikeKeep(string definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId))
+                return false;
+            return definitionId.Contains("keep")
+                   || definitionId.Contains("heartwood")
+                   || definitionId.Contains("citadel");
         }
     }
 }

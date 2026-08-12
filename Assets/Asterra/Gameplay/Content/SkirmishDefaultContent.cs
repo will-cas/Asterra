@@ -84,8 +84,22 @@ namespace Asterra.Gameplay.Content
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
+
+            // Center-ish nodes (shared contest)
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2000, -80f, 60f);
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1500, -100f, -70f);
+
+            // West base (player seat)
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2500, -280f, 70f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, -290f, -80f);
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1800, -240f, -40f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1600, -250f, 50f);
+
+            // East base (enemy seat)
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2500, 280f, -70f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 290f, 80f);
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1800, 240f, 40f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1600, 250f, -50f);
         }
     }
 }

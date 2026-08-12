@@ -1,5 +1,14 @@
 namespace Asterra.Core
 {
+    public enum UnitRole : byte
+    {
+        Infantry = 0,
+        Ranged = 1,
+        Cavalry = 2,
+        Siege = 3,
+        Builder = 4,
+    }
+
     /// <summary>Plain-data unit stats used by the lockstep sim (SO wrappers copy into these).</summary>
     public sealed class UnitDefData
     {
@@ -13,6 +22,11 @@ namespace Asterra.Core
         public int GoldCost = 50;
         public float TrainSeconds = 5f;
         public bool IsBuilder;
+        public bool CanGather;
+        public int CarryCapacity = 10;
+        public float GatherRate = 4f;
+        public UnitRole Role = UnitRole.Infantry;
+        public float BuildingDamageMultiplier = 1f;
     }
 
     public sealed class BuildingDefData
@@ -27,6 +41,7 @@ namespace Asterra.Core
         public float FootprintZ = 4f;
         public bool CanProduce;
         public string[] TrainableUnitIds = System.Array.Empty<string>();
+        public int QueueCapacity = 3;
     }
 
     public sealed class UpgradeDefData

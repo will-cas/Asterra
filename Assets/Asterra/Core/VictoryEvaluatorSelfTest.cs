@@ -45,10 +45,14 @@ namespace Asterra.Core
             private readonly System.Collections.Generic.List<BuildingSnapshot> _buildings = new();
             private readonly System.Collections.Generic.List<TerritorySnapshot> _territories = new();
             private readonly System.Collections.Generic.List<UnitSnapshot> _units = new();
+            private readonly System.Collections.Generic.List<ResourceSnapshot> _resources = new();
+            private readonly System.Collections.Generic.List<CombatEvent> _combat = new();
 
             public System.Collections.Generic.IReadOnlyList<UnitSnapshot> Units => _units;
             public System.Collections.Generic.IReadOnlyList<BuildingSnapshot> Buildings => _buildings;
             public System.Collections.Generic.IReadOnlyList<TerritorySnapshot> Territories => _territories;
+            public System.Collections.Generic.IReadOnlyList<ResourceSnapshot> Resources => _resources;
+            public System.Collections.Generic.IReadOnlyList<CombatEvent> CombatEvents => _combat;
 
             public bool HasUpgrade(PlayerId player, string upgradeDefId) => false;
 
@@ -62,7 +66,17 @@ namespace Asterra.Core
                     0f,
                     0f,
                     BuildingState.Active,
-                    true));
+                    true,
+                    1000f,
+                    1000f,
+                    null,
+                    0f,
+                    0,
+                    null,
+                    0f,
+                    0f,
+                    false,
+                    1f));
             }
 
             public void ClearBuildings(PlayerId owner)

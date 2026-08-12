@@ -15,6 +15,7 @@ namespace Asterra.Gameplay.Presentation
         private Texture2D _build;
         private Texture2D _invalid;
         private Texture2D _train;
+        private Texture2D _gather;
         private OrderCursorMode _last = (OrderCursorMode)255;
 
         private void Awake()
@@ -28,6 +29,7 @@ namespace Asterra.Gameplay.Presentation
             _build = MakeBuild();
             _invalid = MakeInvalid();
             _train = MakeTrain();
+            _gather = MakeGather();
             Apply(OrderCursorMode.Select);
         }
 
@@ -75,6 +77,10 @@ namespace Asterra.Gameplay.Presentation
                 case OrderCursorMode.Train:
                     tex = _train;
                     hotspot = new Vector2(4f, 4f);
+                    break;
+                case OrderCursorMode.Gather:
+                    tex = _gather;
+                    hotspot = new Vector2(size * 0.5f, size * 0.5f);
                     break;
                 case OrderCursorMode.Select:
                     tex = _select;
@@ -168,6 +174,18 @@ namespace Asterra.Gameplay.Presentation
             FillTri(tex, 16, 6, 6, 14, 26, 14, gold);
             DrawLine(tex, 16, 18, 16, 26, Color.white);
             DrawLine(tex, 12, 22, 20, 22, Color.white);
+            tex.Apply();
+            return tex;
+        }
+
+        private Texture2D MakeGather()
+        {
+            var tex = Blank();
+            var amber = new Color(0.95f, 0.75f, 0.2f);
+            // Pickaxe-ish
+            DrawLine(tex, 8, size - 8, size - 10, 8, amber);
+            DrawRect(tex, size - 16, 6, 10, 8, amber);
+            DrawCircle(tex, 10, size - 10, 4, amber);
             tex.Apply();
             return tex;
         }

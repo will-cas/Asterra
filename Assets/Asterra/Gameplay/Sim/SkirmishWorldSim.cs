@@ -6,7 +6,7 @@ using Asterra.Gameplay.Sim;
 namespace Asterra.Gameplay
 {
     /// <summary>
-    /// Authoritative Phase-1 skirmish sim (plain data). Presentation bridges can mirror snapshots later.
+    /// Authoritative skirmish sim (plain data). Presentation mirrors snapshots + combat events.
     /// </summary>
     public sealed class SkirmishWorldSim : IWorldSim
     {
@@ -23,12 +23,16 @@ namespace Asterra.Gameplay
         private readonly List<UnitSnapshot> _unitSnapshots = new();
         private readonly List<BuildingSnapshot> _buildingSnapshots = new();
         private readonly List<TerritorySnapshot> _territorySnapshots = new();
+        private readonly List<ResourceSnapshot> _resourceSnapshots = new();
+        private readonly List<CombatEvent> _combatEvents = new();
 
         private readonly Dictionary<uint, SimUnit> _unitsById = new();
         private readonly Dictionary<uint, SimBuilding> _buildingsById = new();
         private readonly Dictionary<uint, SimTerritory> _territoriesById = new();
+        private readonly Dictionary<uint, SimResourceNode> _resourcesById = new();
 
         private float _gatherAcc;
+        private float _incomeAcc;
         private ulong _mutationCounter;
 
         public SkirmishWorldSim(IResourceWallet wallet, IIdFactory ids, DefinitionRegistry defs)
@@ -42,6 +46,8 @@ namespace Asterra.Gameplay
         public IReadOnlyList<UnitSnapshot> Units => _unitSnapshots;
         public IReadOnlyList<BuildingSnapshot> Buildings => _buildingSnapshots;
         public IReadOnlyList<TerritorySnapshot> Territories => _territorySnapshots;
+        public IReadOnlyList<ResourceSnapshot> Resources => _resourceSnapshots;
+        public IReadOnlyList<CombatEvent> CombatEvents => _combatEvents;
 
         public bool HasUpgrade(PlayerId player, string upgradeDefId) => _upgrades.Has(player, upgradeDefId);
 
@@ -71,6 +77,8 @@ namespace Asterra.Gameplay
                 throw new InvalidOperationException($"Unknown building def '{buildingDefId}'.");
 
             var building = new SimBuilding(id, owner, faction, def, x, z, startActive);
+            building.RallyX = x + (owner.Value == 0 ? 18f : -18f);
+            building.RallyZ = z;
             _buildings.Add(building);
             _buildingsById[id.Value] = building;
             RebuildSnapshots();
@@ -90,7 +98,10 @@ namespace Asterra.Gameplay
 
         public void AddResourceNode(SimEntityId id, ResourceType type, int amount, float x, float z)
         {
-            _resources.Add(new SimResourceNode(id, type, amount, x, z));
+            var node = new SimResourceNode(id, type, amount, x, z);
+            _resources.Add(node);
+            _resourcesById[id.Value] = node;
+            RebuildSnapshots();
         }
 
         public void ApplyCommands(IReadOnlyList<GameCommand> commands)
@@ -121,6 +132,15 @@ namespace Asterra.Gameplay
                     case SetStanceCommand stance:
                         ApplyStance(stance);
                         break;
+                    case GatherCommand gather:
+                        ApplyGather(gather);
+                        break;
+                    case SetRallyCommand rally:
+                        ApplySetRally(rally);
+                        break;
+                    case CancelProductionCommand cancel:
+                        ApplyCancelProduction(cancel);
+                        break;
                     default:
                         break;
                 }
@@ -131,8 +151,10 @@ namespace Asterra.Gameplay
 
         public void Tick(float deltaSeconds)
         {
+            _combatEvents.Clear();
             TickConstruction(deltaSeconds);
             TickProduction(deltaSeconds);
+            TickGather(deltaSeconds);
             TickMovement(deltaSeconds);
             TickCombat(deltaSeconds);
             TickTerritory(deltaSeconds);
@@ -147,6 +169,7 @@ namespace Asterra.Gameplay
             hash ^= _mutationCounter;
             hash ^= (ulong)_units.Count * 1099511628211ul;
             hash ^= (ulong)_buildings.Count * 1099511628211ul;
+            hash ^= (ulong)_resources.Count * 1099511628211ul;
             for (int i = 0; i < _units.Count; i++)
             {
                 var u = _units[i];
@@ -154,7 +177,11 @@ namespace Asterra.Gameplay
                 hash ^= (ulong)(u.X * 100f);
                 hash ^= (ulong)(u.Z * 100f);
                 hash ^= (ulong)u.Health;
+                hash ^= (ulong)u.CarryAmount;
             }
+
+            for (int i = 0; i < _resources.Count; i++)
+                hash ^= (ulong)_resources[i].Remaining * 31ul;
 
             for (int i = 0; i < _territories.Count; i++)
             {
@@ -181,7 +208,9 @@ namespace Asterra.Gameplay
                 unit.MoveTargetX = move.TargetX;
                 unit.MoveTargetZ = move.TargetZ;
                 unit.AttackTargetId = null;
-                _mutationCounter ^= unit.Id.Value * 911ul;
+                unit.GatherTargetId = null;
+                unit.ReturningToDeposit = false;
+                _mutationCounter ^= unit.Id.Value * 3ul;
             }
         }
 
@@ -198,7 +227,71 @@ namespace Asterra.Gameplay
                 unit.AttackTargetId = attack.TargetId;
                 unit.MoveTargetX = null;
                 unit.MoveTargetZ = null;
+                unit.GatherTargetId = null;
+                unit.ReturningToDeposit = false;
                 _mutationCounter ^= unit.Id.Value * 733ul;
+            }
+        }
+
+        private void ApplyGather(GatherCommand gather)
+        {
+            if (gather.UnitIds == null)
+                return;
+            if (!_resourcesById.TryGetValue(gather.ResourceNodeId.Value, out var node) || node.IsDepleted)
+                return;
+
+            for (int i = 0; i < gather.UnitIds.Length; i++)
+            {
+                if (!_unitsById.TryGetValue(gather.UnitIds[i].Value, out var unit))
+                    continue;
+                if (unit.Owner != gather.Issuer || !unit.IsAlive || !unit.CanGather)
+                    continue;
+                unit.GatherTargetId = gather.ResourceNodeId;
+                unit.AttackTargetId = null;
+                unit.ReturningToDeposit = unit.CarryAmount >= unit.CarryCapacity;
+                unit.MoveTargetX = null;
+                unit.MoveTargetZ = null;
+                _mutationCounter ^= unit.Id.Value * 911ul;
+            }
+        }
+
+        private void ApplySetRally(SetRallyCommand rally)
+        {
+            if (!_buildingsById.TryGetValue(rally.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != rally.Issuer)
+                return;
+            building.RallyX = rally.TargetX;
+            building.RallyZ = rally.TargetZ;
+            _mutationCounter ^= building.Id.Value * 409ul;
+        }
+
+        private void ApplyCancelProduction(CancelProductionCommand cancel)
+        {
+            if (!_buildingsById.TryGetValue(cancel.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != cancel.Issuer)
+                return;
+
+            if (building.IsProducing)
+            {
+                if (_defs.TryGetUnit(building.ProductionUnitDefId, out var def))
+                    _wallet.Add(cancel.Issuer, ResourceType.Gold, def.GoldCost / 2);
+                building.ProductionUnitDefId = null;
+                building.ProductionSecondsRemaining = 0f;
+                building.ProductionSecondsTotal = 0f;
+                TryStartNextQueued(building);
+                _mutationCounter ^= building.Id.Value * 577ul;
+                return;
+            }
+
+            if (building.QueueCount > 0)
+            {
+                string defId = building.Queue[0];
+                ShiftQueue(building);
+                if (_defs.TryGetUnit(defId, out var def))
+                    _wallet.Add(cancel.Issuer, ResourceType.Gold, def.GoldCost);
+                _mutationCounter ^= building.Id.Value * 579ul;
             }
         }
 
@@ -226,53 +319,40 @@ namespace Asterra.Gameplay
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
         }
 
-        private bool HasNearbyBuilder(PlayerId owner, float x, float z, float builderPlaceRadius)
-        {
-            float r2 = builderPlaceRadius * builderPlaceRadius;
-            for (int i = 0; i < _units.Count; i++)
-            {
-                var unit = _units[i];
-                if (!unit.IsAlive || unit.Owner != owner)
-                    continue;
-                if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.IsBuilder)
-                    continue;
-                float dx = unit.X - x;
-                float dz = unit.Z - z;
-                if (dx * dx + dz * dz <= r2)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static bool IsInsidePlayable(float x, float z)
-        {
-            const float half = 450f;
-            return x >= -half && x <= half && z >= -half && z <= half;
-        }
-
         private void ApplyTrain(TrainUnitCommand train)
         {
             if (!_buildingsById.TryGetValue(train.BuildingId.Value, out var building))
                 return;
-            if (building.Owner != train.Issuer || !building.CanProduce || building.IsProducing)
+            if (building.Owner != train.Issuer || !building.CanProduce)
                 return;
             if (!Contains(building.TrainableUnitIds, train.UnitDefId))
                 return;
             if (!_defs.TryGetUnit(train.UnitDefId, out var unitDef))
                 return;
+
+            int occupied = building.QueueCount + (building.IsProducing ? 1 : 0);
+            if (occupied >= building.QueueCapacity)
+                return;
             if (!_wallet.TrySpend(train.Issuer, ResourceType.Gold, unitDef.GoldCost))
                 return;
 
-            float trainMult = _upgrades.TrainTimeMultiplier(train.Issuer);
-            building.ProductionUnitDefId = train.UnitDefId;
-            building.ProductionSecondsRemaining = unitDef.TrainSeconds * trainMult;
+            if (!building.IsProducing)
+            {
+                float trainMult = _upgrades.TrainTimeMultiplier(train.Issuer);
+                building.ProductionUnitDefId = train.UnitDefId;
+                building.ProductionSecondsTotal = unitDef.TrainSeconds * trainMult;
+                building.ProductionSecondsRemaining = building.ProductionSecondsTotal;
+            }
+            else
+            {
+                building.Queue[building.QueueCount++] = train.UnitDefId;
+            }
+
             _mutationCounter ^= building.Id.Value * 397ul;
         }
 
         private void ApplyCaptureOrder(CaptureTerritoryCommand capture)
         {
-            // Explicit order: move all issuer units toward the node (simple Phase-1 behaviour).
             if (!_territoriesById.TryGetValue(capture.TerritoryNodeId.Value, out var node))
                 return;
             for (int i = 0; i < _units.Count; i++)
@@ -280,9 +360,12 @@ namespace Asterra.Gameplay
                 var unit = _units[i];
                 if (unit.Owner != capture.Issuer || !unit.IsAlive)
                     continue;
+                if (unit.Role == UnitRole.Builder)
+                    continue;
                 unit.MoveTargetX = node.X;
                 unit.MoveTargetZ = node.Z;
                 unit.AttackTargetId = null;
+                unit.GatherTargetId = null;
             }
 
             _mutationCounter ^= capture.TerritoryNodeId.Value * 541ul;
@@ -352,8 +435,135 @@ namespace Asterra.Gameplay
                 string unitDefId = b.ProductionUnitDefId;
                 b.ProductionUnitDefId = null;
                 b.ProductionSecondsRemaining = 0f;
+                b.ProductionSecondsTotal = 0f;
+
+                float sx = b.RallyX ?? (b.X + 3f);
+                float sz = b.RallyZ ?? b.Z;
                 SpawnUnit(_ids.Next(), b.Owner, b.Faction, unitDefId, b.X + 3f, b.Z);
+                // New unit immediately marches to rally.
+                if (_units.Count > 0)
+                {
+                    var spawned = _units[_units.Count - 1];
+                    spawned.MoveTargetX = sx;
+                    spawned.MoveTargetZ = sz;
+                }
+
+                TryStartNextQueued(b);
             }
+        }
+
+        private void TryStartNextQueued(SimBuilding building)
+        {
+            if (building.IsProducing || building.QueueCount <= 0)
+                return;
+            string next = building.Queue[0];
+            ShiftQueue(building);
+            if (!_defs.TryGetUnit(next, out var unitDef))
+                return;
+            float trainMult = _upgrades.TrainTimeMultiplier(building.Owner);
+            building.ProductionUnitDefId = next;
+            building.ProductionSecondsTotal = unitDef.TrainSeconds * trainMult;
+            building.ProductionSecondsRemaining = building.ProductionSecondsTotal;
+        }
+
+        private static void ShiftQueue(SimBuilding building)
+        {
+            for (int i = 1; i < building.QueueCount; i++)
+                building.Queue[i - 1] = building.Queue[i];
+            if (building.QueueCount > 0)
+            {
+                building.Queue[building.QueueCount - 1] = null;
+                building.QueueCount--;
+            }
+        }
+
+        private void TickGather(float dt)
+        {
+            _gatherAcc += dt;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || !unit.CanGather || !unit.GatherTargetId.HasValue)
+                    continue;
+
+                if (unit.ReturningToDeposit || unit.CarryAmount >= unit.CarryCapacity)
+                {
+                    unit.ReturningToDeposit = true;
+                    if (!TryFindDeposit(unit.Owner, out float dx, out float dz))
+                        continue;
+                    if (Distance(unit.X, unit.Z, dx, dz) > 10f)
+                    {
+                        StepTowardAvoiding(unit, dx, dz, dt);
+                        continue;
+                    }
+
+                    if (unit.CarryAmount > 0 && unit.CarryType.HasValue)
+                    {
+                        _wallet.Add(unit.Owner, unit.CarryType.Value, unit.CarryAmount);
+                        _mutationCounter ^= (ulong)unit.CarryAmount * 13ul;
+                        unit.CarryAmount = 0;
+                        unit.CarryType = null;
+                    }
+
+                    unit.ReturningToDeposit = false;
+                    if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value, out var node) || node.IsDepleted)
+                    {
+                        unit.GatherTargetId = null;
+                        continue;
+                    }
+
+                    continue;
+                }
+
+                if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value, out var resource) || resource.IsDepleted)
+                {
+                    unit.GatherTargetId = null;
+                    continue;
+                }
+
+                if (Distance(unit.X, unit.Z, resource.X, resource.Z) > 8f)
+                {
+                    StepTowardAvoiding(unit, resource.X, resource.Z, dt);
+                    continue;
+                }
+
+                int want = Math.Max(1, (int)(unit.GatherRate * dt + 0.999f));
+                int space = unit.CarryCapacity - unit.CarryAmount;
+                if (space <= 0)
+                {
+                    unit.ReturningToDeposit = true;
+                    continue;
+                }
+
+                int taken = resource.Extract(Math.Min(want, space));
+                if (taken <= 0)
+                {
+                    unit.GatherTargetId = null;
+                    continue;
+                }
+
+                unit.CarryType = resource.Type;
+                unit.CarryAmount += taken;
+                if (unit.CarryAmount >= unit.CarryCapacity)
+                    unit.ReturningToDeposit = true;
+            }
+        }
+
+        private bool TryFindDeposit(PlayerId owner, out float x, out float z)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != owner || b.State == BuildingState.Destroyed)
+                    continue;
+                x = b.X;
+                z = b.Z;
+                return true;
+            }
+
+            x = 0f;
+            z = 0f;
+            return false;
         }
 
         private void TickMovement(float dt)
@@ -363,6 +573,8 @@ namespace Asterra.Gameplay
                 var unit = _units[i];
                 if (!unit.IsAlive)
                     continue;
+                if (unit.GatherTargetId.HasValue)
+                    continue;
 
                 if (unit.AttackTargetId.HasValue)
                 {
@@ -370,7 +582,7 @@ namespace Asterra.Gameplay
                     {
                         float dist = Distance(unit.X, unit.Z, tx, tz);
                         if (dist > unit.AttackRange)
-                            StepToward(unit, tx, tz, dt);
+                            StepTowardAvoiding(unit, tx, tz, dt);
                     }
 
                     continue;
@@ -381,14 +593,42 @@ namespace Asterra.Gameplay
 
                 float mx = unit.MoveTargetX.Value;
                 float mz = unit.MoveTargetZ.Value;
-                if (Distance(unit.X, unit.Z, mx, mz) <= 0.25f)
+                if (Distance(unit.X, unit.Z, mx, mz) <= 0.35f)
                 {
                     unit.MoveTargetX = null;
                     unit.MoveTargetZ = null;
                     continue;
                 }
 
-                StepToward(unit, mx, mz, dt);
+                StepTowardAvoiding(unit, mx, mz, dt);
+            }
+
+            // Soft unit separation.
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var a = _units[i];
+                if (!a.IsAlive)
+                    continue;
+                for (int j = i + 1; j < _units.Count; j++)
+                {
+                    var b = _units[j];
+                    if (!b.IsAlive)
+                        continue;
+                    float dx = b.X - a.X;
+                    float dz = b.Z - a.Z;
+                    float d2 = dx * dx + dz * dz;
+                    const float minDist = 3.5f;
+                    if (d2 >= minDist * minDist || d2 < 0.0001f)
+                        continue;
+                    float d = MathF.Sqrt(d2);
+                    float push = (minDist - d) * 0.5f;
+                    float nx = dx / d;
+                    float nz = dz / d;
+                    a.X -= nx * push * 0.5f;
+                    a.Z -= nz * push * 0.5f;
+                    b.X += nx * push * 0.5f;
+                    b.Z += nz * push * 0.5f;
+                }
             }
         }
 
@@ -401,9 +641,11 @@ namespace Asterra.Gameplay
                     continue;
                 if (unit.AttackCooldownRemaining > 0f)
                     unit.AttackCooldownRemaining -= dt;
+                if (unit.Role == UnitRole.Builder || unit.AttackDamage <= 0f)
+                    continue;
                 if (!unit.AttackTargetId.HasValue)
                     continue;
-                if (!TryGetDamageable(unit.AttackTargetId.Value, out var applyDamage, out float tx, out float tz, out PlayerId targetOwner))
+                if (!TryGetDamageable(unit.AttackTargetId.Value, out var targetUnit, out var targetBuilding, out float tx, out float tz, out PlayerId targetOwner))
                 {
                     unit.AttackTargetId = null;
                     continue;
@@ -420,7 +662,29 @@ namespace Asterra.Gameplay
                 if (unit.AttackCooldownRemaining > 0f)
                     continue;
 
-                applyDamage(unit.AttackDamage);
+                float damage = unit.AttackDamage;
+                bool isBuilding = targetBuilding != null;
+                if (isBuilding)
+                    damage *= unit.BuildingDamageMultiplier;
+
+                if (targetUnit != null)
+                {
+                    targetUnit.Health -= damage;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetUnit.Id, targetUnit.X, targetUnit.Z, false));
+                    if (targetUnit.Health <= 0f)
+                        _combatEvents.Add(new CombatEvent(CombatEventKind.Death, targetUnit.Id, targetUnit.X, targetUnit.Z, false));
+                }
+                else if (targetBuilding != null)
+                {
+                    targetBuilding.Health -= damage;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetBuilding.Id, targetBuilding.X, targetBuilding.Z, true));
+                    if (targetBuilding.Health <= 0f)
+                    {
+                        targetBuilding.State = BuildingState.Destroyed;
+                        _combatEvents.Add(new CombatEvent(CombatEventKind.Death, targetBuilding.Id, targetBuilding.X, targetBuilding.Z, true));
+                    }
+                }
+
                 unit.AttackCooldownRemaining = unit.AttackCooldown;
                 _mutationCounter ^= unit.Id.Value * 19ul;
             }
@@ -499,10 +763,10 @@ namespace Asterra.Gameplay
 
         private void TickTerritoryIncome(float dt)
         {
-            _gatherAcc += dt;
-            if (_gatherAcc < 1f)
+            _incomeAcc += dt;
+            if (_incomeAcc < 1f)
                 return;
-            _gatherAcc -= 1f;
+            _incomeAcc -= 1f;
             for (int i = 0; i < _territories.Count; i++)
             {
                 var node = _territories[i];
@@ -555,14 +819,17 @@ namespace Asterra.Gameplay
 
         private bool TryGetDamageable(
             SimEntityId id,
-            out Action<float> applyDamage,
+            out SimUnit targetUnit,
+            out SimBuilding targetBuilding,
             out float x,
             out float z,
             out PlayerId owner)
         {
+            targetUnit = null;
+            targetBuilding = null;
             if (_unitsById.TryGetValue(id.Value, out var unit) && unit.IsAlive)
             {
-                applyDamage = dmg => unit.Health -= dmg;
+                targetUnit = unit;
                 x = unit.X;
                 z = unit.Z;
                 owner = unit.Owner;
@@ -571,42 +838,93 @@ namespace Asterra.Gameplay
 
             if (_buildingsById.TryGetValue(id.Value, out var building) && building.State != BuildingState.Destroyed)
             {
-                applyDamage = dmg =>
-                {
-                    building.Health -= dmg;
-                    if (building.Health <= 0f)
-                        building.State = BuildingState.Destroyed;
-                };
+                targetBuilding = building;
                 x = building.X;
                 z = building.Z;
                 owner = building.Owner;
                 return true;
             }
 
-            applyDamage = null;
             x = 0f;
             z = 0f;
             owner = default;
             return false;
         }
 
-        private static void StepToward(SimUnit unit, float tx, float tz, float dt)
+        private void StepTowardAvoiding(SimUnit unit, float tx, float tz, float dt)
         {
             float dx = tx - unit.X;
             float dz = tz - unit.Z;
             float len = MathF.Sqrt(dx * dx + dz * dz);
             if (len <= 0.0001f)
                 return;
+            float nx = dx / len;
+            float nz = dz / len;
+
+            // Steer away from building footprints.
+            float steerX = 0f;
+            float steerZ = 0f;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed)
+                    continue;
+                float bx = unit.X - b.X;
+                float bz = unit.Z - b.Z;
+                float dist = MathF.Sqrt(bx * bx + bz * bz);
+                float avoid = b.FootprintRadius + 4f;
+                if (dist < avoid && dist > 0.001f)
+                {
+                    float strength = (avoid - dist) / avoid;
+                    steerX += (bx / dist) * strength;
+                    steerZ += (bz / dist) * strength;
+                }
+            }
+
+            nx += steerX * 1.25f;
+            nz += steerZ * 1.25f;
+            float nlen = MathF.Sqrt(nx * nx + nz * nz);
+            if (nlen > 0.0001f)
+            {
+                nx /= nlen;
+                nz /= nlen;
+            }
+
             float step = unit.MoveSpeed * dt;
-            if (step >= len)
+            if (step >= len && steerX * steerX + steerZ * steerZ < 0.01f)
             {
                 unit.X = tx;
                 unit.Z = tz;
                 return;
             }
 
-            unit.X += dx / len * step;
-            unit.Z += dz / len * step;
+            unit.X += nx * step;
+            unit.Z += nz * step;
+        }
+
+        private bool HasNearbyBuilder(PlayerId owner, float x, float z, float builderPlaceRadius)
+        {
+            float r2 = builderPlaceRadius * builderPlaceRadius;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.Owner != owner)
+                    continue;
+                if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.IsBuilder)
+                    continue;
+                float dx = unit.X - x;
+                float dz = unit.Z - z;
+                if (dx * dx + dz * dz <= r2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsInsidePlayable(float x, float z)
+        {
+            const float half = 450f;
+            return x >= -half && x <= half && z >= -half && z <= half;
         }
 
         private static float Distance(float ax, float az, float bx, float bz)
@@ -631,7 +949,6 @@ namespace Asterra.Gameplay
 
         private FactionId ResolveFaction(PlayerId player)
         {
-            // Phase-1: player 0 → faction 0, player 1 → faction 1.
             return new FactionId(player.Value);
         }
 
@@ -648,6 +965,10 @@ namespace Asterra.Gameplay
             _territorySnapshots.Clear();
             for (int i = 0; i < _territories.Count; i++)
                 _territorySnapshots.Add(_territories[i].ToSnapshot());
+
+            _resourceSnapshots.Clear();
+            for (int i = 0; i < _resources.Count; i++)
+                _resourceSnapshots.Add(_resources[i].ToSnapshot());
         }
     }
 }

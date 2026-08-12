@@ -63,6 +63,27 @@ namespace Asterra.Core
                         UnitIds = new[] { new SimEntityId(10) },
                         Stance = UnitStance.Hold,
                     },
+                    new GatherCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        UnitIds = new[] { new SimEntityId(10) },
+                        ResourceNodeId = new SimEntityId(50),
+                    },
+                    new SetRallyCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        BuildingId = new SimEntityId(7),
+                        TargetX = 10f,
+                        TargetZ = 20f,
+                    },
+                    new CancelProductionCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        BuildingId = new SimEntityId(7),
+                    },
                 },
             };
 

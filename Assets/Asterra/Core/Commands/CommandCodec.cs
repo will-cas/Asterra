@@ -120,6 +120,21 @@ namespace Asterra.Core
                     WriteEntityIds(writer, stance.UnitIds);
                     writer.Write((byte)stance.Stance);
                     break;
+                case GatherCommand gather:
+                    writer.Write((byte)CommandType.Gather);
+                    WriteEntityIds(writer, gather.UnitIds);
+                    writer.Write(gather.ResourceNodeId.Value);
+                    break;
+                case SetRallyCommand rally:
+                    writer.Write((byte)CommandType.SetRally);
+                    writer.Write(rally.BuildingId.Value);
+                    WriteQuantized(writer, rally.TargetX);
+                    WriteQuantized(writer, rally.TargetZ);
+                    break;
+                case CancelProductionCommand cancel:
+                    writer.Write((byte)CommandType.CancelProduction);
+                    writer.Write(cancel.BuildingId.Value);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -182,6 +197,27 @@ namespace Asterra.Core
                     {
                         UnitIds = ReadEntityIds(reader),
                         Stance = (UnitStance)reader.ReadByte(),
+                    };
+                    break;
+                case CommandType.Gather:
+                    command = new GatherCommand
+                    {
+                        UnitIds = ReadEntityIds(reader),
+                        ResourceNodeId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.SetRally:
+                    command = new SetRallyCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                        TargetX = ReadQuantized(reader),
+                        TargetZ = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.CancelProduction:
+                    command = new CancelProductionCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
                     };
                     break;
                 default:

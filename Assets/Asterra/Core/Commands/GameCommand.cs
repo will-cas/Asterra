@@ -54,11 +54,53 @@ namespace Asterra.Core
         public UnitStance Stance;
     }
 
+    public sealed class GatherCommand : GameCommand
+    {
+        public SimEntityId[] UnitIds;
+        public SimEntityId ResourceNodeId;
+    }
+
+    public sealed class SetRallyCommand : GameCommand
+    {
+        public SimEntityId BuildingId;
+        public float TargetX;
+        public float TargetZ;
+    }
+
+    public sealed class CancelProductionCommand : GameCommand
+    {
+        public SimEntityId BuildingId;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {
         public Tick TargetTick;
         public PlayerId Player;
         public GameCommand[] Commands = Array.Empty<GameCommand>();
+    }
+
+    public enum CombatEventKind : byte
+    {
+        Hit = 1,
+        Death = 2,
+    }
+
+    public readonly struct CombatEvent
+    {
+        public readonly CombatEventKind Kind;
+        public readonly SimEntityId TargetId;
+        public readonly float X;
+        public readonly float Z;
+        public readonly bool IsBuilding;
+
+        public CombatEvent(CombatEventKind kind, SimEntityId targetId, float x, float z, bool isBuilding)
+        {
+            Kind = kind;
+            TargetId = targetId;
+            X = x;
+            Z = z;
+            IsBuilding = isBuilding;
+        }
     }
 }
