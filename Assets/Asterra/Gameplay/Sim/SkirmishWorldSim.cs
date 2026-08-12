@@ -206,6 +206,13 @@ namespace Asterra.Gameplay
         {
             if (!_defs.TryGetBuilding(place.BuildingDefId, out var def))
                 return;
+
+            if (!IsInsidePlayable(place.X, place.Z))
+                return;
+
+            if (!HasNearbyBuilder(place.Issuer, place.X, place.Z, builderPlaceRadius: 55f))
+                return;
+
             if (!_wallet.TrySpend(place.Issuer, ResourceType.Gold, def.GoldCost))
                 return;
             if (!_wallet.TrySpend(place.Issuer, ResourceType.Timber, def.TimberCost))
@@ -217,6 +224,31 @@ namespace Asterra.Gameplay
             var faction = ResolveFaction(place.Issuer);
             SpawnBuilding(_ids.Next(), place.Issuer, faction, def.Id, place.X, place.Z, startActive: false);
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        private bool HasNearbyBuilder(PlayerId owner, float x, float z, float builderPlaceRadius)
+        {
+            float r2 = builderPlaceRadius * builderPlaceRadius;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.Owner != owner)
+                    continue;
+                if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.IsBuilder)
+                    continue;
+                float dx = unit.X - x;
+                float dz = unit.Z - z;
+                if (dx * dx + dz * dz <= r2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsInsidePlayable(float x, float z)
+        {
+            const float half = 450f;
+            return x >= -half && x <= half && z >= -half && z <= half;
         }
 
         private void ApplyTrain(TrainUnitCommand train)

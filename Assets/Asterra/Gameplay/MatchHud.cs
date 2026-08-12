@@ -1,4 +1,6 @@
 using Asterra.Core;
+using Asterra.Gameplay.Content;
+using Asterra.Gameplay.Player;
 using UnityEngine;
 
 namespace Asterra.Gameplay
@@ -7,17 +9,22 @@ namespace Asterra.Gameplay
     public sealed class MatchHud : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
+        [SerializeField] private LocalOrderController orders;
 
         private void Awake()
         {
             if (match == null)
                 match = GetComponent<MatchBootstrap>();
+            if (orders == null)
+                orders = GetComponent<LocalOrderController>();
         }
 
         private void OnGUI()
         {
             if (match == null || match.Session == null)
                 return;
+            if (orders == null)
+                orders = FindFirstObjectByType<LocalOrderController>();
 
             var player = match.Session.LocalPlayer;
             string resources = string.Empty;
@@ -44,7 +51,40 @@ namespace Asterra.Gameplay
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);
             GUI.Label(
                 new Rect(12f, 56f, 1200f, 22f),
-                "Drag-select  |  click select  |  ⌘/Shift add  |  right-click / Ctrl-click move  |  WASD/arrows pan  |  scroll zoom");
+                "Click keep → Train Builder  |  select builder → B place barracks  |  drag-select  |  RMB move/attack");
+
+            float panelY = Screen.height - 78f;
+            if (orders != null && orders.SelectedBuilding.HasValue)
+            {
+                string label = "Train";
+                if (match.World != null && match.PlayerRoster != null)
+                {
+                    for (int i = 0; i < match.World.Buildings.Count; i++)
+                    {
+                        var b = match.World.Buildings[i];
+                        if (b.Id != orders.SelectedBuilding.Value)
+                            continue;
+                        label = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
+                            ? "Train Builder (T)"
+                            : "Train Soldier (T)";
+                        break;
+                    }
+                }
+
+                if (GUI.Button(new Rect(12f, panelY, 180f, 36f), label))
+                    orders.TrainFromSelectedBuilding();
+            }
+
+            if (orders != null && !orders.IsPlaceMode)
+            {
+                if (GUI.Button(new Rect(202f, panelY, 200f, 36f), "Build Barracks (B)"))
+                    orders.EnterPlaceMode();
+            }
+            else if (orders != null && orders.IsPlaceMode)
+            {
+                if (GUI.Button(new Rect(202f, panelY, 200f, 36f), "Cancel Build (Esc)"))
+                    orders.CancelPlaceMode();
+            }
 
             if (!match.Result.IsOver)
                 return;

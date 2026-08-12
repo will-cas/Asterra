@@ -208,6 +208,8 @@ namespace Asterra.Gameplay
                 var brain = new DummyEnemyCamp(
                     new PlayerId(1),
                     EnemyRoster.KeepBuildingId,
+                    EnemyRoster.ProducerBuildingId,
+                    EnemyRoster.BuilderUnitId,
                     EnemyRoster.BasicUnitId);
                 coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
             }

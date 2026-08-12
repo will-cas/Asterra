@@ -12,6 +12,7 @@ namespace Asterra.Gameplay.Content
         public string KeepBuildingId;
         public string ProducerBuildingId;
         public string BasicUnitId;
+        public string BuilderUnitId;
         public string BasicUpgradeId;
         public string LoreBlurb;
     }
@@ -27,18 +28,21 @@ namespace Asterra.Gameplay.Content
 
         // Iron Covenant
         public const string MilitiaId = "unit_militia";
+        public const string IronBuilderId = "unit_iron_builder";
         public const string BarracksId = "building_barracks";
         public const string IronKeepId = "building_iron_keep";
         public const string MilitiaTrainingId = "upgrade_militia_training";
 
         // Verdant Court
         public const string DryadId = "unit_dryad";
+        public const string VerdantBuilderId = "unit_verdant_builder";
         public const string GroveId = "building_grove";
         public const string HeartwoodId = "building_heartwood";
         public const string WildGrowthId = "upgrade_wild_growth";
 
         // Ashen Legion
         public const string EmberRaiderId = "unit_ember_raider";
+        public const string AshenBuilderId = "unit_ashen_builder";
         public const string ForgeId = "building_forge";
         public const string AshCitadelId = "building_ash_citadel";
         public const string EmberRitesId = "upgrade_ember_rites";
@@ -51,6 +55,7 @@ namespace Asterra.Gameplay.Content
             KeepBuildingId = IronKeepId,
             ProducerBuildingId = BarracksId,
             BasicUnitId = MilitiaId,
+            BuilderUnitId = IronBuilderId,
             BasicUpgradeId = MilitiaTrainingId,
             LoreBlurb = "Disciplined steel and drilled infantry.",
         };
@@ -63,6 +68,7 @@ namespace Asterra.Gameplay.Content
             KeepBuildingId = HeartwoodId,
             ProducerBuildingId = GroveId,
             BasicUnitId = DryadId,
+            BuilderUnitId = VerdantBuilderId,
             BasicUpgradeId = WildGrowthId,
             LoreBlurb = "Living wood and swift skirmishers.",
         };
@@ -75,6 +81,7 @@ namespace Asterra.Gameplay.Content
             KeepBuildingId = AshCitadelId,
             ProducerBuildingId = ForgeId,
             BasicUnitId = EmberRaiderId,
+            BuilderUnitId = AshenBuilderId,
             BasicUpgradeId = EmberRitesId,
             LoreBlurb = "Raid doctrine and scorched-earth forges.",
         };
@@ -97,6 +104,21 @@ namespace Asterra.Gameplay.Content
             return IronCovenant;
         }
 
+        public static bool IsBuilderUnitId(string definitionId)
+        {
+            return definitionId == IronBuilderId
+                   || definitionId == VerdantBuilderId
+                   || definitionId == AshenBuilderId
+                   || (definitionId != null && definitionId.Contains("builder"));
+        }
+
+        public static bool IsKeepBuildingId(string definitionId)
+        {
+            return definitionId == IronKeepId
+                   || definitionId == HeartwoodId
+                   || definitionId == AshCitadelId;
+        }
+
         public static void RegisterAll(DefinitionRegistry registry)
         {
             // Iron
@@ -111,6 +133,19 @@ namespace Asterra.Gameplay.Content
                 AttackCooldown = 1f,
                 GoldCost = 50,
                 TrainSeconds = 4f,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = IronBuilderId,
+                DisplayName = "Sapper",
+                MaxHealth = 60f,
+                MoveSpeed = 4.5f,
+                AttackDamage = 0f,
+                AttackRange = 0f,
+                AttackCooldown = 1f,
+                GoldCost = 40,
+                TrainSeconds = 3f,
+                IsBuilder = true,
             });
             registry.Register(new BuildingDefData
             {
@@ -129,7 +164,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Iron Keep",
                 MaxHealth = 1200f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { MilitiaId },
+                TrainableUnitIds = new[] { IronBuilderId },
             });
             registry.Register(new UpgradeDefData
             {
@@ -153,6 +188,19 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 55,
                 TrainSeconds = 3.5f,
             });
+            registry.Register(new UnitDefData
+            {
+                Id = VerdantBuilderId,
+                DisplayName = "Grovewright",
+                MaxHealth = 55f,
+                MoveSpeed = 5f,
+                AttackDamage = 0f,
+                AttackRange = 0f,
+                AttackCooldown = 1f,
+                GoldCost = 35,
+                TrainSeconds = 2.8f,
+                IsBuilder = true,
+            });
             registry.Register(new BuildingDefData
             {
                 Id = GroveId,
@@ -170,7 +218,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Heartwood",
                 MaxHealth = 1100f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { DryadId },
+                TrainableUnitIds = new[] { VerdantBuilderId },
             });
             registry.Register(new UpgradeDefData
             {
@@ -194,6 +242,19 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
             });
+            registry.Register(new UnitDefData
+            {
+                Id = AshenBuilderId,
+                DisplayName = "Ashwright",
+                MaxHealth = 65f,
+                MoveSpeed = 4.8f,
+                AttackDamage = 0f,
+                AttackRange = 0f,
+                AttackCooldown = 1f,
+                GoldCost = 45,
+                TrainSeconds = 3.2f,
+                IsBuilder = true,
+            });
             registry.Register(new BuildingDefData
             {
                 Id = ForgeId,
@@ -211,7 +272,7 @@ namespace Asterra.Gameplay.Content
                 DisplayName = "Ash Citadel",
                 MaxHealth = 1250f,
                 CanProduce = true,
-                TrainableUnitIds = new[] { EmberRaiderId },
+                TrainableUnitIds = new[] { AshenBuilderId },
             });
             registry.Register(new UpgradeDefData
             {

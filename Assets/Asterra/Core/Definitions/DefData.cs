@@ -12,6 +12,7 @@ namespace Asterra.Core
         public float AttackCooldown = 1f;
         public int GoldCost = 50;
         public float TrainSeconds = 5f;
+        public bool IsBuilder;
     }
 
     public sealed class BuildingDefData

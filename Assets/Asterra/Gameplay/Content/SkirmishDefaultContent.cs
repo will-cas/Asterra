@@ -77,9 +77,11 @@ namespace Asterra.Gameplay.Content
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, -20f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 0f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 20f);
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 0f);
 
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, -15f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, 15f);
+            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2000, -80f, 60f);

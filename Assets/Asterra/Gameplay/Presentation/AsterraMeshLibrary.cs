@@ -13,6 +13,8 @@ namespace Asterra.Gameplay.Presentation
 
         public static Mesh GetUnitMesh(string definitionId)
         {
+            if (definitionId != null && definitionId.Contains("builder"))
+                return GetOrCreate("unit_builder", BuildBuilder);
             if (definitionId != null && definitionId.Contains("dryad"))
                 return GetOrCreate("unit_dryad", BuildDryad);
             if (definitionId != null && definitionId.Contains("ember"))
@@ -63,6 +65,15 @@ namespace Asterra.Gameplay.Presentation
                 Box(0, 0, 0, 0.7f, 1.4f, 0.5f),
                 Box(0, 1.4f, 0, 0.45f, 0.45f, 0.45f),
                 Box(0.45f, 0.7f, 0, 0.15f, 0.15f, 1.2f));
+        }
+
+        private static Mesh BuildBuilder()
+        {
+            return Combine(
+                Box(0, 0, 0, 0.65f, 1.2f, 0.5f),
+                Box(0, 1.2f, 0, 0.4f, 0.4f, 0.4f),
+                Box(0.55f, 0.55f, 0, 0.9f, 0.18f, 0.18f),
+                Box(0.95f, 0.55f, 0, 0.25f, 0.45f, 0.25f));
         }
 
         private static Mesh BuildDryad()

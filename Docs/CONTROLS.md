@@ -1,40 +1,53 @@
 # Demo controls (Mac-first)
 
+## Economy loop
+1. **Click your keep** → press **T** or **Train Builder** to make a builder
+2. **Select the builder** → press **B** (or Build Barracks) → green ghost → **click** to place
+3. Builder must be near the site (red ghost = too far / off-map)
+4. **Click barracks** → **T** trains combat units
+
+You start with 1 builder already.
+
 ## Pointer
 | Input | Action |
 |-------|--------|
-| **Click** | Select owned unit |
-| **Drag** | Box-select owned units |
-| **⇧ Shift / ⌘ Command + click or drag** | Add / toggle selection |
-| **Click** own building | Select nearby owned units |
-| **Click** ground | Clear selection |
-| **Right-click** ground | Move selected units |
-| **Right-click** revealed enemy | Attack |
-| **Control-click** (Mac) | Same as right-click order |
-| **Two-finger click** (trackpad) | Same as right-click order |
+| **Click** unit | Select |
+| **Drag** | Box-select units |
+| **Click** keep / barracks | Select building (train panel) |
+| **⇧ / ⌘ + click** | Add / toggle units |
+| **B** (builder selected) | Enter place mode |
+| **Click** (place mode) | Confirm building |
+| **Esc / right-click** | Cancel place mode |
+| **Right-click / Ctrl-click / two-finger click** | Move or attack |
+| **T** | Train from selected building (keep → builder) |
+
+## Cursors
+| Cursor | Meaning |
+|--------|---------|
+| Arrow | Select |
+| Green cross | Move order ready |
+| Red X | Attack order ready |
+| Hammer | Valid build site |
+| Red circle | Invalid build site |
+| House+ | Building selected (train) |
 
 ## Camera
 | Input | Action |
 |-------|--------|
-| **WASD** or **Arrow keys** | Pan |
-| **Mouse to screen edge** | Pan |
-| **Scroll** / two-finger swipe | Zoom (keeps steep look-down) |
+| **WASD** / **arrows** / screen edge | Pan |
+| **Scroll** | Zoom |
 
 ## Hotkeys
 | Key | Order |
 |-----|--------|
-| **B** | Place producer at cursor |
-| **T** | Train basic unit |
-| **C** | March to capture center territory |
+| **C** | March to capture center |
 | **U** | Buy faction upgrade |
-| **A** | Attack first *visible* hostile |
+| **A** | Attack first visible hostile |
 | **R** | Select all owned units |
 
 ## Map / fog
-- Playable area has a light rim; past the border is solid black void
-- Fog of war darkens unexplored / out-of-sight cells inside the map
-- Enemy units/buildings only appear inside your vision
+- Light rim marks playable edge; black void beyond
+- Fog of war hides unseen enemies
 
 ## Win / lose
-- Destroy the enemy **keep**, or
-- Hold the center territory for **90s** continuously (configurable on `MatchBootstrap`)
+- Destroy the enemy **keep**, or hold center territory **90s**
