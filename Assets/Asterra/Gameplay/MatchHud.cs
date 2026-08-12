@@ -159,13 +159,13 @@ namespace Asterra.Gameplay
                         }
                         else if (b.CanProduce || !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0)
                         {
-                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Soldier"))
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Infantry"))
                                 orders.TrainUnit(roster.BasicUnitId);
                             trainX += btnW + gap;
-                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Archer"))
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Ranged"))
                                 orders.TrainUnit(roster.RangedUnitId);
                             trainX += btnW + gap;
-                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Cavalry"))
+                            if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Elite"))
                                 orders.TrainUnit(roster.CavalryUnitId);
                             trainX += btnW + gap;
                             if (GUI.Button(new Rect(trainX, trainY, btnW, btnH), "Siege"))
@@ -195,7 +195,31 @@ namespace Asterra.Gameplay
             string reason = match.Result.Reason == MatchEndReason.KeepDestroyed
                 ? "Enemy keep destroyed"
                 : "Territory held long enough";
-            GUI.Box(new Rect(Screen.width * 0.5f - 160f, Screen.height * 0.38f, 320f, 90f), $"{title}\n{reason}");
+            string story = BuildStoryBeat(won);
+            float boxH = string.IsNullOrEmpty(story) ? 90f : 150f;
+            GUI.Box(
+                new Rect(Screen.width * 0.5f - 200f, Screen.height * 0.34f, 400f, boxH),
+                string.IsNullOrEmpty(story)
+                    ? $"{title}\n{reason}"
+                    : $"{title}\n{reason}\n\n{story}");
+        }
+
+        private string BuildStoryBeat(bool won)
+        {
+            if (match == null)
+                return string.Empty;
+
+            bool blackridge = match.MapId == SkirmishMapId.BlackridgePass;
+            bool aurelian = match.PlayerRoster != null
+                            && match.PlayerRoster.DefinitionId == FactionDefaultContent.IronCovenantId;
+            if (!blackridge)
+                return string.Empty;
+
+            if (won && aurelian)
+                return "Blackridge Pass secured.\nStory unlock: The First Border War continues.";
+            if (won)
+                return "Blackridge Pass falls under your banner.";
+            return "The pass is lost. The Crownlands stand exposed.";
         }
 
         private void DrawProductionQueue(BuildingSnapshot b, float y)

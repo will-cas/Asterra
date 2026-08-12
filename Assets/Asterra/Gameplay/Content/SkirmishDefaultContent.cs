@@ -8,6 +8,8 @@ namespace Asterra.Gameplay.Content
     {
         TwinKeeps = 0,
         RiverCrossing = 1,
+        /// <summary>M1 vertical-slice map: fortress warfare through a mountain pass.</summary>
+        BlackridgePass = 2,
     }
 
     /// <summary>
@@ -89,6 +91,9 @@ namespace Asterra.Gameplay.Content
                     break;
                 case SkirmishMapId.RiverCrossing:
                     PopulateRiverCrossing(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
+                    break;
+                case SkirmishMapId.BlackridgePass:
+                    PopulateBlackridgePass(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
                     break;
                 default:
                     throw new System.ArgumentOutOfRangeException(nameof(map), map, null);
@@ -176,6 +181,110 @@ namespace Asterra.Gameplay.Content
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 250f, 160f);
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 220f, 180f);
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 1700, 180f, 140f);
+        }
+
+        /// <summary>
+        /// Blackridge Pass — east/west fortresses, narrow central choke, high-ground flanks.
+        /// Notion M1 vertical-slice region.
+        /// </summary>
+        private static void PopulateBlackridgePass(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerId westPlayer,
+            FactionRoster westFaction,
+            PlayerId eastPlayer,
+            FactionRoster eastFaction)
+        {
+            // Fortresses outside the pass mouth
+            world.SpawnBuilding(
+                ids.Next(), westPlayer, westFaction.Id, westFaction.KeepBuildingId, -360f, 0f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 360f, 0f, startActive: true);
+
+            // Starting garrisons
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, -18f);
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 0f);
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 18f);
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.RangedUnitId, -310f, -30f);
+            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 8f);
+
+            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, -15f);
+            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, 15f);
+            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.RangedUnitId, 310f, 28f);
+            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, -8f);
+
+            // West pass mouth fortifications
+            world.SpawnBuilding(
+                ids.Next(), westPlayer, westFaction.Id, westFaction.TowerBuildingId, -140f, -55f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), westPlayer, westFaction.Id, westFaction.TowerBuildingId, -140f, 55f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), westPlayer, westFaction.Id, westFaction.WallBuildingId, -120f, -70f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), westPlayer, westFaction.Id, westFaction.WallBuildingId, -120f, 70f, startActive: true);
+
+            // East pass mouth fortifications
+            world.SpawnBuilding(
+                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.TowerBuildingId, 140f, -55f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.TowerBuildingId, 140f, 55f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.WallBuildingId, 120f, -70f, startActive: true);
+            world.SpawnBuilding(
+                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.WallBuildingId, 120f, 70f, startActive: true);
+
+            // Contested pass control + high-ground supply flanks
+            world.AddTerritory(ids.Next(), 0f, 0f, radius: 36f, goldPerSecond: 10);
+            world.AddTerritory(ids.Next(), 0f, 110f, radius: 28f, goldPerSecond: 6);
+            world.AddTerritory(ids.Next(), 0f, -110f, radius: 28f, goldPerSecond: 6);
+
+            // Iron / stone / timber along the choke (trade-route feel via gold nodes)
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2800, -40f, 0f);
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2800, 40f, 0f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 0f, 35f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 0f, -35f);
+
+            // High-ground flanks
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2200, -20f, 120f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1800, 20f, 125f);
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2200, 20f, -120f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1800, -20f, -125f);
+
+            // Base economy pads
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, -280f, 60f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, -290f, -70f);
+            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 280f, -60f);
+            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 290f, 70f);
+        }
+
+        public static string GetMapDisplayName(SkirmishMapId map)
+        {
+            switch (map)
+            {
+                case SkirmishMapId.TwinKeeps:
+                    return "Twin Keeps";
+                case SkirmishMapId.RiverCrossing:
+                    return "River Crossing";
+                case SkirmishMapId.BlackridgePass:
+                    return "Blackridge Pass";
+                default:
+                    return map.ToString();
+            }
+        }
+
+        public static SkirmishMapId NextMap(SkirmishMapId map)
+        {
+            switch (map)
+            {
+                case SkirmishMapId.TwinKeeps:
+                    return SkirmishMapId.RiverCrossing;
+                case SkirmishMapId.RiverCrossing:
+                    return SkirmishMapId.BlackridgePass;
+                case SkirmishMapId.BlackridgePass:
+                    return SkirmishMapId.TwinKeeps;
+                default:
+                    return SkirmishMapId.TwinKeeps;
+            }
         }
     }
 }

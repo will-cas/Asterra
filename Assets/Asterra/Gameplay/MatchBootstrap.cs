@@ -25,7 +25,7 @@ namespace Asterra.Gameplay
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
         [SerializeField] private int playerFactionIndex;
         [SerializeField] private int enemyFactionIndex = 1;
-        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.TwinKeeps;
+        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.BlackridgePass;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 500;
@@ -283,8 +283,19 @@ namespace Asterra.Gameplay
                 var camRig = FindFirstObjectByType<RtsCameraRig>();
                 if (camRig == null)
                     camRig = gameObject.AddComponent<RtsCameraRig>();
-                float focusX = mapId == SkirmishMapId.RiverCrossing ? -280f : -320f;
-                float focusZ = mapId == SkirmishMapId.RiverCrossing ? -200f : 0f;
+                float focusX = -320f;
+                float focusZ = 0f;
+                if (mapId == SkirmishMapId.RiverCrossing)
+                {
+                    focusX = -280f;
+                    focusZ = -200f;
+                }
+                else if (mapId == SkirmishMapId.BlackridgePass)
+                {
+                    focusX = -330f;
+                    focusZ = 0f;
+                }
+
                 camRig.FocusOn(focusX, focusZ, height: 240f, back: 42f);
             }
             var keepIds = new[]
