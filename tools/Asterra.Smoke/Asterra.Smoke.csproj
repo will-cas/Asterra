@@ -14,5 +14,6 @@
     <Compile Include="../../Assets/Asterra/Gameplay/Services/LockstepClock.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Sim/**/*.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishDefaultContent.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/FactionDefaultContent.cs" />
   </ItemGroup>
 </Project>

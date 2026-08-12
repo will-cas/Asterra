@@ -11,8 +11,16 @@ namespace Asterra.Smoke
             if (args.Length > 0 && int.TryParse(args[0], out int parsed))
                 ticks = parsed;
 
-            Console.WriteLine(SkirmishSmokeTest.Run(ticks));
-            return 0;
+            try
+            {
+                Console.WriteLine(SkirmishSmokeTest.Run(ticks));
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                return 1;
+            }
         }
     }
 }

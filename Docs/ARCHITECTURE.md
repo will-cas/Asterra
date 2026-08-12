@@ -117,7 +117,11 @@ Docs/
 
 **Not required day one:** Full Netcode for Entities (use Entities for **local sim**, NGO for **commands**). Revisit if you move to a dedicated server model.
 
-## Pathfinding note (~1 km, 1k units)
+## Multiplayer transport notes
+
+- `CommandCodec` quantizes positions to millimeters and round-trips all Phase-1 command types.
+- `LockstepNetworkBridge` serializes `CommandFrame`s over NGO RPCs (no per-unit NetworkObjects).
+- `ReplayBuffer` / `DesyncDetector` sit in Core for local + networked use.
 
 - **Slice 1:** Unity NavMesh for small groups + simple steering.
 - **Slice 2:** Grid **flow fields** per army destination (RTS-standard at this density).

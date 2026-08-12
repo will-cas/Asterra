@@ -1,0 +1,226 @@
+using Asterra.Core;
+using Asterra.Gameplay.Sim;
+
+namespace Asterra.Gameplay.Content
+{
+    /// <summary>Plain-data roster for one of the three launch factions.</summary>
+    public sealed class FactionRoster
+    {
+        public FactionId Id;
+        public string DefinitionId;
+        public string DisplayName;
+        public string KeepBuildingId;
+        public string ProducerBuildingId;
+        public string BasicUnitId;
+        public string BasicUpgradeId;
+        public string LoreBlurb;
+    }
+
+    /// <summary>
+    /// Three asymmetric factions as data only (Iron Covenant, Verdant Court, Ashen Legion).
+    /// </summary>
+    public static class FactionDefaultContent
+    {
+        public const string IronCovenantId = "faction_iron_covenant";
+        public const string VerdantCourtId = "faction_verdant_court";
+        public const string AshenLegionId = "faction_ashen_legion";
+
+        // Iron Covenant
+        public const string MilitiaId = "unit_militia";
+        public const string BarracksId = "building_barracks";
+        public const string IronKeepId = "building_iron_keep";
+        public const string MilitiaTrainingId = "upgrade_militia_training";
+
+        // Verdant Court
+        public const string DryadId = "unit_dryad";
+        public const string GroveId = "building_grove";
+        public const string HeartwoodId = "building_heartwood";
+        public const string WildGrowthId = "upgrade_wild_growth";
+
+        // Ashen Legion
+        public const string EmberRaiderId = "unit_ember_raider";
+        public const string ForgeId = "building_forge";
+        public const string AshCitadelId = "building_ash_citadel";
+        public const string EmberRitesId = "upgrade_ember_rites";
+
+        public static readonly FactionRoster IronCovenant = new FactionRoster
+        {
+            Id = new FactionId(0),
+            DefinitionId = IronCovenantId,
+            DisplayName = "Iron Covenant",
+            KeepBuildingId = IronKeepId,
+            ProducerBuildingId = BarracksId,
+            BasicUnitId = MilitiaId,
+            BasicUpgradeId = MilitiaTrainingId,
+            LoreBlurb = "Disciplined steel and drilled infantry.",
+        };
+
+        public static readonly FactionRoster VerdantCourt = new FactionRoster
+        {
+            Id = new FactionId(1),
+            DefinitionId = VerdantCourtId,
+            DisplayName = "Verdant Court",
+            KeepBuildingId = HeartwoodId,
+            ProducerBuildingId = GroveId,
+            BasicUnitId = DryadId,
+            BasicUpgradeId = WildGrowthId,
+            LoreBlurb = "Living wood and swift skirmishers.",
+        };
+
+        public static readonly FactionRoster AshenLegion = new FactionRoster
+        {
+            Id = new FactionId(2),
+            DefinitionId = AshenLegionId,
+            DisplayName = "Ashen Legion",
+            KeepBuildingId = AshCitadelId,
+            ProducerBuildingId = ForgeId,
+            BasicUnitId = EmberRaiderId,
+            BasicUpgradeId = EmberRitesId,
+            LoreBlurb = "Raid doctrine and scorched-earth forges.",
+        };
+
+        public static FactionRoster[] All { get; } =
+        {
+            IronCovenant,
+            VerdantCourt,
+            AshenLegion,
+        };
+
+        public static FactionRoster Get(FactionId id)
+        {
+            for (int i = 0; i < All.Length; i++)
+            {
+                if (All[i].Id == id)
+                    return All[i];
+            }
+
+            return IronCovenant;
+        }
+
+        public static void RegisterAll(DefinitionRegistry registry)
+        {
+            // Iron
+            registry.Register(new UnitDefData
+            {
+                Id = MilitiaId,
+                DisplayName = "Militia",
+                MaxHealth = 100f,
+                MoveSpeed = 5f,
+                AttackDamage = 12f,
+                AttackRange = 1.75f,
+                AttackCooldown = 1f,
+                GoldCost = 50,
+                TrainSeconds = 4f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = BarracksId,
+                DisplayName = "Barracks",
+                MaxHealth = 600f,
+                GoldCost = 120,
+                TimberCost = 80,
+                BuildSeconds = 6f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { MilitiaId },
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = IronKeepId,
+                DisplayName = "Iron Keep",
+                MaxHealth = 1200f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { MilitiaId },
+            });
+            registry.Register(new UpgradeDefData
+            {
+                Id = MilitiaTrainingId,
+                DisplayName = "Militia Training",
+                GoldCost = 150,
+                TrainTimeMultiplier = 0.75f,
+                UnitDamageMultiplier = 1.25f,
+            });
+
+            // Verdant
+            registry.Register(new UnitDefData
+            {
+                Id = DryadId,
+                DisplayName = "Dryad",
+                MaxHealth = 80f,
+                MoveSpeed = 6.5f,
+                AttackDamage = 10f,
+                AttackRange = 2.5f,
+                AttackCooldown = 0.9f,
+                GoldCost = 55,
+                TrainSeconds = 3.5f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = GroveId,
+                DisplayName = "Grove",
+                MaxHealth = 500f,
+                GoldCost = 100,
+                TimberCost = 120,
+                BuildSeconds = 5f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { DryadId },
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = HeartwoodId,
+                DisplayName = "Heartwood",
+                MaxHealth = 1100f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { DryadId },
+            });
+            registry.Register(new UpgradeDefData
+            {
+                Id = WildGrowthId,
+                DisplayName = "Wild Growth",
+                GoldCost = 140,
+                TrainTimeMultiplier = 0.7f,
+                UnitDamageMultiplier = 1.15f,
+            });
+
+            // Ashen
+            registry.Register(new UnitDefData
+            {
+                Id = EmberRaiderId,
+                DisplayName = "Ember Raider",
+                MaxHealth = 90f,
+                MoveSpeed = 5.5f,
+                AttackDamage = 15f,
+                AttackRange = 1.5f,
+                AttackCooldown = 1.1f,
+                GoldCost = 60,
+                TrainSeconds = 4.5f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = ForgeId,
+                DisplayName = "Forge",
+                MaxHealth = 650f,
+                GoldCost = 140,
+                TimberCost = 60,
+                BuildSeconds = 7f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { EmberRaiderId },
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = AshCitadelId,
+                DisplayName = "Ash Citadel",
+                MaxHealth = 1250f,
+                CanProduce = true,
+                TrainableUnitIds = new[] { EmberRaiderId },
+            });
+            registry.Register(new UpgradeDefData
+            {
+                Id = EmberRitesId,
+                DisplayName = "Ember Rites",
+                GoldCost = 160,
+                TrainTimeMultiplier = 0.85f,
+                UnitDamageMultiplier = 1.35f,
+            });
+        }
+    }
+}

@@ -53,16 +53,13 @@ namespace Asterra.AI
 
             if (keepId.HasValue && tick - _lastTrainTick >= _trainEveryTicks)
             {
-                if (context.Wallet.CanAfford(Player, ResourceType.Gold, 50))
+                commands.Add(new TrainUnitCommand
                 {
-                    commands.Add(new TrainUnitCommand
-                    {
-                        Issuer = Player,
-                        BuildingId = keepId.Value,
-                        UnitDefId = _unitDefId,
-                    });
-                    _lastTrainTick = tick;
-                }
+                    Issuer = Player,
+                    BuildingId = keepId.Value,
+                    UnitDefId = _unitDefId,
+                });
+                _lastTrainTick = tick;
             }
 
             var myUnits = new List<EntityId>();

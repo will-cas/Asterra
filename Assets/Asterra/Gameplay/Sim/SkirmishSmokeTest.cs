@@ -13,20 +13,25 @@ namespace Asterra.Gameplay
     {
         public static string Run(int ticks = 2000)
         {
+            var codecReport = CommandCodecSelfTest.Run();
+
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = SkirmishDefaultContent.CreateRegistry();
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var clock = new LockstepClock(0.05f, commandDelayTicks: 2);
             var bus = new CommandBus();
+            var replay = new ReplayBuffer();
 
             var player = new PlayerId(0);
             var enemy = new PlayerId(1);
+            var playerFaction = FactionDefaultContent.IronCovenant;
+            var enemyFaction = FactionDefaultContent.VerdantCourt;
             wallet.Seed(player, ResourceType.Gold, 500);
             wallet.Seed(player, ResourceType.Timber, 300);
             wallet.Seed(enemy, ResourceType.Gold, 500);
             wallet.Seed(enemy, ResourceType.Timber, 300);
-            SkirmishDefaultContent.PopulateInitialWorld(sim, ids);
+            SkirmishDefaultContent.PopulateInitialWorld(sim, ids, playerFaction, enemyFaction);
 
             var owned = new System.Collections.Generic.List<EntityId>();
             for (int i = 0; i < sim.Units.Count; i++)
@@ -35,7 +40,7 @@ namespace Asterra.Gameplay
                     owned.Add(sim.Units[i].Id);
             }
 
-            bus.EnqueueRemote(new CommandFrame
+            var openers = new CommandFrame
             {
                 TargetTick = new Tick(2),
                 Player = player,
@@ -44,7 +49,7 @@ namespace Asterra.Gameplay
                     new PlaceBuildingCommand
                     {
                         Issuer = player,
-                        BuildingDefId = SkirmishDefaultContent.BarracksId,
+                        BuildingDefId = playerFaction.ProducerBuildingId,
                         X = -300f,
                         Z = 25f,
                     },
@@ -56,7 +61,10 @@ namespace Asterra.Gameplay
                         TargetZ = 0f,
                     },
                 },
-            });
+            };
+            replay.Record(openers);
+            // Prove codec path used by NGO bridge.
+            bus.EnqueueRemote(CommandCodec.DeserializeFrame(CommandCodec.SerializeFrame(openers)));
             bus.EnqueueRemote(new CommandFrame
             {
                 TargetTick = new Tick(40),
@@ -79,21 +87,20 @@ namespace Asterra.Gameplay
                     new ChooseUpgradeCommand
                     {
                         Issuer = player,
-                        UpgradeDefId = SkirmishDefaultContent.MilitiaTrainingId,
+                        UpgradeDefId = playerFaction.BasicUpgradeId,
                     },
                 },
             });
 
             for (int i = 0; i < ticks; i++)
             {
-                // Mid-match: train once barracks should be active.
                 if (clock.CurrentTick.Value == 160)
                 {
                     EntityId barracks = default;
                     bool found = false;
                     for (int b = 0; b < sim.Buildings.Count; b++)
                     {
-                        if (sim.Buildings[b].DefinitionId == SkirmishDefaultContent.BarracksId
+                        if (sim.Buildings[b].DefinitionId == playerFaction.ProducerBuildingId
                             && sim.Buildings[b].Owner == player)
                         {
                             barracks = sim.Buildings[b].Id;
@@ -114,7 +121,7 @@ namespace Asterra.Gameplay
                                 {
                                     Issuer = player,
                                     BuildingId = barracks,
-                                    UnitDefId = SkirmishDefaultContent.MilitiaId,
+                                    UnitDefId = playerFaction.BasicUnitId,
                                 },
                             },
                         });
@@ -128,8 +135,10 @@ namespace Asterra.Gameplay
             }
 
             var sb = new StringBuilder();
+            sb.Append(codecReport);
             sb.AppendLine("[Asterra Smoke]");
-            sb.AppendLine($"ticks={ticks} hash={sim.ComputeWorldHash()}");
+            sb.AppendLine($"factions={playerFaction.DisplayName} vs {enemyFaction.DisplayName}");
+            sb.AppendLine($"ticks={ticks} hash={sim.ComputeWorldHash()} replayFrames={replay.Count}");
             sb.AppendLine($"units={sim.Units.Count} buildings={sim.Buildings.Count}");
             sb.AppendLine($"goldP0={wallet.Get(player, ResourceType.Gold)} goldP1={wallet.Get(enemy, ResourceType.Gold)}");
             if (sim.Territories.Count > 0)
@@ -139,7 +148,8 @@ namespace Asterra.Gameplay
                     $"territory state={t.State} controller={(t.HasController ? t.Controller.ToString() : "none")} progress={t.CaptureProgress:0.00}");
             }
 
-            sb.AppendLine($"upgradeP0={sim.HasUpgrade(player, SkirmishDefaultContent.MilitiaTrainingId)}");
+            sb.AppendLine($"upgradeP0={sim.HasUpgrade(player, playerFaction.BasicUpgradeId)}");
+            sb.AppendLine($"defsRegistered=iron+verdant+ashen");
             return sb.ToString();
         }
     }

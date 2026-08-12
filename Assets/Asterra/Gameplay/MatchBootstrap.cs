@@ -13,6 +13,8 @@ namespace Asterra.Gameplay
     public sealed class MatchBootstrap : MonoBehaviour
     {
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
+        [SerializeField] private int playerFactionIndex;
+        [SerializeField] private int enemyFactionIndex = 1;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 500;
@@ -20,6 +22,8 @@ namespace Asterra.Gameplay
         [SerializeField] private int enemyStartingGold = 500;
         [SerializeField] private bool attachLocalOrders = true;
         [SerializeField] private bool runSmokeOnAwake;
+        [SerializeField] private bool reportHashEveryTick;
+        [SerializeField] private uint matchSeed = 42;
 
         public IMatchSession Session { get; private set; }
         public ILockstepClock Clock { get; private set; }
@@ -29,6 +33,10 @@ namespace Asterra.Gameplay
         public IFactionCatalog Factions { get; private set; }
         public IIdFactory Ids { get; private set; }
         public DefinitionRegistry Definitions { get; private set; }
+        public ReplayBuffer Replay { get; private set; }
+        public DeterministicRandom Random { get; private set; }
+        public FactionRoster PlayerRoster { get; private set; }
+        public FactionRoster EnemyRoster { get; private set; }
 
         private CommandBus _commandBus;
         private SkirmishWorldSim _sim;
@@ -38,12 +46,19 @@ namespace Asterra.Gameplay
 
         private void Awake()
         {
+            PlayerRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(playerFactionIndex, 0, 2)));
+            EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(enemyFactionIndex, 0, 2)));
+            if (EnemyRoster.Id == PlayerRoster.Id)
+                EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)((PlayerRoster.Id.Value + 1) % 3)));
+
             Ids = new SequentialIdFactory();
             Wallet = new ResourceWallet();
             _commandBus = new CommandBus();
             Commands = _commandBus;
             Clock = new LockstepClock(1f / Mathf.Max(1f, tickHz), commandDelayTicks);
             Definitions = SkirmishDefaultContent.CreateRegistry();
+            Replay = new ReplayBuffer();
+            Random = new DeterministicRandom(matchSeed);
             _sim = new SkirmishWorldSim(Wallet, Ids, Definitions);
             World = _sim;
             Factions = new FactionCatalog(factions);
@@ -56,11 +71,11 @@ namespace Asterra.Gameplay
             Wallet.Seed(enemy, ResourceType.Gold, enemyStartingGold);
             Wallet.Seed(enemy, ResourceType.Timber, startingTimber);
 
-            SkirmishDefaultContent.PopulateInitialWorld(_sim, Ids);
+            SkirmishDefaultContent.PopulateInitialWorld(_sim, Ids, PlayerRoster, EnemyRoster);
             _enemyBrain = new DummyEnemyCamp(
                 enemy,
-                SkirmishDefaultContent.KeepId,
-                SkirmishDefaultContent.MilitiaId);
+                EnemyRoster.KeepBuildingId,
+                EnemyRoster.BasicUnitId);
 
             if (attachLocalOrders)
             {
@@ -99,20 +114,44 @@ namespace Asterra.Gameplay
                     copy[i].IssueTick = target;
                 }
 
-                _commandBus.EnqueueRemote(new CommandFrame
+                var frame = new CommandFrame
                 {
                     TargetTick = target,
                     Player = _enemyBrain.Player,
                     Commands = copy,
-                });
+                };
+                Replay.Record(frame);
+                _commandBus.EnqueueRemote(frame);
             }
 
             _commandBus.ScheduleLocal(target);
 
             var frameCommands = Commands.DrainForTick(Clock.CurrentTick);
+            if (frameCommands.Count > 0)
+            {
+                Replay.Record(new CommandFrame
+                {
+                    TargetTick = Clock.CurrentTick,
+                    Player = Session.LocalPlayer,
+                    Commands = ToArray(frameCommands),
+                });
+            }
+
             World.ApplyCommands(frameCommands);
             World.Tick(Clock.FixedDeltaSeconds);
+
+            if (reportHashEveryTick && Clock.CurrentTick.Value % 20 == 0)
+                Debug.Log($"[Asterra] tick={Clock.CurrentTick.Value} hash={World.ComputeWorldHash()}");
+
             Clock.Advance();
+        }
+
+        private static GameCommand[] ToArray(System.Collections.Generic.IReadOnlyList<GameCommand> list)
+        {
+            var arr = new GameCommand[list.Count];
+            for (int i = 0; i < list.Count; i++)
+                arr[i] = list[i];
+            return arr;
         }
 
         private sealed class LocalMatchSession : IMatchSession

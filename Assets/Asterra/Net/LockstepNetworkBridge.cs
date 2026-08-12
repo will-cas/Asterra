@@ -1,3 +1,4 @@
+using Asterra.Core;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -8,26 +9,67 @@ namespace Asterra.Net
     /// </summary>
     public sealed class LockstepNetworkBridge : NetworkBehaviour
     {
-        public override void OnNetworkSpawn()
+        private ICommandBus _bus;
+        private DesyncDetector _desync;
+        private ReplayBuffer _replay;
+        private PlayerId _localPlayer;
+
+        public DesyncDetector Desync => _desync;
+        public ReplayBuffer Replay => _replay;
+
+        public void Bind(ICommandBus bus, PlayerId localPlayer, ReplayBuffer replay = null)
         {
-            base.OnNetworkSpawn();
+            _bus = bus;
+            _localPlayer = localPlayer;
+            _replay = replay ?? new ReplayBuffer();
+            _desync = new DesyncDetector();
         }
 
-        /// <summary>Client → all: opaque serialized CommandFrame for a future tick.</summary>
+        public void BroadcastFrame(CommandFrame frame)
+        {
+            if (frame == null)
+                return;
+            byte[] payload = CommandCodec.SerializeFrame(frame);
+            _replay?.RecordPayload(payload);
+            if (IsSpawned)
+                SubmitCommandFrameRpc(frame.TargetTick.Value, frame.Player.Value, payload);
+            else
+                ApplyPayload(payload);
+        }
+
+        public void BroadcastWorldHash(Tick tick, ulong hash)
+        {
+            if (IsSpawned)
+                ReportWorldHashRpc(tick.Value, hash);
+            else
+                _desync?.Report(tick.Value, _localPlayer.Value, hash);
+        }
+
         [Rpc(SendTo.ClientsAndHost)]
         public void SubmitCommandFrameRpc(uint targetTick, byte player, byte[] payload)
         {
-            // Deserialize into Asterra.Core.CommandFrame and ICommandBus.EnqueueRemote in Phase 3.
             _ = targetTick;
             _ = player;
-            _ = payload;
+            ApplyPayload(payload);
         }
 
         [Rpc(SendTo.ClientsAndHost)]
         public void ReportWorldHashRpc(uint tick, ulong hash)
         {
-            _ = tick;
-            _ = hash;
+            // Issuer identity isn't on the RPC yet; host stamps channel peer later in Phase 3.
+            byte reporter = IsServer ? (byte)0 : _localPlayer.Value;
+            _desync?.Report(tick, reporter, hash);
+            if (_desync != null && _desync.TryGetDesync(tick, out ulong expected, out ulong actual))
+                Debug.LogError($"[Asterra] DESYNC tick={tick} expected={expected} actual={actual}");
+        }
+
+        private void ApplyPayload(byte[] payload)
+        {
+            if (payload == null || payload.Length == 0 || _bus == null)
+                return;
+            var frame = CommandCodec.DeserializeFrame(payload);
+            _replay?.RecordPayload(payload);
+            _bus.EnqueueRemote(frame);
         }
     }
 
@@ -38,7 +80,6 @@ namespace Asterra.Net
 
         public async void HostSkirmishAsync(string lobbyName)
         {
-            // Phase 3: AuthenticationService → LobbyService.CreateLobby → Relay allocation → NGO StartHost.
             Debug.Log($"[Asterra] HostSkirmish placeholder ({lobbyName}, max {maxPlayers}).");
             await System.Threading.Tasks.Task.CompletedTask;
         }

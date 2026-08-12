@@ -19,16 +19,18 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 5. [x] Territory capture + gold income tick
 6. [x] `upgrade_militia_training` (faster train + damage buff)
 7. [x] `SkirmishSmokeTest` headless driver (enable `runSmokeOnAwake` on `MatchBootstrap`)
-8. [ ] Create `Skirmish.unity`, ground, camera; flip smoke off for play
+8. [x] Three faction rosters as data (`FactionDefaultContent`)
+9. [x] `CommandCodec` + `ReplayBuffer` + `DesyncDetector` + NGO bridge wiring
+10. [ ] Create `Skirmish.unity`, ground, camera; flip smoke off for play
 
 **Exit criteria:** 5-minute loop: build → train → fight → capture → gather → upgrade.
 
 ## Phase 2 — Deterministic sim + 1k stress
 
-1. Port unit move/combat into Entities (`Asterra.Simulation`).
-2. Fixed tick, seeded `DeterministicRandom`.
-3. Spawn 1k units, measure frame time / Burst jobs.
-4. World-hash for single-player “desync” tests (replay).
+1. [x] DOTS unit components + `UnitMoveSystem` stub (`Asterra.Simulation`)
+2. Port remaining combat from `SkirmishWorldSim` into Entities jobs
+3. Spawn 1k units, measure frame time / Burst jobs
+4. World-hash for single-player “desync” tests (replay)
 
 ## Phase 3 — Multiplayer skirmish (2 → 8)
 

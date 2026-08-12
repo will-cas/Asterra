@@ -16,6 +16,7 @@ namespace Asterra.Gameplay.Player
         private ICommandBus _commands;
         private IWorldQuery _world;
         private PlayerId _local;
+        private FactionRoster _roster;
 
         public SelectionState Selection => _selection;
 
@@ -26,6 +27,7 @@ namespace Asterra.Gameplay.Player
             _commands = bootstrap.Commands;
             _world = bootstrap.World;
             _local = bootstrap.Session.LocalPlayer;
+            _roster = bootstrap.PlayerRoster ?? FactionDefaultContent.IronCovenant;
             AutoSelectOwnedUnits();
         }
 
@@ -39,14 +41,13 @@ namespace Asterra.Gameplay.Player
                 _commands.SubmitLocal(new PlaceBuildingCommand
                 {
                     Issuer = _local,
-                    BuildingDefId = SkirmishDefaultContent.BarracksId,
+                    BuildingDefId = _roster.ProducerBuildingId,
                     X = -300f,
                     Z = 30f,
                     YawDegrees = 0f,
                 });
             }
 
-            // T — train militia from first owned producer
             if (UnityEngine.Input.GetKeyDown(KeyCode.T))
             {
                 if (TryFindOwnedProducer(out var buildingId))
@@ -55,12 +56,11 @@ namespace Asterra.Gameplay.Player
                     {
                         Issuer = _local,
                         BuildingId = buildingId,
-                        UnitDefId = SkirmishDefaultContent.MilitiaId,
+                        UnitDefId = _roster.BasicUnitId,
                     });
                 }
             }
 
-            // C — capture center territory
             if (UnityEngine.Input.GetKeyDown(KeyCode.C) && _world.Territories.Count > 0)
             {
                 _commands.SubmitLocal(new CaptureTerritoryCommand
@@ -70,17 +70,15 @@ namespace Asterra.Gameplay.Player
                 });
             }
 
-            // U — unlock militia training upgrade
             if (UnityEngine.Input.GetKeyDown(KeyCode.U))
             {
                 _commands.SubmitLocal(new ChooseUpgradeCommand
                 {
                     Issuer = _local,
-                    UpgradeDefId = SkirmishDefaultContent.MilitiaTrainingId,
+                    UpgradeDefId = _roster.BasicUpgradeId,
                 });
             }
 
-            // A — attack first hostile unit with selection (or all owned)
             if (UnityEngine.Input.GetKeyDown(KeyCode.A))
             {
                 if (TryFindHostile(out var target))
@@ -94,7 +92,6 @@ namespace Asterra.Gameplay.Player
                 }
             }
 
-            // M — move selection toward map center
             if (UnityEngine.Input.GetKeyDown(KeyCode.M))
             {
                 _commands.SubmitLocal(new MoveCommand
@@ -106,7 +103,6 @@ namespace Asterra.Gameplay.Player
                 });
             }
 
-            // R — refresh selection to all owned living units
             if (UnityEngine.Input.GetKeyDown(KeyCode.R))
                 AutoSelectOwnedUnits();
         }
