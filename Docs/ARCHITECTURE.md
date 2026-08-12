@@ -123,6 +123,8 @@ Docs/
 - `LockstepNetworkBridge` serializes `CommandFrame`s over NGO RPCs (no per-unit NetworkObjects).
 - `ReplayBuffer` / `DesyncDetector` sit in Core for local + networked use.
 
+## Pathfinding note (~1 km, 1k units)
+
 - **Slice 1:** Unity NavMesh for small groups + simple steering.
 - **Slice 2:** Grid **flow fields** per army destination (RTS-standard at this density).
 - Keep path API behind `IPathfindingService` so the swap does not touch combat code.
