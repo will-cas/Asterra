@@ -34,6 +34,7 @@ namespace Asterra.Gameplay.Sim
         public ResourceType? CarryType;
         public int CarryAmount;
         public bool ReturningToDeposit;
+        public bool AttackMoving;
 
         public SimUnit(SimEntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
         {

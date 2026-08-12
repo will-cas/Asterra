@@ -43,11 +43,13 @@ namespace Asterra.Gameplay.Player
 
         private SimEntityId? _selectedBuilding;
         private bool _placeMode;
+        private bool _attackMoveArmed;
         private GameObject _ghost;
         private Renderer _ghostRenderer;
 
         public SelectionState Selection => _selection;
         public bool IsPlaceMode => _placeMode;
+        public bool IsAttackMoveArmed => _attackMoveArmed;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
 
@@ -81,6 +83,7 @@ namespace Asterra.Gameplay.Player
         {
             if (!HasSelectedBuilder())
                 return;
+            CancelAttackMoveArm();
             _placeMode = true;
             EnsureGhost();
         }
@@ -90,6 +93,11 @@ namespace Asterra.Gameplay.Player
             _placeMode = false;
             if (_ghost != null)
                 _ghost.SetActive(false);
+        }
+
+        public void CancelAttackMoveArm()
+        {
+            _attackMoveArmed = false;
         }
 
         public void TrainFromSelectedBuilding()
@@ -173,7 +181,17 @@ namespace Asterra.Gameplay.Player
                 return;
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (_attackMoveArmed)
+                    CancelAttackMoveArm();
                 CancelPlaceMode();
+            }
+
+            if (_attackMoveArmed)
+            {
+                HandleAttackMoveArmedPointer();
+                return;
+            }
 
             if (_placeMode)
             {
@@ -195,6 +213,7 @@ namespace Asterra.Gameplay.Player
                             Z = z,
                             YawDegrees = 0f,
                         });
+                        MatchFeedback.Show("Building ordered");
                         CancelPlaceMode();
                     }
                 }
@@ -273,6 +292,7 @@ namespace Asterra.Gameplay.Player
                             UnitIds = builders,
                             ResourceNodeId = resource.Id,
                         });
+                        MatchFeedback.Show("Gathering...");
                         return;
                     }
                 }
@@ -304,6 +324,40 @@ namespace Asterra.Gameplay.Player
                     });
                 }
             }
+        }
+
+        private void HandleAttackMoveArmedPointer()
+        {
+            if (IsPointerOverUi())
+                return;
+
+            bool lmb = UnityEngine.Input.GetMouseButtonDown(0);
+            bool rmb = UnityEngine.Input.GetMouseButtonDown(1);
+            if (!lmb && !rmb)
+                return;
+
+            if (TryRaycastGround(out float x, out float z))
+            {
+                x = Mathf.Clamp(x, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                z = Mathf.Clamp(z, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                var unitIds = GetOrderUnitIds();
+                if (unitIds.Length > 0)
+                {
+                    _commands.SubmitLocal(new AttackMoveCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetX = x,
+                        TargetZ = z,
+                    });
+                }
+
+                CancelAttackMoveArm();
+                return;
+            }
+
+            if (rmb)
+                CancelAttackMoveArm();
         }
 
         private void HandleClickSelect(bool additive)
@@ -406,15 +460,9 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.A))
             {
-                if (TryFindHostile(out var target))
-                {
-                    _commands.SubmitLocal(new AttackCommand
-                    {
-                        Issuer = _local,
-                        UnitIds = GetOrderUnitIds(),
-                        TargetId = target,
-                    });
-                }
+                CancelPlaceMode();
+                _attackMoveArmed = true;
+                MatchFeedback.Show("Attack-move: click ground");
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.R))
@@ -456,6 +504,12 @@ namespace Asterra.Gameplay.Player
                     CurrentCursorMode = CanPlaceAt(x, z) ? OrderCursorMode.Build : OrderCursorMode.Invalid;
                 else
                     CurrentCursorMode = OrderCursorMode.Invalid;
+                return;
+            }
+
+            if (_attackMoveArmed)
+            {
+                CurrentCursorMode = OrderCursorMode.Attack;
                 return;
             }
 

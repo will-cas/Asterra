@@ -135,6 +135,12 @@ namespace Asterra.Core
                     writer.Write((byte)CommandType.CancelProduction);
                     writer.Write(cancel.BuildingId.Value);
                     break;
+                case AttackMoveCommand attackMove:
+                    writer.Write((byte)CommandType.AttackMove);
+                    WriteEntityIds(writer, attackMove.UnitIds);
+                    WriteQuantized(writer, attackMove.TargetX);
+                    WriteQuantized(writer, attackMove.TargetZ);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -218,6 +224,14 @@ namespace Asterra.Core
                     command = new CancelProductionCommand
                     {
                         BuildingId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.AttackMove:
+                    command = new AttackMoveCommand
+                    {
+                        UnitIds = ReadEntityIds(reader),
+                        TargetX = ReadQuantized(reader),
+                        TargetZ = ReadQuantized(reader),
                     };
                     break;
                 default:

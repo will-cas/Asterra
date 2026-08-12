@@ -33,6 +33,19 @@ namespace Asterra.Gameplay.Presentation
             DefinitionId = definitionId;
 
             float visualScale = isUnit ? UnitVisualScale : BuildingVisualScale;
+            if (isUnit)
+            {
+                var role = AsterraMeshLibrary.InferRole(definitionId);
+                visualScale *= AsterraMeshLibrary.RoleScaleMultiplier(role);
+                Color faction = AsterraMeshLibrary.FactionColor(factionIndex);
+                Color accent = AsterraMeshLibrary.RoleAccent(role);
+                _baseColor = Color.Lerp(faction, accent, 0.35f);
+            }
+            else
+            {
+                _baseColor = AsterraMeshLibrary.FactionColor(factionIndex);
+            }
+
             transform.localScale = Vector3.one * visualScale;
 
             var filter = gameObject.GetComponent<MeshFilter>();
@@ -45,7 +58,6 @@ namespace Asterra.Gameplay.Presentation
             _renderer = gameObject.GetComponent<MeshRenderer>();
             if (_renderer == null)
                 _renderer = gameObject.AddComponent<MeshRenderer>();
-            _baseColor = AsterraMeshLibrary.FactionColor(factionIndex);
             _renderer.sharedMaterial = CreateColorMaterial(_baseColor);
 
             EnsurePickCollider(isUnit, filter.sharedMesh);

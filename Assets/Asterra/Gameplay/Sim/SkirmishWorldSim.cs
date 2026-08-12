@@ -141,6 +141,9 @@ namespace Asterra.Gameplay
                     case CancelProductionCommand cancel:
                         ApplyCancelProduction(cancel);
                         break;
+                    case AttackMoveCommand attackMove:
+                        ApplyAttackMove(attackMove);
+                        break;
                     default:
                         break;
                 }
@@ -210,6 +213,7 @@ namespace Asterra.Gameplay
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
+                unit.AttackMoving = false;
                 _mutationCounter ^= unit.Id.Value * 3ul;
             }
         }
@@ -229,7 +233,30 @@ namespace Asterra.Gameplay
                 unit.MoveTargetZ = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
+                unit.AttackMoving = false;
                 _mutationCounter ^= unit.Id.Value * 733ul;
+            }
+        }
+
+        private void ApplyAttackMove(AttackMoveCommand attackMove)
+        {
+            if (attackMove.UnitIds == null)
+                return;
+            for (int i = 0; i < attackMove.UnitIds.Length; i++)
+            {
+                if (!_unitsById.TryGetValue(attackMove.UnitIds[i].Value, out var unit))
+                    continue;
+                if (unit.Owner != attackMove.Issuer || !unit.IsAlive)
+                    continue;
+                if (unit.Role == UnitRole.Builder || unit.AttackDamage <= 0f)
+                    continue;
+                unit.MoveTargetX = attackMove.TargetX;
+                unit.MoveTargetZ = attackMove.TargetZ;
+                unit.AttackTargetId = null;
+                unit.GatherTargetId = null;
+                unit.ReturningToDeposit = false;
+                unit.AttackMoving = true;
+                _mutationCounter ^= unit.Id.Value * 743ul;
             }
         }
 
@@ -251,6 +278,7 @@ namespace Asterra.Gameplay
                 unit.ReturningToDeposit = unit.CarryAmount >= unit.CarryCapacity;
                 unit.MoveTargetX = null;
                 unit.MoveTargetZ = null;
+                unit.AttackMoving = false;
                 _mutationCounter ^= unit.Id.Value * 911ul;
             }
         }
@@ -417,7 +445,10 @@ namespace Asterra.Gameplay
                     continue;
                 b.BuildSecondsRemaining -= dt;
                 if (b.BuildSecondsRemaining <= 0f)
+                {
                     b.State = BuildingState.Active;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.BuildComplete, b.Id, b.X, b.Z, true));
+                }
             }
         }
 
@@ -499,8 +530,10 @@ namespace Asterra.Gameplay
 
                     if (unit.CarryAmount > 0 && unit.CarryType.HasValue)
                     {
-                        _wallet.Add(unit.Owner, unit.CarryType.Value, unit.CarryAmount);
-                        _mutationCounter ^= (ulong)unit.CarryAmount * 13ul;
+                        int deposited = unit.CarryAmount;
+                        _wallet.Add(unit.Owner, unit.CarryType.Value, deposited);
+                        _mutationCounter ^= (ulong)deposited * 13ul;
+                        _combatEvents.Add(new CombatEvent(CombatEventKind.Deposit, unit.Id, unit.X, unit.Z, false));
                         unit.CarryAmount = 0;
                         unit.CarryType = null;
                     }
@@ -584,9 +617,19 @@ namespace Asterra.Gameplay
                         if (dist > unit.AttackRange)
                             StepTowardAvoiding(unit, tx, tz, dt);
                     }
+                    else
+                    {
+                        unit.AttackTargetId = null;
+                    }
 
                     continue;
                 }
+
+                if (unit.AttackMoving)
+                    TryAcquireAttackMoveTarget(unit);
+
+                if (unit.AttackTargetId.HasValue)
+                    continue;
 
                 if (!unit.MoveTargetX.HasValue || !unit.MoveTargetZ.HasValue)
                     continue;
@@ -597,6 +640,7 @@ namespace Asterra.Gameplay
                 {
                     unit.MoveTargetX = null;
                     unit.MoveTargetZ = null;
+                    unit.AttackMoving = false;
                     continue;
                 }
 
@@ -794,6 +838,47 @@ namespace Asterra.Gameplay
                 _buildingsById.Remove(_buildings[i].Id.Value);
                 _buildings.RemoveAt(i);
             }
+        }
+
+        private void TryAcquireAttackMoveTarget(SimUnit unit)
+        {
+            float acquire = MathF.Max(18f, unit.AttackRange + 10f);
+            float acquire2 = acquire * acquire;
+            float best = acquire2;
+            SimEntityId? bestId = null;
+
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var other = _units[i];
+                if (!other.IsAlive || other.Owner == unit.Owner)
+                    continue;
+                float dx = other.X - unit.X;
+                float dz = other.Z - unit.Z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < best)
+                {
+                    best = d2;
+                    bestId = other.Id;
+                }
+            }
+
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner == unit.Owner || b.State == BuildingState.Destroyed)
+                    continue;
+                float dx = b.X - unit.X;
+                float dz = b.Z - unit.Z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < best)
+                {
+                    best = d2;
+                    bestId = b.Id;
+                }
+            }
+
+            if (bestId.HasValue)
+                unit.AttackTargetId = bestId;
         }
 
         private bool TryGetAttackTargetPosition(SimEntityId id, out float x, out float z)

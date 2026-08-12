@@ -72,6 +72,13 @@ namespace Asterra.Core
         public SimEntityId BuildingId;
     }
 
+    public sealed class AttackMoveCommand : GameCommand
+    {
+        public SimEntityId[] UnitIds;
+        public float TargetX;
+        public float TargetZ;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {
@@ -84,6 +91,8 @@ namespace Asterra.Core
     {
         Hit = 1,
         Death = 2,
+        Deposit = 3,
+        BuildComplete = 4,
     }
 
     public readonly struct CombatEvent

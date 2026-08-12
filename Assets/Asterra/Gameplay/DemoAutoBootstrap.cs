@@ -22,6 +22,7 @@ namespace Asterra.Gameplay
             Debug.Log("[Asterra] Empty scene detected — spawning offline 1v1 demo root.");
             EnsureLighting();
             var root = new GameObject("AsterraDemo");
+            // autoStartOffline defaults to false → OfflineMatchMenu appears before skirmish.
             root.AddComponent<MatchBootstrap>();
         }
 

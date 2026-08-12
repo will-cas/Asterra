@@ -27,7 +27,7 @@ namespace Asterra.AI
             string producerDefId,
             string builderDefId,
             string combatUnitDefId,
-            int trainEveryTicks = 80)
+            int trainEveryTicks = 55)
             : this(
                 player,
                 keepDefId,
@@ -48,7 +48,7 @@ namespace Asterra.AI
             string infantryDefId,
             string rangedDefId,
             string cavalryDefId,
-            int trainEveryTicks = 80)
+            int trainEveryTicks = 55)
         {
             Player = player;
             _keepDefId = keepDefId;
@@ -112,7 +112,7 @@ namespace Asterra.AI
             }
 
             // Builders gather nearest resource (never send into combat).
-            if (builders.Count > 0 && tick - _lastGatherTick >= 40)
+            if (builders.Count > 0 && tick - _lastGatherTick >= 30)
             {
                 if (TryFindNearestResource(world, keepX, keepZ, out var nodeId))
                 {
@@ -164,7 +164,7 @@ namespace Asterra.AI
                 });
                 _lastTrainTick = tick;
             }
-            else if (!producerId.HasValue && builderCount > 0 && tick - _lastBuildTick >= 120)
+            else if (!producerId.HasValue && builderCount > 0 && tick - _lastBuildTick >= 90)
             {
                 float placeX = keepX > 0f ? keepX - 35f : keepX + 35f;
                 commands.Add(new PlaceBuildingCommand
@@ -193,7 +193,7 @@ namespace Asterra.AI
                 return commands;
 
             // Attack when combat force is ready; otherwise hold / contest center.
-            if (combatCount >= 4)
+            if (combatCount >= 3)
             {
                 if (TryFindEnemyKeep(world, out var enemyKeep))
                 {

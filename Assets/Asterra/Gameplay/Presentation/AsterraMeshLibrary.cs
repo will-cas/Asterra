@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Asterra.Core;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Presentation
@@ -45,6 +46,60 @@ namespace Asterra.Gameplay.Presentation
             return definitionId.Contains("keep")
                    || definitionId.Contains("heartwood")
                    || definitionId.Contains("citadel");
+        }
+
+        public static UnitRole InferRole(string definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId))
+                return UnitRole.Infantry;
+            if (definitionId.Contains("builder"))
+                return UnitRole.Builder;
+            if (definitionId.Contains("archer") || definitionId.Contains("bow"))
+                return UnitRole.Ranged;
+            if (definitionId.Contains("knight") || definitionId.Contains("cavalry") || definitionId.Contains("rider"))
+                return UnitRole.Cavalry;
+            if (definitionId.Contains("catapult") || definitionId.Contains("siege") || definitionId.Contains("mortar")
+                || definitionId.Contains("engine"))
+                return UnitRole.Siege;
+            return UnitRole.Infantry;
+        }
+
+        public static Color RoleAccent(UnitRole role)
+        {
+            switch (role)
+            {
+                case UnitRole.Infantry:
+                    return new Color(0.92f, 0.93f, 0.96f);
+                case UnitRole.Ranged:
+                    return new Color(0.25f, 0.85f, 0.95f);
+                case UnitRole.Cavalry:
+                    return new Color(0.95f, 0.78f, 0.22f);
+                case UnitRole.Siege:
+                    return new Color(0.95f, 0.5f, 0.18f);
+                case UnitRole.Builder:
+                    return new Color(0.95f, 0.88f, 0.25f);
+                default:
+                    throw new System.ArgumentOutOfRangeException(nameof(role), role, null);
+            }
+        }
+
+        public static float RoleScaleMultiplier(UnitRole role)
+        {
+            switch (role)
+            {
+                case UnitRole.Cavalry:
+                    return 1.15f;
+                case UnitRole.Siege:
+                    return 1.25f;
+                case UnitRole.Ranged:
+                    return 0.95f;
+                case UnitRole.Builder:
+                    return 0.9f;
+                case UnitRole.Infantry:
+                    return 1f;
+                default:
+                    throw new System.ArgumentOutOfRangeException(nameof(role), role, null);
+            }
         }
 
         public static Color FactionColor(byte factionIndex)

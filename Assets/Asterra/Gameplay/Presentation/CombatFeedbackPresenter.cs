@@ -4,16 +4,17 @@ using UnityEngine;
 
 namespace Asterra.Gameplay.Presentation
 {
-    /// <summary>Client-only combat juice: hit flash and brief death burst.</summary>
+    /// <summary>Client-only combat juice: hit flash, death burst, deposit/build pulses.</summary>
     public sealed class CombatFeedbackPresenter : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
         [SerializeField] private float deathBurstSeconds = 0.35f;
+        [SerializeField] private float pulseSeconds = 0.45f;
 
-        private readonly List<DeathBurst> _bursts = new();
+        private readonly List<FxBurst> _bursts = new();
         private int _handledTick = int.MinValue;
 
-        private struct DeathBurst
+        private struct FxBurst
         {
             public GameObject Go;
             public float ExpireAt;
@@ -41,15 +42,26 @@ namespace Asterra.Gameplay.Presentation
                     for (int i = 0; i < events.Count; i++)
                     {
                         var ev = events[i];
-                        if (ev.Kind == CombatEventKind.Hit)
+                        switch (ev.Kind)
                         {
-                            var view = FindView(views, ev.TargetId);
-                            if (view != null)
-                                view.SetHitFlash();
-                        }
-                        else if (ev.Kind == CombatEventKind.Death)
-                        {
-                            SpawnDeathBurst(ev.X, ev.Z);
+                            case CombatEventKind.Hit:
+                            {
+                                var view = FindView(views, ev.TargetId);
+                                if (view != null)
+                                    view.SetHitFlash();
+                                break;
+                            }
+                            case CombatEventKind.Death:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.2f, 0.15f, 0.9f), 6f, deathBurstSeconds);
+                                break;
+                            case CombatEventKind.Deposit:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.25f, 0.95f, 0.4f, 0.9f), 4.5f, pulseSeconds);
+                                break;
+                            case CombatEventKind.BuildComplete:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.2f, 0.95f, 0.95f, 0.95f), 8f, pulseSeconds);
+                                break;
+                            default:
+                                throw new System.ArgumentOutOfRangeException(nameof(ev.Kind), ev.Kind, null);
                         }
                     }
                 }
@@ -66,13 +78,13 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private void SpawnDeathBurst(float x, float z)
+        private void SpawnBurst(float x, float z, Color color, float size, float life)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Object.Destroy(go.GetComponent<Collider>());
-            go.name = "DeathBurst";
+            go.name = "CombatPulse";
             go.transform.position = new Vector3(x, 4f, z);
-            go.transform.localScale = new Vector3(6f, 6f, 6f);
+            go.transform.localScale = new Vector3(size, size, size);
             var rend = go.GetComponent<Renderer>();
             var shader = Shader.Find("Asterra/UnlitColor")
                          ?? Shader.Find("Universal Render Pipeline/Unlit")
@@ -81,7 +93,6 @@ namespace Asterra.Gameplay.Presentation
             if (shader != null)
             {
                 var mat = new Material(shader);
-                var color = new Color(0.95f, 0.2f, 0.15f, 0.9f);
                 if (mat.HasProperty("_BaseColor"))
                     mat.SetColor("_BaseColor", color);
                 if (mat.HasProperty("_Color"))
@@ -89,7 +100,7 @@ namespace Asterra.Gameplay.Presentation
                 rend.sharedMaterial = mat;
             }
 
-            _bursts.Add(new DeathBurst { Go = go, ExpireAt = Time.time + deathBurstSeconds });
+            _bursts.Add(new FxBurst { Go = go, ExpireAt = Time.time + life });
         }
 
         private static EntityView FindView(EntityView[] views, SimEntityId id)

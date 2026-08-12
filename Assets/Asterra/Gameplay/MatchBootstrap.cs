@@ -25,6 +25,7 @@ namespace Asterra.Gameplay
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
         [SerializeField] private int playerFactionIndex;
         [SerializeField] private int enemyFactionIndex = 1;
+        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.TwinKeeps;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 500;
@@ -36,7 +37,7 @@ namespace Asterra.Gameplay
         [SerializeField] private uint matchSeed = 42;
         [SerializeField] private LockstepMatchCoordinator coordinator;
         [SerializeField] private LockstepNetworkBridge networkBridge;
-        [SerializeField] private bool autoStartOffline = true;
+        [SerializeField] private bool autoStartOffline;
         [SerializeField] private float territoryHoldSecondsToWin = 90f;
         [SerializeField] private bool attachPresentation = true;
         [SerializeField] private bool attachCameraRig = true;
@@ -58,6 +59,24 @@ namespace Asterra.Gameplay
         public bool IsMatchRunning { get; private set; }
         public MatchResult Result { get; private set; } = MatchResult.None;
         public VictoryEvaluator Victory { get; private set; }
+
+        public int PlayerFactionIndex
+        {
+            get => playerFactionIndex;
+            set => playerFactionIndex = Mathf.Clamp(value, 0, 2);
+        }
+
+        public int EnemyFactionIndex
+        {
+            get => enemyFactionIndex;
+            set => enemyFactionIndex = Mathf.Clamp(value, 0, 2);
+        }
+
+        public SkirmishMapId MapId
+        {
+            get => mapId;
+            set => mapId = value;
+        }
 
         private CommandBus _commandBus;
         private SkirmishWorldSim _sim;
@@ -83,9 +102,23 @@ namespace Asterra.Gameplay
 
             if (playMode == MatchPlayMode.OfflineVsAi && autoStartOffline)
                 StartOfflineVsAi();
+            else if (playMode == MatchPlayMode.OfflineVsAi && !autoStartOffline && !IsMatchRunning)
+            {
+                if (GetComponent<OfflineMatchMenu>() == null
+                    && FindFirstObjectByType<OfflineMatchMenu>() == null)
+                    gameObject.AddComponent<OfflineMatchMenu>();
+            }
         }
 
         public void SetPlayMode(MatchPlayMode mode) => playMode = mode;
+
+        public void ConfigureAndStartOffline(int playerFaction, int enemyFaction, SkirmishMapId map)
+        {
+            PlayerFactionIndex = playerFaction;
+            EnemyFactionIndex = enemyFaction;
+            MapId = map;
+            StartOfflineVsAi();
+        }
 
         public void StartOfflineVsAi()
         {
@@ -197,7 +230,7 @@ namespace Asterra.Gameplay
                 System.Array.Sort(seats, (a, b) => a.Player.Value.CompareTo(b.Player.Value));
             }
 
-            SkirmishDefaultContent.PopulateFromSlots(_sim, Ids, seats);
+            SkirmishDefaultContent.PopulateFromSlots(_sim, Ids, seats, mapId);
 
             coordinator.ConfigureTiming(tickHz, commandDelayTicks);
             coordinator.SetBridge(networkBridge);
@@ -240,13 +273,17 @@ namespace Asterra.Gameplay
 
             if (GetComponent<MatchHud>() == null)
                 gameObject.AddComponent<MatchHud>();
+            if (GetComponent<MatchFeedback>() == null && FindFirstObjectByType<MatchFeedback>() == null)
+                gameObject.AddComponent<MatchFeedback>();
 
             if (attachCameraRig)
             {
                 var camRig = FindFirstObjectByType<RtsCameraRig>();
                 if (camRig == null)
                     camRig = gameObject.AddComponent<RtsCameraRig>();
-                camRig.FocusOn(-320f, 0f, height: 240f, back: 42f);
+                float focusX = mapId == SkirmishMapId.RiverCrossing ? -280f : -320f;
+                float focusZ = mapId == SkirmishMapId.RiverCrossing ? -200f : 0f;
+                camRig.FocusOn(focusX, focusZ, height: 240f, back: 42f);
             }
             var keepIds = new[]
             {
@@ -259,7 +296,7 @@ namespace Asterra.Gameplay
             coordinator.TickAdvanced += OnTickAdvanced;
 
             IsMatchRunning = true;
-            Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} players={_participants.Count}");
+            Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} map={mapId} players={_participants.Count}");
         }
 
         private void OnTickAdvanced(Tick tick, ulong hash)

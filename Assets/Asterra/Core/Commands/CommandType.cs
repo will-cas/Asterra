@@ -12,5 +12,6 @@ namespace Asterra.Core
         Gather = 8,
         SetRally = 9,
         CancelProduction = 10,
+        AttackMove = 11,
     }
 }

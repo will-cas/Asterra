@@ -84,6 +84,14 @@ namespace Asterra.Core
                         IssueTick = new Tick(42),
                         BuildingId = new SimEntityId(7),
                     },
+                    new AttackMoveCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        UnitIds = new[] { new SimEntityId(10) },
+                        TargetX = 50f,
+                        TargetZ = -20f,
+                    },
                 },
             };
 

@@ -11,9 +11,9 @@ namespace Asterra.Gameplay.Presentation
     public sealed class FogOfWarPresenter : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
-        [SerializeField] private float unitSightRadius = 95f;
-        [SerializeField] private float keepSightRadius = 140f;
-        [SerializeField] private float buildingSightRadius = 75f;
+        [SerializeField] private float unitSightRadius = 110f;
+        [SerializeField] private float keepSightRadius = 160f;
+        [SerializeField] private float buildingSightRadius = 85f;
         [SerializeField] private float mapHalfExtent = MapBounds.PlayableHalfExtent;
         [SerializeField] private float cellSize = 30f;
         [SerializeField] private float fogHeight = 0.4f;

@@ -165,12 +165,12 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 0f,
                 AttackRange = 0f,
                 AttackCooldown = 1f,
-                GoldCost = 40,
-                TrainSeconds = 3f,
+                GoldCost = 30,
+                TrainSeconds = 2.8f,
                 IsBuilder = true,
                 CanGather = true,
                 CarryCapacity = 15,
-                GatherRate = 5f,
+                GatherRate = 6f,
                 Role = UnitRole.Builder,
             });
             registry.Register(new UnitDefData
@@ -195,7 +195,7 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 16f,
                 AttackRange = 1.6f,
                 AttackCooldown = 1.05f,
-                GoldCost = 90,
+                GoldCost = 105,
                 TrainSeconds = 6f,
                 Role = UnitRole.Cavalry,
             });
@@ -209,7 +209,7 @@ namespace Asterra.Gameplay.Content
                 AttackRange = 10f,
                 AttackCooldown = 2.2f,
                 GoldCost = 140,
-                TrainSeconds = 8f,
+                TrainSeconds = 9.5f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.5f,
             });
@@ -266,12 +266,12 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 0f,
                 AttackRange = 0f,
                 AttackCooldown = 1f,
-                GoldCost = 35,
-                TrainSeconds = 2.8f,
+                GoldCost = 28,
+                TrainSeconds = 2.5f,
                 IsBuilder = true,
                 CanGather = true,
                 CarryCapacity = 15,
-                GatherRate = 5f,
+                GatherRate = 6f,
                 Role = UnitRole.Builder,
             });
             registry.Register(new UnitDefData
@@ -296,7 +296,7 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 14f,
                 AttackRange = 1.8f,
                 AttackCooldown = 0.95f,
-                GoldCost = 85,
+                GoldCost = 100,
                 TrainSeconds = 5.5f,
                 Role = UnitRole.Cavalry,
             });
@@ -310,7 +310,7 @@ namespace Asterra.Gameplay.Content
                 AttackRange = 10f,
                 AttackCooldown = 2f,
                 GoldCost = 130,
-                TrainSeconds = 7.5f,
+                TrainSeconds = 9f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.2f,
             });
@@ -367,12 +367,12 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 0f,
                 AttackRange = 0f,
                 AttackCooldown = 1f,
-                GoldCost = 45,
-                TrainSeconds = 3.2f,
+                GoldCost = 32,
+                TrainSeconds = 2.9f,
                 IsBuilder = true,
                 CanGather = true,
                 CarryCapacity = 15,
-                GatherRate = 5f,
+                GatherRate = 6f,
                 Role = UnitRole.Builder,
             });
             registry.Register(new UnitDefData
@@ -397,7 +397,7 @@ namespace Asterra.Gameplay.Content
                 AttackDamage = 17f,
                 AttackRange = 1.5f,
                 AttackCooldown = 1f,
-                GoldCost = 95,
+                GoldCost = 110,
                 TrainSeconds = 6.2f,
                 Role = UnitRole.Cavalry,
             });
@@ -411,7 +411,7 @@ namespace Asterra.Gameplay.Content
                 AttackRange = 10.5f,
                 AttackCooldown = 2.4f,
                 GoldCost = 150,
-                TrainSeconds = 8.5f,
+                TrainSeconds = 10f,
                 Role = UnitRole.Siege,
                 BuildingDamageMultiplier = 3.8f,
             });

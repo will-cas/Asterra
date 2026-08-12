@@ -49,9 +49,22 @@ namespace Asterra.Gameplay
 
             GUI.Label(new Rect(12f, 12f, 900f, 22f), resources);
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);
+            GUI.Label(new Rect(12f, 56f, 1200f, 22f), BuildSelectionLabel());
             GUI.Label(
-                new Rect(12f, 56f, 1200f, 22f),
-                "Builder RMB resource = gather  |  B place producer  |  building RMB = rally  |  minimap click to pan");
+                new Rect(12f, 78f, 1200f, 22f),
+                "A then click = attack-move  |  Builder RMB resource = gather  |  B place producer  |  building RMB = rally");
+
+            if (MatchFeedback.Instance != null && MatchFeedback.Instance.HasActiveMessage)
+            {
+                string toast = MatchFeedback.Instance.CurrentMessage;
+                var style = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.UpperCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = 16,
+                };
+                GUI.Label(new Rect(0f, 10f, Screen.width, 28f), toast, style);
+            }
 
             float panelY = Screen.height - 120f;
             float x = 12f;
@@ -131,6 +144,36 @@ namespace Asterra.Gameplay
                 ? "Enemy keep destroyed"
                 : "Territory held long enough";
             GUI.Box(new Rect(Screen.width * 0.5f - 160f, Screen.height * 0.38f, 320f, 90f), $"{title}\n{reason}");
+        }
+
+        private string BuildSelectionLabel()
+        {
+            if (orders == null || orders.Selection == null || match.World == null)
+                return "Selected 0";
+
+            int total = orders.Selection.Selected.Count;
+            int builders = 0;
+            int combat = 0;
+            var local = match.Session.LocalPlayer;
+            for (int i = 0; i < orders.Selection.Selected.Count; i++)
+            {
+                var id = orders.Selection.Selected[i];
+                for (int u = 0; u < match.World.Units.Count; u++)
+                {
+                    var unit = match.World.Units[u];
+                    if (unit.Id != id || !unit.IsAlive || unit.Owner != local)
+                        continue;
+                    if (FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
+                        builders++;
+                    else
+                        combat++;
+                    break;
+                }
+            }
+
+            if (builders > 0 || combat > 0)
+                return $"Selected {total}  ({builders} builders, {combat} combat)";
+            return $"Selected {total}";
         }
 
         private static string ShortName(string defId)
