@@ -1,6 +1,6 @@
 # Phase 1 — Local controls (dev)
 
-Add `MatchBootstrap` to any scene GameObject. `LocalOrderController` attaches automatically.
+Add `MatchBootstrap` to any scene GameObject. Offline AI skirmish auto-starts (play mode OfflineVsAi). `LocalOrderController` attaches automatically.
 
 | Key | Order |
 |-----|--------|
@@ -14,4 +14,6 @@ Add `MatchBootstrap` to any scene GameObject. `LocalOrderController` attaches au
 
 On `MatchBootstrap`, set **Player Faction Index** / **Enemy Faction Index** (0 Iron Covenant, 1 Verdant Court, 2 Ashen Legion).
 
-Optional: enable **Run Smoke On Awake** on `MatchBootstrap` to log `SkirmishSmokeTest` results to the Console (no play needed beyond entering Play Mode once).
+## Lobby (online)
+
+Use `LobbyHud` / `MatchLobbyController`: Claim → Faction → Ready → Host Start (after `MultiplayerMenu` host/join).

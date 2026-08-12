@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Asterra.Core;
 using Asterra.Net;
@@ -6,7 +7,16 @@ using UnityEngine;
 namespace Asterra.Gameplay
 {
     /// <summary>
-    /// Networked lockstep driver: submits local frames, waits for all players via
+    /// Supplies additional command frames each tick (e.g. AI seats in offline skirmish).
+    /// </summary>
+    public interface IFrameContributor
+    {
+        PlayerId Player { get; }
+        CommandFrame BuildFrame(Tick targetTick, IWorldQuery world, IResourceWallet wallet);
+    }
+
+    /// <summary>
+    /// Networked or local lockstep driver: submits local + contributor frames, waits via
     /// <see cref="LockstepFrameGate"/>, then advances the shared sim.
     /// </summary>
     public sealed class LockstepMatchCoordinator : MonoBehaviour
@@ -18,11 +28,13 @@ namespace Asterra.Gameplay
 
         private CommandBus _commandBus;
         private IWorldSim _world;
+        private IResourceWallet _wallet;
         private ILockstepClock _clock;
         private LockstepFrameGate _gate;
         private ReplayBuffer _replay;
         private PlayerId _localPlayer;
         private readonly List<GameCommand> _consumeBuffer = new();
+        private readonly List<IFrameContributor> _contributors = new();
         private float _accum;
         private float _hashTimer;
         private uint? _lastSubmittedTarget;
@@ -30,6 +42,15 @@ namespace Asterra.Gameplay
         public ILockstepClock Clock => _clock;
         public LockstepFrameGate Gate => _gate;
         public bool IsRunning { get; private set; }
+        public event Action<Tick, ulong> TickAdvanced;
+
+        public void ConfigureTiming(float hz, int delayTicks)
+        {
+            tickHz = hz;
+            commandDelayTicks = delayTicks;
+        }
+
+        public void SetBridge(LockstepNetworkBridge networkBridge) => bridge = networkBridge;
 
         public void Initialize(
             IWorldSim world,
@@ -37,10 +58,12 @@ namespace Asterra.Gameplay
             PlayerId localPlayer,
             IEnumerable<PlayerId> participants,
             ReplayBuffer replay = null,
-            LockstepNetworkBridge networkBridge = null)
+            LockstepNetworkBridge networkBridge = null,
+            IResourceWallet wallet = null)
         {
             _world = world;
             _commandBus = commandBus;
+            _wallet = wallet;
             _localPlayer = localPlayer;
             _replay = replay ?? new ReplayBuffer();
             _clock = new LockstepClock(1f / Mathf.Max(1f, tickHz), commandDelayTicks);
@@ -51,7 +74,6 @@ namespace Asterra.Gameplay
             if (bridge != null)
                 bridge.Bind(commandBus, localPlayer, _replay, _gate);
 
-            // Pre-seed empty frames so the command-delay window can advance immediately.
             foreach (var player in participants)
             {
                 for (uint t = 0; t < (uint)commandDelayTicks; t++)
@@ -59,7 +81,20 @@ namespace Asterra.Gameplay
             }
 
             _lastSubmittedTarget = null;
+            _accum = 0f;
             IsRunning = true;
+        }
+
+        public void AddContributor(IFrameContributor contributor)
+        {
+            if (contributor == null)
+                return;
+            _contributors.Add(contributor);
+        }
+
+        public void Stop()
+        {
+            IsRunning = false;
         }
 
         private void Update()
@@ -75,14 +110,17 @@ namespace Asterra.Gameplay
                 StepOnce();
             }
 
-            if (!reportHashEverySecond || bridge == null)
+            if (!reportHashEverySecond)
                 return;
 
             _hashTimer += Time.deltaTime;
             if (_hashTimer < 1f)
                 return;
             _hashTimer = 0f;
-            bridge.BroadcastWorldHash(_clock.CurrentTick, _world.ComputeWorldHash());
+            ulong hash = _world.ComputeWorldHash();
+            if (bridge != null)
+                bridge.BroadcastWorldHash(_clock.CurrentTick, hash);
+            TickAdvanced?.Invoke(_clock.CurrentTick, hash);
         }
 
         private void StepOnce()
@@ -98,12 +136,13 @@ namespace Asterra.Gameplay
                     Player = _localPlayer,
                     Commands = ToArray(scheduled),
                 };
-                if (bridge != null)
-                    bridge.BroadcastFrame(localFrame);
-                else
+                SubmitFrame(localFrame);
+
+                for (int i = 0; i < _contributors.Count; i++)
                 {
-                    _replay.Record(localFrame);
-                    _gate.Submit(localFrame);
+                    var frame = _contributors[i].BuildFrame(target, _world, _wallet);
+                    if (frame != null)
+                        SubmitFrame(frame);
                 }
 
                 _lastSubmittedTarget = target.Value;
@@ -117,10 +156,21 @@ namespace Asterra.Gameplay
             _clock.Advance();
         }
 
+        private void SubmitFrame(CommandFrame frame)
+        {
+            if (bridge != null)
+                bridge.BroadcastFrame(frame);
+            else
+            {
+                _replay.Record(frame);
+                _gate.Submit(frame);
+            }
+        }
+
         private static GameCommand[] ToArray(IReadOnlyList<GameCommand> list)
         {
             if (list == null || list.Count == 0)
-                return System.Array.Empty<GameCommand>();
+                return Array.Empty<GameCommand>();
             var arr = new GameCommand[list.Count];
             for (int i = 0; i < list.Count; i++)
                 arr[i] = list[i];

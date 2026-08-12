@@ -1,17 +1,26 @@
+using System.Collections.Generic;
 using Asterra.AI;
 using Asterra.Core;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Player;
 using Asterra.Gameplay.Sim;
+using Asterra.Net;
 using UnityEngine;
 
 namespace Asterra.Gameplay
 {
+    public enum MatchPlayMode : byte
+    {
+        OfflineVsAi = 0,
+        Online = 1,
+    }
+
     /// <summary>
-    /// Composition root for a local 1v1 skirmish sandbox (player 0 vs dummy enemy 1).
+    /// Single composition root for offline AI skirmish and online lockstep matches.
     /// </summary>
     public sealed class MatchBootstrap : MonoBehaviour
     {
+        [SerializeField] private MatchPlayMode playMode = MatchPlayMode.OfflineVsAi;
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
         [SerializeField] private int playerFactionIndex;
         [SerializeField] private int enemyFactionIndex = 1;
@@ -24,9 +33,12 @@ namespace Asterra.Gameplay
         [SerializeField] private bool runSmokeOnAwake;
         [SerializeField] private bool reportHashEveryTick;
         [SerializeField] private uint matchSeed = 42;
+        [SerializeField] private LockstepMatchCoordinator coordinator;
+        [SerializeField] private LockstepNetworkBridge networkBridge;
+        [SerializeField] private bool autoStartOffline = true;
 
         public IMatchSession Session { get; private set; }
-        public ILockstepClock Clock { get; private set; }
+        public ILockstepClock Clock => coordinator != null ? coordinator.Clock : null;
         public ICommandBus Commands { get; private set; }
         public IWorldSim World { get; private set; }
         public IResourceWallet Wallet { get; private set; }
@@ -37,45 +49,162 @@ namespace Asterra.Gameplay
         public DeterministicRandom Random { get; private set; }
         public FactionRoster PlayerRoster { get; private set; }
         public FactionRoster EnemyRoster { get; private set; }
+        public MatchLobbyState Lobby { get; private set; }
+        public MatchPlayMode PlayMode => playMode;
+        public bool IsMatchRunning { get; private set; }
 
         private CommandBus _commandBus;
         private SkirmishWorldSim _sim;
-        private IArmyBrain _enemyBrain;
-        private float _accum;
         private LocalOrderController _orders;
+        private readonly List<PlayerId> _participants = new();
 
         private void Awake()
         {
+            if (coordinator == null)
+                coordinator = GetComponent<LockstepMatchCoordinator>();
+            if (coordinator == null)
+                coordinator = gameObject.AddComponent<LockstepMatchCoordinator>();
+
+            Lobby = new MatchLobbyState { MatchSeed = matchSeed, MaxPlayers = 8 };
+            Definitions = SkirmishDefaultContent.CreateRegistry();
+            Factions = new FactionCatalog(factions);
+            Replay = new ReplayBuffer();
+            _commandBus = new CommandBus();
+            Commands = _commandBus;
+
+            if (runSmokeOnAwake)
+                Debug.Log(SkirmishSmokeTest.Run());
+
+            if (playMode == MatchPlayMode.OfflineVsAi && autoStartOffline)
+                StartOfflineVsAi();
+        }
+
+        public void SetPlayMode(MatchPlayMode mode) => playMode = mode;
+
+        public void StartOfflineVsAi()
+        {
+            playMode = MatchPlayMode.OfflineVsAi;
             PlayerRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(playerFactionIndex, 0, 2)));
             EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(enemyFactionIndex, 0, 2)));
             if (EnemyRoster.Id == PlayerRoster.Id)
                 EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)((PlayerRoster.Id.Value + 1) % 3)));
 
+            var local = new PlayerId(0);
+            var enemy = new PlayerId(1);
+            Lobby = new MatchLobbyState { MatchSeed = matchSeed, MaxPlayers = 8 };
+            Lobby.ClaimSlot(local, "Player");
+            Lobby.ClaimSlot(enemy, "Enemy AI");
+            Lobby.SetFaction(local, PlayerRoster.Id.Value);
+            Lobby.SetFaction(enemy, EnemyRoster.Id.Value);
+            Lobby.SetReady(local, true);
+            Lobby.SetReady(enemy, true);
+            Lobby.TryStart(out _);
+
+            BeginMatchFromLobby(local, includeAi: true);
+        }
+
+        /// <summary>Online path: call after lobby TryStart succeeds on all peers.</summary>
+        public void StartOnlineFromLobby(PlayerId localPlayer, MatchStartInfo startInfo)
+        {
+            playMode = MatchPlayMode.Online;
+            if (startInfo == null)
+                throw new System.ArgumentNullException(nameof(startInfo));
+
+            matchSeed = startInfo.Seed;
+            PlayerSlotState localSlot = null;
+            PlayerSlotState firstRemote = null;
+            for (int i = 0; i < startInfo.Players.Length; i++)
+            {
+                var slot = startInfo.Players[i];
+                if (slot.Player == localPlayer)
+                    localSlot = slot;
+                else if (firstRemote == null)
+                    firstRemote = slot;
+            }
+
+            if (localSlot == null)
+                throw new System.InvalidOperationException("Local player missing from MatchStartInfo.");
+
+            PlayerRoster = FactionDefaultContent.Get(new FactionId(localSlot.FactionIndex));
+            EnemyRoster = firstRemote != null
+                ? FactionDefaultContent.Get(new FactionId(firstRemote.FactionIndex))
+                : FactionDefaultContent.Get(new FactionId((byte)((localSlot.FactionIndex + 1) % 3)));
+
+            BeginMatchFromLobby(localPlayer, includeAi: false, startInfo.Players);
+        }
+
+        private void BeginMatchFromLobby(PlayerId localPlayer, bool includeAi, PlayerSlotState[] onlinePlayers = null)
+        {
             Ids = new SequentialIdFactory();
             Wallet = new ResourceWallet();
-            _commandBus = new CommandBus();
-            Commands = _commandBus;
-            Clock = new LockstepClock(1f / Mathf.Max(1f, tickHz), commandDelayTicks);
-            Definitions = SkirmishDefaultContent.CreateRegistry();
-            Replay = new ReplayBuffer();
             Random = new DeterministicRandom(matchSeed);
             _sim = new SkirmishWorldSim(Wallet, Ids, Definitions);
             World = _sim;
-            Factions = new FactionCatalog(factions);
-            Session = new LocalMatchSession(new PlayerId(0), playerCount: 2);
+            Session = new LocalMatchSession(localPlayer, includeAi ? 2 : (onlinePlayers?.Length ?? 1));
 
-            var local = Session.LocalPlayer;
-            var enemy = new PlayerId(1);
-            Wallet.Seed(local, ResourceType.Gold, startingGold);
-            Wallet.Seed(local, ResourceType.Timber, startingTimber);
-            Wallet.Seed(enemy, ResourceType.Gold, enemyStartingGold);
-            Wallet.Seed(enemy, ResourceType.Timber, startingTimber);
+            _participants.Clear();
+            if (onlinePlayers != null)
+            {
+                for (int i = 0; i < onlinePlayers.Length; i++)
+                {
+                    var slot = onlinePlayers[i];
+                    _participants.Add(slot.Player);
+                    Wallet.Seed(slot.Player, ResourceType.Gold, startingGold);
+                    Wallet.Seed(slot.Player, ResourceType.Timber, startingTimber);
+                }
+            }
+            else
+            {
+                _participants.Add(localPlayer);
+                _participants.Add(new PlayerId(1));
+                Wallet.Seed(localPlayer, ResourceType.Gold, startingGold);
+                Wallet.Seed(localPlayer, ResourceType.Timber, startingTimber);
+                Wallet.Seed(new PlayerId(1), ResourceType.Gold, enemyStartingGold);
+                Wallet.Seed(new PlayerId(1), ResourceType.Timber, startingTimber);
+            }
 
-            SkirmishDefaultContent.PopulateInitialWorld(_sim, Ids, PlayerRoster, EnemyRoster);
-            _enemyBrain = new DummyEnemyCamp(
-                enemy,
-                EnemyRoster.KeepBuildingId,
-                EnemyRoster.BasicUnitId);
+            // Deterministic seats: sorted player ids → west/east. Never local-centric.
+            PlayerSlotState[] seats;
+            if (onlinePlayers != null)
+            {
+                seats = onlinePlayers;
+            }
+            else
+            {
+                seats = new[]
+                {
+                    new PlayerSlotState
+                    {
+                        Player = localPlayer,
+                        FactionIndex = PlayerRoster.Id.Value,
+                        IsReady = true,
+                        DisplayName = "Player",
+                    },
+                    new PlayerSlotState
+                    {
+                        Player = new PlayerId(1),
+                        FactionIndex = EnemyRoster.Id.Value,
+                        IsReady = true,
+                        DisplayName = "Enemy AI",
+                    },
+                };
+                System.Array.Sort(seats, (a, b) => a.Player.Value.CompareTo(b.Player.Value));
+            }
+
+            SkirmishDefaultContent.PopulateFromSlots(_sim, Ids, seats);
+
+            coordinator.ConfigureTiming(tickHz, commandDelayTicks);
+            coordinator.SetBridge(networkBridge);
+            coordinator.Initialize(_sim, _commandBus, localPlayer, _participants, Replay, networkBridge, Wallet);
+
+            if (includeAi)
+            {
+                var brain = new DummyEnemyCamp(
+                    new PlayerId(1),
+                    EnemyRoster.KeepBuildingId,
+                    EnemyRoster.BasicUnitId);
+                coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
+            }
 
             if (attachLocalOrders)
             {
@@ -85,73 +214,23 @@ namespace Asterra.Gameplay
                 _orders.Bind(this);
             }
 
-            if (runSmokeOnAwake)
-                Debug.Log(SkirmishSmokeTest.Run());
+            if (reportHashEveryTick)
+                coordinator.TickAdvanced += OnTickAdvanced;
+
+            IsMatchRunning = true;
+            Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} players={_participants.Count}");
         }
 
-        private void Update()
+        private void OnTickAdvanced(Tick tick, ulong hash)
         {
-            _accum += Time.deltaTime;
-            float step = Clock.FixedDeltaSeconds;
-            while (_accum >= step)
-            {
-                _accum -= step;
-                SimulateOneTick();
-            }
+            if (tick.Value % 20 == 0)
+                Debug.Log($"[Asterra] tick={tick.Value} hash={hash}");
         }
 
-        private void SimulateOneTick()
+        private void OnDestroy()
         {
-            var target = new Tick(Clock.CurrentTick.Value + (uint)Clock.CommandDelayTicks);
-
-            var aiCommands = _enemyBrain.Think(new ArmyBrainContext(Clock.CurrentTick, World, Wallet));
-            if (aiCommands.Count > 0)
-            {
-                var copy = new GameCommand[aiCommands.Count];
-                for (int i = 0; i < aiCommands.Count; i++)
-                {
-                    copy[i] = aiCommands[i];
-                    copy[i].IssueTick = target;
-                }
-
-                var frame = new CommandFrame
-                {
-                    TargetTick = target,
-                    Player = _enemyBrain.Player,
-                    Commands = copy,
-                };
-                Replay.Record(frame);
-                _commandBus.EnqueueRemote(frame);
-            }
-
-            _commandBus.ScheduleLocal(target);
-
-            var frameCommands = Commands.DrainForTick(Clock.CurrentTick);
-            if (frameCommands.Count > 0)
-            {
-                Replay.Record(new CommandFrame
-                {
-                    TargetTick = Clock.CurrentTick,
-                    Player = Session.LocalPlayer,
-                    Commands = ToArray(frameCommands),
-                });
-            }
-
-            World.ApplyCommands(frameCommands);
-            World.Tick(Clock.FixedDeltaSeconds);
-
-            if (reportHashEveryTick && Clock.CurrentTick.Value % 20 == 0)
-                Debug.Log($"[Asterra] tick={Clock.CurrentTick.Value} hash={World.ComputeWorldHash()}");
-
-            Clock.Advance();
-        }
-
-        private static GameCommand[] ToArray(System.Collections.Generic.IReadOnlyList<GameCommand> list)
-        {
-            var arr = new GameCommand[list.Count];
-            for (int i = 0; i < list.Count; i++)
-                arr[i] = list[i];
-            return arr;
+            if (coordinator != null)
+                coordinator.TickAdvanced -= OnTickAdvanced;
         }
 
         private sealed class LocalMatchSession : IMatchSession

@@ -17,10 +17,17 @@
 
 ## Flow
 
-1. Host calls `MultiplayerSessionHost.HostSkirmishAsync` → Auth → Relay allocation → Lobby (stores relay + seed) → `StartHost`.
-2. Client calls `JoinSkirmishAsync(code)` → join lobby → Relay join → `StartClient`.
-3. `LockstepMatchCoordinator.Initialize(...)` with all `PlayerId`s once the roster is known.
-4. Each tick: schedule local orders → broadcast frame → gate waits for all players → `IWorldSim` steps → periodic world hash RPC.
+### Offline
+1. `MatchBootstrap` (play mode OfflineVsAi) auto-starts.
+2. Builds lobby seats for P0/P1, populates world from sorted slots, starts `LockstepMatchCoordinator`.
+3. AI seats feed frames via `ArmyBrainFrameContributor`.
+
+### Online
+1. Host/Join via `MultiplayerSessionHost` (see session objects above).
+2. Clients `MatchLobbyController.ClaimLocalSlot` → pick faction → ready.
+3. Host `HostStart` → `MatchLobbyNetworkBridge` StartMatch → `MatchBootstrap.StartOnlineFromLobby`.
+4. All peers populate from the same `MatchStartInfo.Players` order (west = lowest player id).
+5. `LockstepMatchCoordinator` runs gated ticks + hash RPCs.
 
 ## Offline / pre-package
 
