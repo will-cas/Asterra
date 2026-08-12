@@ -29,6 +29,11 @@
 4. All peers populate from the same `MatchStartInfo.Players` order (west = lowest player id).
 5. `LockstepMatchCoordinator` runs gated ticks + hash RPCs.
 
-## Offline / pre-package
+## Offline / package status
 
-If UGS assemblies are not present, `ASTERRA_UGS` is undefined and session methods log a stub warning. Core lockstep (`CommandCodec`, `LockstepFrameGate`) still runs in local skirmish / smoke tests.
+`UnityGamingServicesSession` is currently a **compile-safe stub** so offline 1v1 works even if Lobby/Relay assemblies fail to resolve on Unity 6.3.
+
+When you are ready for online:
+1. Package Manager → confirm **Multiplayer Services / Lobby / Relay / Authentication** installed.
+2. Restore live UGS host/join wiring (see git history for `UnityGamingServicesSession`).
+3. Add `Unity.Services.*` refs back to `Asterra.Net.asmdef`.

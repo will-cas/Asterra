@@ -3,12 +3,7 @@
   "rootNamespace": "Asterra.Net",
   "references": [
     "Asterra.Core",
-    "Unity.Netcode.Runtime",
-    "Unity.Services.Core",
-    "Unity.Services.Authentication",
-    "Unity.Services.Lobby",
-    "Unity.Services.Relay",
-    "Unity.Networking.Transport"
+    "Unity.Netcode.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
@@ -17,12 +12,6 @@
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [],
-  "versionDefines": [
-    {
-      "name": "com.unity.services.core",
-      "expression": "1.0.0",
-      "define": "ASTERRA_UGS"
-    }
-  ],
+  "versionDefines": [],
   "noEngineReferences": false
 }
