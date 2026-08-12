@@ -1,0 +1,17 @@
+{
+  "name": "Asterra.UI",
+  "rootNamespace": "Asterra.UI",
+  "references": [
+    "Asterra.Core",
+    "Asterra.Gameplay"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
