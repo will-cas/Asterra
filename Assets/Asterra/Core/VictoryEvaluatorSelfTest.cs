@@ -58,6 +58,13 @@ namespace Asterra.Core
 
             public bool HasUpgrade(PlayerId player, string upgradeDefId) => false;
 
+            public bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining)
+            {
+                cooldownRemaining = 0f;
+                buffRemaining = 0f;
+                return false;
+            }
+
             public void AddBuilding(PlayerId owner, string def)
             {
                 _buildings.Add(new BuildingSnapshot(

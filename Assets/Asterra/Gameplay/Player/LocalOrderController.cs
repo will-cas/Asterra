@@ -189,6 +189,31 @@ namespace Asterra.Gameplay.Player
             MatchFeedback.Show($"Idle workers: {idle.Count}");
         }
 
+        public bool CanUseCommanderAbility =>
+            _roster != null
+            && _roster.DefinitionId == FactionDefaultContent.IronCovenantId
+            && _commands != null;
+
+        public void ActivateCommanderAbility()
+        {
+            if (!CanUseCommanderAbility)
+                return;
+
+            if (_world != null
+                && _world.TryGetCommanderAbilityStatus(_local, out float cd, out _)
+                && cd > 0.05f)
+            {
+                MatchFeedback.Show($"Iron Wall cooling down ({cd:0}s)");
+                return;
+            }
+
+            _commands.SubmitLocal(new ActivateCommanderAbilityCommand
+            {
+                Issuer = _local,
+            });
+            MatchFeedback.Show("Iron Wall — Lucien Vale");
+        }
+
         public void JumpToBuilding(SimEntityId buildingId)
         {
             if (_world == null)
@@ -666,6 +691,9 @@ namespace Asterra.Gameplay.Player
                     UpgradeDefId = _roster.BasicUpgradeId,
                 });
             }
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Q))
+                ActivateCommanderAbility();
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.A))
             {

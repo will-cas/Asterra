@@ -28,6 +28,8 @@ namespace Asterra.Gameplay.Sim
         public UnitRole Role;
         public float Armor;
         public float ProjectileSpeed;
+        /// <summary>Active Iron Wall (or similar) armor bonus currently applied to this unit.</summary>
+        public float CommanderArmorBonus;
 
         public float? MoveTargetX;
         public float? MoveTargetZ;

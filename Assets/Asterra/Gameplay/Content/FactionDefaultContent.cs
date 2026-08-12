@@ -43,6 +43,13 @@ namespace Asterra.Gameplay.Content
         public const string IronKeepId = "building_iron_keep";
         public const string MilitiaTrainingId = "upgrade_militia_training";
 
+        // Lucien Vale — Iron Wall (Aurelian commander active)
+        public const string LucienIronWallAbilityId = "ability_lucien_iron_wall";
+        public const float LucienIronWallArmorBonus = 3f;
+        public const float LucienIronWallBuildingMitigation = 4f;
+        public const float LucienIronWallDurationSeconds = 12f;
+        public const float LucienIronWallCooldownSeconds = 45f;
+
         // Shared fortifications
         public const string WatchtowerId = "building_watchtower";
         public const string PalisadeId = "building_palisade";

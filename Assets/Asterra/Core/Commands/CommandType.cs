@@ -15,5 +15,6 @@ namespace Asterra.Core
         AttackMove = 11,
         Stop = 12,
         Patrol = 13,
+        ActivateCommanderAbility = 14,
     }
 }

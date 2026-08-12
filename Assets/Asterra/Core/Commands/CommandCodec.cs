@@ -151,6 +151,9 @@ namespace Asterra.Core
                     WriteQuantized(writer, patrol.TargetX);
                     WriteQuantized(writer, patrol.TargetZ);
                     break;
+                case ActivateCommanderAbilityCommand:
+                    writer.Write((byte)CommandType.ActivateCommanderAbility);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -257,6 +260,9 @@ namespace Asterra.Core
                         TargetX = ReadQuantized(reader),
                         TargetZ = ReadQuantized(reader),
                     };
+                    break;
+                case CommandType.ActivateCommanderAbility:
+                    command = new ActivateCommanderAbilityCommand();
                     break;
                 default:
                     throw new InvalidDataException($"Unknown command type byte: {(byte)type}");

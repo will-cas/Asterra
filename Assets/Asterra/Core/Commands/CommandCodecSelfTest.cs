@@ -106,6 +106,11 @@ namespace Asterra.Core
                         TargetX = 80f,
                         TargetZ = 12f,
                     },
+                    new ActivateCommanderAbilityCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                    },
                 },
             };
 

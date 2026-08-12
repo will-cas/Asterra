@@ -204,6 +204,8 @@ namespace Asterra.Core
         IReadOnlyList<CombatEvent> CombatEvents { get; }
         IReadOnlyList<ProjectileSnapshot> Projectiles { get; }
         bool HasUpgrade(PlayerId player, string upgradeDefId);
+        /// <summary>Commander ability timers. Returns false if the player has no ability state.</summary>
+        bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining);
     }
 
     public interface IUpgradeState

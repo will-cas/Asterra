@@ -31,6 +31,7 @@ Local offline / skirmish input (keyboard + mouse).
 | X | Cancel production (when building is producing/queued) |
 | C | Capture nearest territory order |
 | U | Buy faction upgrade |
+| Q | Iron Wall (Aurelian / Lucien Vale) |
 | R | Reselect all owned units |
 
 ## Control groups

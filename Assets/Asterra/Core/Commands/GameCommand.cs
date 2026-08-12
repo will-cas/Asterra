@@ -91,6 +91,11 @@ namespace Asterra.Core
         public float TargetZ;
     }
 
+    /// <summary>Faction commander active ability (v1: Aurelian Iron Wall).</summary>
+    public sealed class ActivateCommanderAbilityCommand : GameCommand
+    {
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {

@@ -52,6 +52,9 @@ namespace Asterra.Gameplay
             GUI.Label(new Rect(12f, 56f, 1200f, 22f), BuildContextLine());
             GUI.Label(new Rect(12f, 78f, 1400f, 22f), BuildHotkeyHint());
 
+            if (orders != null && orders.CanUseCommanderAbility)
+                DrawCommanderAbilityButton();
+
             if (MatchFeedback.Instance != null && MatchFeedback.Instance.HasActiveMessage)
             {
                 string toast = MatchFeedback.Instance.CurrentMessage;
@@ -204,6 +207,25 @@ namespace Asterra.Gameplay
                     : $"{title}\n{reason}\n\n{story}");
         }
 
+        private void DrawCommanderAbilityButton()
+        {
+            float cd = 0f;
+            float buff = 0f;
+            if (match.World != null)
+                match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, out cd, out buff);
+
+            string label;
+            if (buff > 0.05f)
+                label = $"Iron Wall ACTIVE {buff:0}s";
+            else if (cd > 0.05f)
+                label = $"Iron Wall {cd:0}s";
+            else
+                label = "Iron Wall (Q)";
+
+            if (GUI.Button(new Rect(Screen.width - 210f, 12f, 198f, 36f), label) && cd <= 0.05f)
+                orders.ActivateCommanderAbility();
+        }
+
         private string BuildStoryBeat(bool won)
         {
             if (match == null)
@@ -337,6 +359,12 @@ namespace Asterra.Gameplay
                 return "LMB place  Esc/RMB cancel  Shift keep placing";
             if (orders.HasBuilderSelected)
                 return "B barracks  N tower  M wall  O outpost  . idle workers";
+            if (orders.CanUseCommanderAbility)
+            {
+                if (orders.HasCombatUnitSelected)
+                    return "S stop  P patrol  A attack-move  Q Iron Wall  F/G/H stance  Ctrl+1-9 groups";
+                return "Q Iron Wall (Lucien Vale)  . idle workers  Ctrl+1-9 groups  R reselect all";
+            }
             if (orders.HasCombatUnitSelected)
                 return "S stop  P patrol  A attack-move  F/G/H stance  Ctrl+1-9 groups";
             if (orders.SelectedBuilding.HasValue)

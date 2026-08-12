@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Sim;
 
 namespace Asterra.Gameplay
@@ -37,6 +38,15 @@ namespace Asterra.Gameplay
         private float _incomeAcc;
         private ulong _mutationCounter;
 
+        private sealed class CommanderAbilityRuntime
+        {
+            public float CooldownRemaining;
+            public float BuffRemaining;
+            public float ArmorBonus;
+        }
+
+        private readonly Dictionary<byte, CommanderAbilityRuntime> _commanderAbilities = new();
+
         private sealed class SimProjectile
         {
             public float X;
@@ -64,6 +74,20 @@ namespace Asterra.Gameplay
 
         public bool HasUpgrade(PlayerId player, string upgradeDefId) => _upgrades.Has(player, upgradeDefId);
 
+        public bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining)
+        {
+            if (_commanderAbilities.TryGetValue(player.Value, out var state))
+            {
+                cooldownRemaining = state.CooldownRemaining;
+                buffRemaining = state.BuffRemaining;
+                return true;
+            }
+
+            cooldownRemaining = 0f;
+            buffRemaining = 0f;
+            return false;
+        }
+
         public SimUnit SpawnUnit(SimEntityId id, PlayerId owner, FactionId faction, string unitDefId, float x, float z)
         {
             if (!_defs.TryGetUnit(unitDefId, out var def))
@@ -71,6 +95,14 @@ namespace Asterra.Gameplay
 
             var unit = new SimUnit(id, owner, faction, def, x, z);
             unit.AttackDamage *= _upgrades.UnitDamageMultiplier(owner);
+            if (_commanderAbilities.TryGetValue(owner.Value, out var ability)
+                && ability.BuffRemaining > 0f
+                && ability.ArmorBonus > 0f)
+            {
+                unit.Armor += ability.ArmorBonus;
+                unit.CommanderArmorBonus = ability.ArmorBonus;
+            }
+
             _units.Add(unit);
             _unitsById[id.Value] = unit;
             RebuildSnapshots();
@@ -163,6 +195,9 @@ namespace Asterra.Gameplay
                     case PatrolCommand patrol:
                         ApplyPatrol(patrol);
                         break;
+                    case ActivateCommanderAbilityCommand ability:
+                        ApplyCommanderAbility(ability);
+                        break;
                     default:
                         break;
                 }
@@ -174,6 +209,7 @@ namespace Asterra.Gameplay
         public void Tick(float deltaSeconds)
         {
             _combatEvents.Clear();
+            TickCommanderAbilities(deltaSeconds);
             TickConstruction(deltaSeconds);
             TickProduction(deltaSeconds);
             TickGather(deltaSeconds);
@@ -510,6 +546,134 @@ namespace Asterra.Gameplay
             }
 
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        private void ApplyCommanderAbility(ActivateCommanderAbilityCommand cmd)
+        {
+            if (!TryResolvePlayerFaction(cmd.Issuer, out var faction))
+                return;
+            if (faction != FactionDefaultContent.IronCovenant.Id)
+                return;
+
+            if (!_commanderAbilities.TryGetValue(cmd.Issuer.Value, out var state))
+            {
+                state = new CommanderAbilityRuntime();
+                _commanderAbilities[cmd.Issuer.Value] = state;
+            }
+
+            if (state.CooldownRemaining > 0f)
+                return;
+
+            // Clear any leftover buff before re-applying.
+            if (state.BuffRemaining > 0f)
+                ClearCommanderArmorBuff(cmd.Issuer, state.ArmorBonus);
+
+            state.ArmorBonus = FactionDefaultContent.LucienIronWallArmorBonus;
+            state.BuffRemaining = FactionDefaultContent.LucienIronWallDurationSeconds;
+            state.CooldownRemaining = FactionDefaultContent.LucienIronWallCooldownSeconds;
+            ApplyCommanderArmorBuff(cmd.Issuer, state.ArmorBonus);
+            _mutationCounter ^= 0xA11CEUL ^ (ulong)(cmd.Issuer.Value + 1) * 97ul;
+        }
+
+        private void TickCommanderAbilities(float dt)
+        {
+            if (_commanderAbilities.Count == 0)
+                return;
+
+            foreach (var pair in _commanderAbilities)
+            {
+                byte key = pair.Key;
+                var state = pair.Value;
+                bool changed = false;
+                if (state.CooldownRemaining > 0f)
+                {
+                    state.CooldownRemaining = Math.Max(0f, state.CooldownRemaining - dt);
+                    changed = true;
+                }
+
+                if (state.BuffRemaining > 0f)
+                {
+                    state.BuffRemaining -= dt;
+                    if (state.BuffRemaining <= 0f)
+                    {
+                        state.BuffRemaining = 0f;
+                        ClearCommanderArmorBuff(new PlayerId(key), state.ArmorBonus);
+                        state.ArmorBonus = 0f;
+                    }
+
+                    changed = true;
+                }
+
+                if (changed)
+                    _mutationCounter ^= (ulong)(key + 1) * 13ul;
+            }
+        }
+
+        private void ApplyCommanderArmorBuff(PlayerId owner, float bonus)
+        {
+            if (bonus <= 0f)
+                return;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (unit.Owner != owner || !unit.IsAlive)
+                    continue;
+                if (unit.CommanderArmorBonus > 0f)
+                    continue;
+                unit.Armor += bonus;
+                unit.CommanderArmorBonus = bonus;
+            }
+        }
+
+        private void ClearCommanderArmorBuff(PlayerId owner, float bonus)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (unit.Owner != owner || unit.CommanderArmorBonus <= 0f)
+                    continue;
+                float remove = bonus > 0f ? bonus : unit.CommanderArmorBonus;
+                unit.Armor = Math.Max(0f, unit.Armor - remove);
+                unit.CommanderArmorBonus = 0f;
+            }
+        }
+
+        private bool TryResolvePlayerFaction(PlayerId player, out FactionId faction)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner == player && b.State != BuildingState.Destroyed)
+                {
+                    faction = b.Faction;
+                    return true;
+                }
+            }
+
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (u.Owner == player && u.IsAlive)
+                {
+                    faction = u.Faction;
+                    return true;
+                }
+            }
+
+            faction = default;
+            return false;
+        }
+
+        private bool IsIronWallActive(PlayerId owner)
+        {
+            return _commanderAbilities.TryGetValue(owner.Value, out var state) && state.BuffRemaining > 0f;
+        }
+
+        private float MitigateBuildingDamage(PlayerId owner, float damage)
+        {
+            if (!IsIronWallActive(owner))
+                return damage;
+            return CombatMath.ApplyArmor(damage, FactionDefaultContent.LucienIronWallBuildingMitigation);
         }
 
         private void ApplyStance(SetStanceCommand stance)
@@ -1104,7 +1268,7 @@ namespace Asterra.Gameplay
                 && _buildingsById.TryGetValue(targetId.Value, out var preferredBuilding)
                 && preferredBuilding.State != BuildingState.Destroyed)
             {
-                preferredBuilding.Health -= damage;
+                preferredBuilding.Health -= MitigateBuildingDamage(preferredBuilding.Owner, damage);
                 _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, preferredBuilding.Id, preferredBuilding.X, preferredBuilding.Z, true));
                 if (preferredBuilding.Health <= 0f)
                 {
@@ -1128,7 +1292,7 @@ namespace Asterra.Gameplay
             if (_buildingsById.TryGetValue(targetId.Value, out var targetBuilding)
                 && targetBuilding.State != BuildingState.Destroyed)
             {
-                targetBuilding.Health -= damage;
+                targetBuilding.Health -= MitigateBuildingDamage(targetBuilding.Owner, damage);
                 _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetBuilding.Id, targetBuilding.X, targetBuilding.Z, true));
                 if (targetBuilding.Health <= 0f)
                 {

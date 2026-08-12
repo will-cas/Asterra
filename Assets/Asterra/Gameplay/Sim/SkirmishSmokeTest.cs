@@ -67,6 +67,18 @@ namespace Asterra.Gameplay
             bus.EnqueueRemote(CommandCodec.DeserializeFrame(CommandCodec.SerializeFrame(openers)));
             bus.EnqueueRemote(new CommandFrame
             {
+                TargetTick = new Tick(5),
+                Player = player,
+                Commands = new GameCommand[]
+                {
+                    new ActivateCommanderAbilityCommand
+                    {
+                        Issuer = player,
+                    },
+                },
+            });
+            bus.EnqueueRemote(new CommandFrame
+            {
                 TargetTick = new Tick(40),
                 Player = player,
                 Commands = new GameCommand[]
@@ -152,6 +164,8 @@ namespace Asterra.Gameplay
             }
 
             sb.AppendLine($"upgradeP0={sim.HasUpgrade(player, playerFaction.BasicUpgradeId)}");
+            sim.TryGetCommanderAbilityStatus(player, out float cd, out float buff);
+            sb.AppendLine($"ironWallP0 cd={cd:0.0} buff={buff:0.0}");
             sb.AppendLine($"defsRegistered=iron+verdant+ashen");
             return sb.ToString();
         }
