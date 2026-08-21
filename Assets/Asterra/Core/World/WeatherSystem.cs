@@ -85,6 +85,20 @@ namespace Asterra.Core.World
         public float WindDirZ => _windDirZ;
         public float WindIntensity => _windIntensity;
         public float Temperature => _temperature;
+        /// <summary>Added from time-of-day (night colder) before ice/snow ticks.</summary>
+        public float ExternalTemperatureBias { get; set; }
+        public float EffectiveTemperature
+        {
+            get
+            {
+                float t = _temperature + ExternalTemperatureBias;
+                if (t < -1f)
+                    return -1f;
+                if (t > 1f)
+                    return 1f;
+                return t;
+            }
+        }
         public float FogDensity { get; private set; }
         public float PrecipitationRate { get; private set; }
         public float SnowfallRate { get; private set; }

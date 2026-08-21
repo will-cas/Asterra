@@ -488,6 +488,20 @@ namespace Asterra.Gameplay.Player
 
                 if (TryPickEntity(out var targetView))
                 {
+                    if (targetView.Owner == _local && !targetView.IsUnit
+                        && TryGetBuildingSnapshot(targetView.Id, out var gb)
+                        && gb.AllowsGarrison)
+                    {
+                        _commands.SubmitLocal(new EnterGarrisonCommand
+                        {
+                            Issuer = _local,
+                            UnitIds = unitIds,
+                            BuildingId = targetView.Id,
+                        });
+                        MatchFeedback.Show("Garrisoning...");
+                        return;
+                    }
+
                     if (targetView.Owner != _local && targetView.IsRevealed)
                     {
                         _commands.SubmitLocal(new AttackCommand
@@ -1149,6 +1163,23 @@ namespace Asterra.Gameplay.Player
             }
 
             return view != null;
+        }
+
+        private bool TryGetBuildingSnapshot(SimEntityId id, out BuildingSnapshot snap)
+        {
+            snap = default;
+            if (match == null || match.World == null)
+                return false;
+            var buildings = match.World.Buildings;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                if (buildings[i].Id.Value != id.Value)
+                    continue;
+                snap = buildings[i];
+                return true;
+            }
+
+            return false;
         }
 
         private bool TryPickEntity(out EntityView view)

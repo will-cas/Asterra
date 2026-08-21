@@ -46,6 +46,10 @@ namespace Asterra.Gameplay
             if (buildingReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return buildingReport + "\nBuilding systems self-test failed — aborting further smoke.";
 
+            var pathReport = PathfindingSelfTest.Run();
+            if (pathReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return pathReport + "\nPathfinding self-test failed — aborting further smoke.";
+
             var codecReport = CommandCodecSelfTest.Run();
 
             var ids = new SequentialIdFactory();
@@ -188,6 +192,7 @@ namespace Asterra.Gameplay
             sb.AppendLine(weatherReport);
             sb.AppendLine(timeReport);
             sb.AppendLine(buildingReport);
+            sb.AppendLine(pathReport);
             sb.Append(codecReport);
             sb.Append(LockstepFrameGateSelfTest.Run());
             sb.Append(MatchLobbyStateSelfTest.Run());

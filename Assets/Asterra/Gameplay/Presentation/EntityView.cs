@@ -73,6 +73,41 @@ namespace Asterra.Gameplay.Presentation
             SetHealth(1f, 1f);
         }
 
+        /// <summary>
+        /// Orient / stretch wall segment from sim neighbour bits (N=1,E=2,S=4,W=8).
+        /// </summary>
+        public void ApplyWallLinks(byte links)
+        {
+            if (IsUnit)
+                return;
+            bool ew = (links & 2) != 0 || (links & 8) != 0;
+            bool ns = (links & 1) != 0 || (links & 4) != 0;
+            float yaw = 0f;
+            float sx = BuildingVisualScale;
+            float sy = BuildingVisualScale;
+            float sz = BuildingVisualScale;
+            if (ew && !ns)
+            {
+                yaw = 90f;
+                sx = BuildingVisualScale * 1.35f;
+                sz = BuildingVisualScale * 0.85f;
+            }
+            else if (ns && !ew)
+            {
+                yaw = 0f;
+                sx = BuildingVisualScale * 0.85f;
+                sz = BuildingVisualScale * 1.35f;
+            }
+            else if (ew && ns)
+            {
+                sx = BuildingVisualScale * 1.15f;
+                sz = BuildingVisualScale * 1.15f;
+            }
+
+            transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            transform.localScale = new Vector3(sx, sy, sz);
+        }
+
         public void SetHealth(float health, float max)
         {
             _health = Mathf.Max(0f, health);

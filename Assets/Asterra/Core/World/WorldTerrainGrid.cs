@@ -93,6 +93,12 @@ namespace Asterra.Core.World
             return cellX >= 0 && cellZ >= 0 && cellX < Width && cellZ < Height;
         }
 
+        public void CellCenter(int cellX, int cellZ, out float worldX, out float worldZ)
+        {
+            worldX = OriginX + (cellX + 0.5f) * CellSize;
+            worldZ = OriginZ + (cellZ + 0.5f) * CellSize;
+        }
+
         public bool TryGetCell(float worldX, float worldZ, out TerrainCell cell)
         {
             if (!TryWorldToCell(worldX, worldZ, out int cx, out int cz))

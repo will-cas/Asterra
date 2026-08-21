@@ -18,6 +18,8 @@ namespace Asterra.Core
         public readonly bool HasCarry;
         public readonly bool IsIdle;
         public readonly UnitStance Stance;
+        public readonly bool IsGarrisoned;
+        public readonly float SightRadius;
 
         public UnitSnapshot(
             SimEntityId id,
@@ -33,7 +35,9 @@ namespace Asterra.Core
             ResourceType carryType,
             bool hasCarry,
             bool isIdle,
-            UnitStance stance)
+            UnitStance stance,
+            bool isGarrisoned = false,
+            float sightRadius = 110f)
         {
             Id = id;
             Owner = owner;
@@ -49,6 +53,8 @@ namespace Asterra.Core
             HasCarry = hasCarry;
             IsIdle = isIdle;
             Stance = stance;
+            IsGarrisoned = isGarrisoned;
+            SightRadius = sightRadius;
         }
     }
 
@@ -77,6 +83,10 @@ namespace Asterra.Core
         public readonly float BuildProgress;
         public readonly float SightRadius;
         public readonly BuildingKind Kind;
+        public readonly byte WallLinks;
+        public readonly int GarrisonCount;
+        public readonly int GarrisonCapacity;
+        public readonly bool AllowsGarrison;
 
         public BuildingSnapshot(
             SimEntityId id,
@@ -101,7 +111,11 @@ namespace Asterra.Core
             bool hasRally,
             float buildProgress,
             float sightRadius,
-            BuildingKind kind)
+            BuildingKind kind,
+            byte wallLinks = 0,
+            int garrisonCount = 0,
+            int garrisonCapacity = 0,
+            bool allowsGarrison = false)
         {
             Id = id;
             Owner = owner;
@@ -126,6 +140,10 @@ namespace Asterra.Core
             BuildProgress = buildProgress;
             SightRadius = sightRadius;
             Kind = kind;
+            WallLinks = wallLinks;
+            GarrisonCount = garrisonCount;
+            GarrisonCapacity = garrisonCapacity;
+            AllowsGarrison = allowsGarrison;
         }
     }
 

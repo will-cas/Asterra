@@ -96,6 +96,17 @@ namespace Asterra.Core
     {
     }
 
+    public sealed class EnterGarrisonCommand : GameCommand
+    {
+        public SimEntityId[] UnitIds;
+        public SimEntityId BuildingId;
+    }
+
+    public sealed class ExitGarrisonCommand : GameCommand
+    {
+        public SimEntityId BuildingId;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {

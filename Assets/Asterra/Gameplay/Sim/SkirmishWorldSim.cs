@@ -43,6 +43,7 @@ namespace Asterra.Gameplay
         private float _gatherAcc;
         private float _incomeAcc;
         private ulong _mutationCounter;
+        private readonly System.Collections.Generic.List<(float x, float z)> _pathScratch = new();
 
         private sealed class CommanderAbilityRuntime
         {
@@ -234,6 +235,12 @@ namespace Asterra.Gameplay
                     case ActivateCommanderAbilityCommand ability:
                         ApplyCommanderAbility(ability);
                         break;
+                    case EnterGarrisonCommand enter:
+                        ApplyEnterGarrison(enter);
+                        break;
+                    case ExitGarrisonCommand exit:
+                        ApplyExitGarrison(exit);
+                        break;
                     default:
                         break;
                 }
@@ -309,13 +316,12 @@ namespace Asterra.Gameplay
                     continue;
                 FormationOffset(move.TargetX, move.TargetZ, index, count, out float tx, out float tz);
                 index++;
-                unit.MoveTargetX = tx;
-                unit.MoveTargetZ = tz;
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = false;
                 unit.Patrolling = false;
+                AssignUnitPath(unit, tx, tz);
                 _mutationCounter ^= unit.Id.Value * 3ul;
             }
         }
@@ -337,6 +343,7 @@ namespace Asterra.Gameplay
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = false;
                 unit.Patrolling = false;
+                unit.ClearPath();
                 _mutationCounter ^= unit.Id.Value * 733ul;
             }
         }
@@ -365,13 +372,12 @@ namespace Asterra.Gameplay
                     continue;
                 FormationOffset(attackMove.TargetX, attackMove.TargetZ, index, count, out float tx, out float tz);
                 index++;
-                unit.MoveTargetX = tx;
-                unit.MoveTargetZ = tz;
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = true;
                 unit.Patrolling = false;
+                AssignUnitPath(unit, tx, tz);
                 _mutationCounter ^= unit.Id.Value * 743ul;
             }
         }
@@ -941,7 +947,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
-                if (!unit.IsAlive)
+                if (!unit.IsAlive || unit.IsGarrisoned)
                     continue;
                 if (unit.GatherTargetId.HasValue)
                     continue;
@@ -1023,13 +1029,32 @@ namespace Asterra.Gameplay
 
                 float mx = unit.MoveTargetX.Value;
                 float mz = unit.MoveTargetZ.Value;
-                if (Distance(unit.X, unit.Z, mx, mz) <= 0.35f)
+                if (unit.TryGetPathWaypoint(out float wx, out float wz))
+                {
+                    if (Distance(unit.X, unit.Z, wx, wz) <= 1.2f)
+                    {
+                        unit.PathIndex++;
+                        if (!unit.TryGetPathWaypoint(out wx, out wz))
+                        {
+                            wx = mx;
+                            wz = mz;
+                        }
+                    }
+                    else
+                    {
+                        mx = wx;
+                        mz = wz;
+                    }
+                }
+
+                if (Distance(unit.X, unit.Z, unit.MoveTargetX.Value, unit.MoveTargetZ.Value) <= 0.35f)
                 {
                     if (!unit.Patrolling)
                     {
                         unit.MoveTargetX = null;
                         unit.MoveTargetZ = null;
                         unit.AttackMoving = false;
+                        unit.ClearPath();
                     }
 
                     continue;
@@ -1077,7 +1102,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
-                if (!unit.IsAlive)
+                if (!unit.IsAlive || unit.IsGarrisoned)
                     continue;
                 if (unit.AttackCooldownRemaining > 0f)
                     unit.AttackCooldownRemaining -= dt;
@@ -1739,6 +1764,104 @@ namespace Asterra.Gameplay
             unit.TraversalForward = forward;
             unit.TraversalProgress = 0f;
             _mutationCounter ^= (ulong)(link.Id + 1) * 911ul;
+        }
+
+
+        private void AssignUnitPath(SimUnit unit, float tx, float tz)
+        {
+            unit.MoveTargetX = tx;
+            unit.MoveTargetZ = tz;
+            unit.ClearPath();
+            _pathScratch.Clear();
+            if (_environment.Pathfinding.TryGetPath(unit.X, unit.Z, tx, tz, unit.TraversalCapabilities, _pathScratch))
+                unit.SetPath(_pathScratch);
+        }
+
+        private void ApplyEnterGarrison(EnterGarrisonCommand enter)
+        {
+            if (enter.UnitIds == null)
+                return;
+            if (!_buildingsById.TryGetValue(enter.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != enter.Issuer || building.State == BuildingState.Destroyed || !building.AllowsGarrison)
+                return;
+            for (int i = 0; i < enter.UnitIds.Length; i++)
+            {
+                if (!_unitsById.TryGetValue(enter.UnitIds[i].Value, out var unit))
+                    continue;
+                if (unit.Owner != enter.Issuer || !unit.IsAlive || unit.IsGarrisoned)
+                    continue;
+                if (Distance(unit.X, unit.Z, building.X, building.Z) > building.FootprintRadius + 28f)
+                    continue;
+                if (!building.TryAddGarrison(unit.Id.Value))
+                    break;
+                unit.GarrisonBuildingId = building.Id;
+                unit.MoveTargetX = null;
+                unit.MoveTargetZ = null;
+                unit.AttackTargetId = null;
+                unit.GatherTargetId = null;
+                unit.ClearPath();
+                unit.ActiveTraversalLinkId = -1;
+                unit.X = building.X;
+                unit.Z = building.Z;
+                _mutationCounter ^= unit.Id.Value * 1009ul;
+            }
+        }
+
+        private void ApplyExitGarrison(ExitGarrisonCommand exit)
+        {
+            if (!_buildingsById.TryGetValue(exit.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != exit.Issuer || building.GarrisonCount <= 0)
+                return;
+            int n = building.GarrisonCount;
+            for (int i = n - 1; i >= 0; i--)
+            {
+                uint uid = building.GarrisonUnitIds[i];
+                if (!_unitsById.TryGetValue(uid, out var unit))
+                {
+                    building.TryRemoveGarrison(uid);
+                    continue;
+                }
+                building.TryRemoveGarrison(uid);
+                unit.GarrisonBuildingId = null;
+                float ang = i * 0.9f;
+                unit.X = building.X + MathF.Cos(ang) * (building.FootprintRadius + 8f);
+                unit.Z = building.Z + MathF.Sin(ang) * (building.FootprintRadius + 8f);
+                unit.ClearPath();
+                _mutationCounter ^= unit.Id.Value * 1013ul;
+            }
+        }
+
+        /// <summary>Shared vision query for FoW / AI. Circles from owned units and buildings.</summary>
+        public bool IsVisibleTo(PlayerId player, float x, float z)
+        {
+            float visScale = _environment.CombinedVisibility();
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.Owner != player || u.IsGarrisoned)
+                    continue;
+                float r = u.SightRadius * visScale;
+                float dx = x - u.X;
+                float dz = z - u.Z;
+                if (dx * dx + dz * dz <= r * r)
+                    return true;
+            }
+
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != player || b.State == BuildingState.Destroyed)
+                    continue;
+                float r = (b.SightRadius > 1f ? b.SightRadius : 85f) * visScale;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                if (dx * dx + dz * dz <= r * r)
+                    return true;
+            }
+
+            return false;
         }
 
         private void StepTowardAvoiding(SimUnit unit, float tx, float tz, float dt)

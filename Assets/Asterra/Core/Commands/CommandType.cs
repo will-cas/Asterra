@@ -16,5 +16,7 @@ namespace Asterra.Core
         Stop = 12,
         Patrol = 13,
         ActivateCommanderAbility = 14,
+        EnterGarrison = 15,
+        ExitGarrison = 16,
     }
 }

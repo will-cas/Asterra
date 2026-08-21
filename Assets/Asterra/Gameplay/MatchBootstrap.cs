@@ -267,6 +267,8 @@ namespace Asterra.Gameplay
                     gameObject.AddComponent<DayNightLightingPresenter>();
                 if (FindFirstObjectByType<WorldDebugOverlay>() == null)
                     gameObject.AddComponent<WorldDebugOverlay>();
+                if (FindFirstObjectByType<WeatherAtmospherePresenter>() == null)
+                    gameObject.AddComponent<WeatherAtmospherePresenter>();
             }
 
             if (attachLocalOrders)

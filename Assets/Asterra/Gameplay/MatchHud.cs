@@ -144,6 +144,19 @@ namespace Asterra.Gameplay
                     if (producing)
                         DrawProductionQueue(b, panelY - 70f);
 
+                    if (b.AllowsGarrison && b.GarrisonCount > 0
+                        && GUI.Button(new Rect(panelX, panelY - 100f, 160f, 28f), $"Unload ({b.GarrisonCount})"))
+                    {
+                        if (match.Commands != null)
+                        {
+                            match.Commands.SubmitLocal(new ExitGarrisonCommand
+                            {
+                                Issuer = player,
+                                BuildingId = b.Id,
+                            });
+                        }
+                    }
+
                     float trainX = bx;
                     float trainY = buildY;
                     bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);

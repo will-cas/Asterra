@@ -62,6 +62,38 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "capture started", sawStart);
             Expect(ref fails, sb, "capture completed", sawComplete);
 
+            // Garrison enter/exit.
+            var tower = sim.SpawnBuilding(
+                ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.WatchtowerId, 200f, 200f, startActive: true);
+            var grunt = sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.MilitiaId, 205f, 200f);
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new EnterGarrisonCommand
+                {
+                    Issuer = new PlayerId(0),
+                    UnitIds = new[] { grunt.Id },
+                    BuildingId = tower.Id,
+                },
+            });
+            Expect(ref fails, sb, "unit garrisoned", grunt.IsGarrisoned && tower.GarrisonCount == 1);
+            Expect(ref fails, sb, "tower still provides vision", sim.IsVisibleTo(new PlayerId(0), 200f, 200f));
+
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new ExitGarrisonCommand { Issuer = new PlayerId(0), BuildingId = tower.Id },
+            });
+            Expect(ref fails, sb, "unit unloaded", !grunt.IsGarrisoned && tower.GarrisonCount == 0);
+
+            // Night colder than afternoon for weather bias.
+            var env = sim.Environment;
+            env.TimeOfDaySim.SetTime01(0.4f);
+            env.Tick(0.05f);
+            float dayTemp = env.CombinedTemperature();
+            env.TimeOfDaySim.SetTime01(0.9f);
+            env.Tick(0.05f);
+            float nightTemp = env.CombinedTemperature();
+            Expect(ref fails, sb, "night colder bias", nightTemp < dayTemp);
+
             sb.Append(fails == 0 ? "BuildingSystemsSelfTest: OK" : $"BuildingSystemsSelfTest: FAIL ({fails})");
             return sb.ToString();
         }

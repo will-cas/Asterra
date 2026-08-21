@@ -33,6 +33,7 @@ namespace Asterra.Gameplay.Sim
         public TraversalCapability TraversalCapabilities;
         /// <summary>Active Iron Wall (or similar) armor bonus currently applied to this unit.</summary>
         public float CommanderArmorBonus;
+        public float SightRadius = 110f;
 
         /// <summary>Active traversal link id, or -1 when not traversing.</summary>
         public int ActiveTraversalLinkId = -1;
@@ -41,10 +42,17 @@ namespace Asterra.Gameplay.Sim
         /// <summary>True = Start→End, false = End→Start.</summary>
         public bool TraversalForward = true;
 
+        public const int MaxPathPoints = 48;
+        public readonly float[] PathPointsX = new float[MaxPathPoints];
+        public readonly float[] PathPointsZ = new float[MaxPathPoints];
+        public int PathCount;
+        public int PathIndex;
+
         public float? MoveTargetX;
         public float? MoveTargetZ;
         public SimEntityId? AttackTargetId;
         public SimEntityId? GatherTargetId;
+        public SimEntityId? GarrisonBuildingId;
         public ResourceType? CarryType;
         public int CarryAmount;
         public bool ReturningToDeposit;
@@ -78,14 +86,54 @@ namespace Asterra.Gameplay.Sim
             TraversalCapabilities = def.TraversalCapabilities != TraversalCapability.None
                 ? def.TraversalCapabilities
                 : TraversalCapability.Land;
+            SightRadius = def.SightRadius > 1f ? def.SightRadius : 110f;
             X = x;
             Z = z;
+        }
+
+        public bool IsGarrisoned => GarrisonBuildingId.HasValue;
+
+        public void ClearPath()
+        {
+            PathCount = 0;
+            PathIndex = 0;
+        }
+
+        public void SetPath(System.Collections.Generic.IReadOnlyList<(float x, float z)> points)
+        {
+            ClearPath();
+            if (points == null)
+                return;
+            int n = points.Count < MaxPathPoints ? points.Count : MaxPathPoints;
+            for (int i = 0; i < n; i++)
+            {
+                PathPointsX[i] = points[i].x;
+                PathPointsZ[i] = points[i].z;
+            }
+
+            PathCount = n;
+            PathIndex = 0;
+        }
+
+        public bool TryGetPathWaypoint(out float x, out float z)
+        {
+            if (PathIndex >= PathCount)
+            {
+                x = 0f;
+                z = 0f;
+                return false;
+            }
+
+            x = PathPointsX[PathIndex];
+            z = PathPointsZ[PathIndex];
+            return true;
         }
 
         public UnitSnapshot ToSnapshot()
         {
             bool hasCarry = CarryAmount > 0 && CarryType.HasValue;
             bool idle = IsAlive
+                        && !IsGarrisoned
                         && !MoveTargetX.HasValue
                         && !AttackTargetId.HasValue
                         && !GatherTargetId.HasValue
@@ -107,7 +155,9 @@ namespace Asterra.Gameplay.Sim
                 hasCarry ? CarryType.Value : ResourceType.Gold,
                 hasCarry,
                 idle,
-                Stance);
+                Stance,
+                IsGarrisoned,
+                SightRadius);
         }
     }
 
@@ -153,6 +203,9 @@ namespace Asterra.Gameplay.Sim
         public float WallSegmentLength;
         /// <summary>Bit0=N,1=E,2=S,3=W — neighbour wall segments.</summary>
         public byte WallLinks;
+        public const int MaxGarrison = 16;
+        public readonly uint[] GarrisonUnitIds = new uint[MaxGarrison];
+        public int GarrisonCount;
         public bool IsProducing => !string.IsNullOrEmpty(ProductionUnitDefId);
 
         private readonly bool _canProduce;
@@ -265,7 +318,39 @@ namespace Asterra.Gameplay.Sim
                 RallyX.HasValue,
                 buildProgress,
                 SightRadius,
-                Kind);
+                Kind,
+                WallLinks,
+                GarrisonCount,
+                GarrisonCapacity,
+                AllowsGarrison);
+        }
+
+        public bool TryAddGarrison(uint unitId)
+        {
+            if (!AllowsGarrison || GarrisonCount >= GarrisonCapacity || GarrisonCount >= MaxGarrison)
+                return false;
+            for (int i = 0; i < GarrisonCount; i++)
+            {
+                if (GarrisonUnitIds[i] == unitId)
+                    return false;
+            }
+
+            GarrisonUnitIds[GarrisonCount++] = unitId;
+            return true;
+        }
+
+        public bool TryRemoveGarrison(uint unitId)
+        {
+            for (int i = 0; i < GarrisonCount; i++)
+            {
+                if (GarrisonUnitIds[i] != unitId)
+                    continue;
+                GarrisonUnitIds[i] = GarrisonUnitIds[GarrisonCount - 1];
+                GarrisonCount--;
+                return true;
+            }
+
+            return false;
         }
     }
 

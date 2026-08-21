@@ -20,7 +20,7 @@ namespace Asterra.Gameplay.World
         public EnvironmentFeatureIndex Features { get; }
         public PathDirtyTracker PathDirty { get; }
 
-        public DirectSteerPathfindingService Pathfinding { get; }
+        public IPathfindingService Pathfinding { get; }
 
         public WorldEnvironmentSim(
             WorldTerrainGrid grid = null,
@@ -32,7 +32,7 @@ namespace Asterra.Gameplay.World
             TraversalGraph = new TraversalGraph(Grid);
             WeatherSim = new WeatherSystem(weatherSeed, Grid);
             TimeOfDaySim = new TimeOfDaySystem(dayLengthSeconds, startTime01);
-            Pathfinding = new DirectSteerPathfindingService(Grid, TraversalGraph);
+            Pathfinding = new GridAStarPathfindingService(Grid, TraversalGraph);
             Features = new EnvironmentFeatureIndex(Grid);
             Features.Rebuild();
             PathDirty = new PathDirtyTracker();
@@ -43,8 +43,11 @@ namespace Asterra.Gameplay.World
         public void Tick(float deltaSeconds)
         {
             TimeOfDaySim.Tick(deltaSeconds);
+            WeatherSim.ExternalTemperatureBias = TimeOfDaySim.TemperatureBias;
             WeatherSim.Tick(deltaSeconds);
         }
+
+        public float CombinedTemperature() => WeatherSim.EffectiveTemperature;
 
         public float CombinedVisibility() =>
             WeatherSim.EffectiveVisibility() * TimeOfDaySim.VisibilityModifier;

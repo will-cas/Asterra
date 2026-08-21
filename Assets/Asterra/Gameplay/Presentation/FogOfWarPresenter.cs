@@ -64,6 +64,10 @@ namespace Asterra.Gameplay.Presentation
 
         public bool IsWorldVisible(float x, float z)
         {
+            var sim = match != null ? match.World as SkirmishWorldSim : null;
+            if (sim != null && match.Session != null)
+                return sim.IsVisibleTo(match.Session.LocalPlayer, x, z);
+
             for (int i = 0; i < _visionCenters.Count; i++)
             {
                 float dx = x - _visionCenters[i].x;
@@ -85,10 +89,11 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < units.Count; i++)
             {
                 var u = units[i];
-                if (!u.IsAlive || u.Owner != local)
+                if (!u.IsAlive || u.Owner != local || u.IsGarrisoned)
                     continue;
+                float sight = u.SightRadius > 1f ? u.SightRadius : unitSightRadius;
                 _visionCenters.Add(new Vector2(u.X, u.Z));
-                _visionRadii.Add(unitSightRadius * VisionScale());
+                _visionRadii.Add(sight * VisionScale());
             }
 
             var buildings = match.World.Buildings;

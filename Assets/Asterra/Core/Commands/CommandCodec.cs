@@ -154,6 +154,15 @@ namespace Asterra.Core
                 case ActivateCommanderAbilityCommand:
                     writer.Write((byte)CommandType.ActivateCommanderAbility);
                     break;
+                case EnterGarrisonCommand enter:
+                    writer.Write((byte)CommandType.EnterGarrison);
+                    WriteEntityIds(writer, enter.UnitIds);
+                    writer.Write(enter.BuildingId.Value);
+                    break;
+                case ExitGarrisonCommand exit:
+                    writer.Write((byte)CommandType.ExitGarrison);
+                    writer.Write(exit.BuildingId.Value);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -263,6 +272,19 @@ namespace Asterra.Core
                     break;
                 case CommandType.ActivateCommanderAbility:
                     command = new ActivateCommanderAbilityCommand();
+                    break;
+                case CommandType.EnterGarrison:
+                    command = new EnterGarrisonCommand
+                    {
+                        UnitIds = ReadEntityIds(reader),
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.ExitGarrison:
+                    command = new ExitGarrisonCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                    };
                     break;
                 default:
                     throw new InvalidDataException($"Unknown command type byte: {(byte)type}");

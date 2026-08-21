@@ -90,7 +90,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < units.Count; i++)
             {
                 var snap = units[i];
-                if (!snap.IsAlive)
+                if (!snap.IsAlive || snap.IsGarrisoned)
                     continue;
                 alive.Add(snap.Id.Value);
                 if (!_unitViews.TryGetValue(snap.Id.Value, out var view))
@@ -137,6 +137,8 @@ namespace Asterra.Gameplay
 
                 view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
                 view.SetHealth(snap.Health, snap.MaxHealth);
+                if (snap.Kind == BuildingKind.Wall || snap.Kind == BuildingKind.Gate)
+                    view.ApplyWallLinks(snap.WallLinks);
             }
 
             RemoveMissing(_buildingViews, alive);
