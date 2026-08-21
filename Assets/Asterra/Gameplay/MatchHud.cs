@@ -145,7 +145,7 @@ namespace Asterra.Gameplay
                         DrawProductionQueue(b, panelY - 70f);
 
                     if (b.AllowsGarrison && b.GarrisonCount > 0
-                        && GUI.Button(new Rect(panelX, panelY - 100f, 160f, 28f), $"Unload ({b.GarrisonCount})"))
+                        && GUI.Button(new Rect(12f, panelY - 100f, 160f, 28f), $"Unload ({b.GarrisonCount})"))
                     {
                         if (match.Commands != null)
                         {

@@ -55,8 +55,7 @@ namespace Asterra.Gameplay.Presentation
 
         private float VisionScale()
         {
-            // SkirmishWorldSim is in Asterra.Gameplay (parent namespace), not Asterra.Gameplay.Sim.
-            var sim = match.World as SkirmishWorldSim;
+            var sim = match.World as global::Asterra.Gameplay.SkirmishWorldSim;
             if (sim == null)
                 return 1f;
             return Mathf.Clamp(sim.Environment.CombinedVisibility(), 0.45f, 1.15f);
@@ -64,7 +63,7 @@ namespace Asterra.Gameplay.Presentation
 
         public bool IsWorldVisible(float x, float z)
         {
-            var sim = match != null ? match.World as SkirmishWorldSim : null;
+            var sim = match != null ? match.World as global::Asterra.Gameplay.SkirmishWorldSim : null;
             if (sim != null && match.Session != null)
                 return sim.IsVisibleTo(match.Session.LocalPlayer, x, z);
 
