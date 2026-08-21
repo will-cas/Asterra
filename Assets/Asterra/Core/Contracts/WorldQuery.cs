@@ -20,6 +20,17 @@ namespace Asterra.Core
         public readonly UnitStance Stance;
         public readonly bool IsGarrisoned;
         public readonly float SightRadius;
+        /// <summary>First applied equipment upgrade id (null if none).</summary>
+        public readonly string AppliedEquipment0;
+        public readonly string AppliedEquipment1;
+        public readonly byte EquipmentVisualFlags;
+        public readonly bool HasMoveTarget;
+        public readonly float MoveTargetX;
+        public readonly float MoveTargetZ;
+        public readonly bool HasAttackTarget;
+        public readonly uint AttackTargetId;
+        public readonly bool AttackMoving;
+        public readonly bool Patrolling;
 
         public UnitSnapshot(
             SimEntityId id,
@@ -37,7 +48,17 @@ namespace Asterra.Core
             bool isIdle,
             UnitStance stance,
             bool isGarrisoned = false,
-            float sightRadius = 110f)
+            float sightRadius = 110f,
+            string appliedEquipment0 = null,
+            string appliedEquipment1 = null,
+            byte equipmentVisualFlags = 0,
+            bool hasMoveTarget = false,
+            float moveTargetX = 0f,
+            float moveTargetZ = 0f,
+            bool hasAttackTarget = false,
+            uint attackTargetId = 0,
+            bool attackMoving = false,
+            bool patrolling = false)
         {
             Id = id;
             Owner = owner;
@@ -55,6 +76,23 @@ namespace Asterra.Core
             Stance = stance;
             IsGarrisoned = isGarrisoned;
             SightRadius = sightRadius;
+            AppliedEquipment0 = appliedEquipment0;
+            AppliedEquipment1 = appliedEquipment1;
+            EquipmentVisualFlags = equipmentVisualFlags;
+            HasMoveTarget = hasMoveTarget;
+            MoveTargetX = moveTargetX;
+            MoveTargetZ = moveTargetZ;
+            HasAttackTarget = hasAttackTarget;
+            AttackTargetId = attackTargetId;
+            AttackMoving = attackMoving;
+            Patrolling = patrolling;
+        }
+
+        public bool HasAppliedEquipment(string upgradeId)
+        {
+            if (string.IsNullOrEmpty(upgradeId))
+                return false;
+            return AppliedEquipment0 == upgradeId || AppliedEquipment1 == upgradeId;
         }
     }
 
@@ -87,6 +125,11 @@ namespace Asterra.Core
         public readonly int GarrisonCount;
         public readonly int GarrisonCapacity;
         public readonly bool AllowsGarrison;
+        public readonly int AttachmentSlotCount;
+        public readonly byte AttachmentOccupiedMask;
+        public readonly string ResearchUpgradeDefId;
+        public readonly float ResearchProgress;
+        public readonly float YawDegrees;
 
         public BuildingSnapshot(
             SimEntityId id,
@@ -115,7 +158,12 @@ namespace Asterra.Core
             byte wallLinks = 0,
             int garrisonCount = 0,
             int garrisonCapacity = 0,
-            bool allowsGarrison = false)
+            bool allowsGarrison = false,
+            int attachmentSlotCount = 0,
+            byte attachmentOccupiedMask = 0,
+            string researchUpgradeDefId = null,
+            float researchProgress = 0f,
+            float yawDegrees = 0f)
         {
             Id = id;
             Owner = owner;
@@ -144,6 +192,11 @@ namespace Asterra.Core
             GarrisonCount = garrisonCount;
             GarrisonCapacity = garrisonCapacity;
             AllowsGarrison = allowsGarrison;
+            AttachmentSlotCount = attachmentSlotCount;
+            AttachmentOccupiedMask = attachmentOccupiedMask;
+            ResearchUpgradeDefId = researchUpgradeDefId;
+            ResearchProgress = researchProgress;
+            YawDegrees = yawDegrees;
         }
     }
 
@@ -258,7 +311,10 @@ namespace Asterra.Core
         IReadOnlyList<ProjectileSnapshot> Projectiles { get; }
         IReadOnlyList<DestructibleSnapshot> Destructibles { get; }
         bool HasUpgrade(PlayerId player, string upgradeDefId);
-        /// <summary>Commander ability timers. Returns false if the player has no ability state.</summary>
+        bool HasPower(PlayerId player, string powerDefId);
+        /// <summary>Commander ability timers for a specific power.</summary>
+        bool TryGetCommanderAbilityStatus(PlayerId player, string powerDefId, out float cooldownRemaining, out float buffRemaining);
+        /// <summary>Legacy: status for the faction primary power (PowerIds[0]).</summary>
         bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining);
     }
 

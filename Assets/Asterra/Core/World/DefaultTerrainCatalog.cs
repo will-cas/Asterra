@@ -26,6 +26,12 @@ namespace Asterra.Core.World
         public const ushort IceThin = 15;
         public const ushort Trench = 16;
         public const ushort NoEntry = 17;
+        /// <summary>Fordable shallows — land units can cross slowly.</summary>
+        public const ushort WaterShallow = 18;
+        /// <summary>Deep channel — boats only; land blocked.</summary>
+        public const ushort WaterDeep = 19;
+        /// <summary>Fast current — boats only, higher move speed.</summary>
+        public const ushort WaterFast = 20;
 
         public static TerrainDefData[] CreateDefs()
         {
@@ -49,6 +55,10 @@ namespace Asterra.Core.World
                 Def("terrain_ice_thin", "Thin Ice", TerrainCategory.Ice, 0.8f, 1.35f, TraversalCapability.Land, sound: 1.25f, combat: 0.9f, destructible: true, drainage: 0.15f),
                 Def("terrain_trench", "Trench", TerrainCategory.Trench, 0.7f, 1.3f, TraversalCapability.Land, visibility: 0.75f, cover: 0.4f, los: 0.35f, combat: 1.1f, allowsBuild: false),
                 TerrainDefData.CreateNoEntry("terrain_no_entry"),
+                // Append-only river variants (indices 18–20).
+                Def("terrain_water_shallow", "Shallow River", TerrainCategory.WaterRiver, 0.48f, 2.2f, TraversalCapability.Land, allowsBuild: false, allowsGather: false, drainage: 0.6f, waterlog: 1.6f),
+                Def("terrain_water_deep", "Deep River", TerrainCategory.WaterRiver, 0.9f, 1.4f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
+                Def("terrain_water_fast", "Fast River", TerrainCategory.WaterRiver, 1.35f, 1.1f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
             };
         }
 

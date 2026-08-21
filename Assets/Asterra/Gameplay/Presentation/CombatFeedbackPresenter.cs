@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Gameplay.Audio;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Presentation
@@ -49,30 +50,88 @@ namespace Asterra.Gameplay.Presentation
                                 var view = FindView(views, ev.TargetId);
                                 if (view != null)
                                     view.SetHitFlash();
+                                AsterraAudio.Play(AsterraSfx.Hit, 0.55f);
                                 break;
                             }
                             case CombatEventKind.Death:
-                                SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.2f, 0.15f, 0.9f), 6f, deathBurstSeconds);
+                            {
+                                var deathView = FindView(views, ev.TargetId);
+                                if (deathView != null && !deathView.IsUnit)
+                                    deathView.BeginCollapse();
+                                SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.2f, 0.15f, 0.9f),
+                                    ev.IsBuilding ? 9f : 6f, deathBurstSeconds);
+                                AsterraAudio.Play(AsterraSfx.Death, 0.8f);
                                 break;
+                            }
                             case CombatEventKind.WorldDestroyed:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.55f, 0.35f, 0.15f, 0.95f), 7f, deathBurstSeconds);
+                                AsterraAudio.Play(AsterraSfx.Death, 0.7f);
                                 break;
                             case CombatEventKind.CaptureStarted:
                             case CombatEventKind.CaptureContested:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.85f, 0.2f, 0.9f), 5f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.Capture, 0.5f);
                                 break;
                             case CombatEventKind.CaptureCompleted:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.3f, 0.85f, 1f, 0.95f), 7f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.Capture, 0.85f);
                                 break;
                             case CombatEventKind.CaptureLost:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.9f, 0.35f, 0.2f, 0.9f), 6f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.Invalid, 0.6f);
                                 break;
                             case CombatEventKind.Deposit:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.25f, 0.95f, 0.4f, 0.9f), 4.5f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.Deposit, 0.65f);
                                 break;
                             case CombatEventKind.BuildComplete:
+                            {
+                                var built = FindView(views, ev.TargetId);
+                                if (built != null && !built.IsUnit)
+                                    built.PlayBuildCompleteFlash();
                                 SpawnBurst(ev.X, ev.Z, new Color(0.2f, 0.95f, 0.95f, 0.95f), 8f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.BuildComplete, 0.9f);
                                 break;
+                            }
+                            case CombatEventKind.ResearchComplete:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.55f, 0.75f, 1f, 0.95f), 7f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.OrderResearch, 0.9f);
+                                MatchFeedback.Show("Research complete");
+                                break;
+                            case CombatEventKind.TrainComplete:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.4f, 0.9f, 0.55f, 0.9f), 5f, pulseSeconds);
+                                AsterraAudio.Play(AsterraSfx.OrderTrain, 0.55f);
+                                break;
+                            case CombatEventKind.PowerActivated:
+                            {
+                                SpawnBurst(ev.X, ev.Z, new Color(0.85f, 0.55f, 1f, 0.95f), 12f, pulseSeconds * 1.2f);
+                                AsterraAudio.Play(AsterraSfx.OrderResearch, 1f);
+                                MatchFeedback.Show("Commander power active!");
+                                for (int v = 0; v < views.Length; v++)
+                                {
+                                    var view = views[v];
+                                    if (view == null || !view.IsUnit || !view.IsRevealed)
+                                        continue;
+                                    if (ev.IssuerPlayer != 255 && view.Owner.Value != ev.IssuerPlayer)
+                                        continue;
+                                    view.SetPowerAura(10f);
+                                }
+
+                                break;
+                            }
+                            case CombatEventKind.UpgradeApplied:
+                            {
+                                var upgraded = FindView(views, ev.TargetId);
+                                if (upgraded != null)
+                                {
+                                    upgraded.SetHitFlash();
+                                    upgraded.SetPowerAura(1.2f);
+                                }
+
+                                SpawnBurst(ev.X, ev.Z, new Color(1f, 0.55f, 0.15f, 0.95f), 6f, pulseSeconds);
+                                MatchFeedback.Show("Equipment equipped");
+                                break;
+                            }
                             default:
                                 throw new System.ArgumentOutOfRangeException(nameof(ev.Kind), ev.Kind, null);
                         }

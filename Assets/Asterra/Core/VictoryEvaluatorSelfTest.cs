@@ -60,6 +60,15 @@ namespace Asterra.Core
 
             public bool HasUpgrade(PlayerId player, string upgradeDefId) => false;
 
+            public bool HasPower(PlayerId player, string powerDefId) => false;
+
+            public bool TryGetCommanderAbilityStatus(PlayerId player, string powerDefId, out float cooldownRemaining, out float buffRemaining)
+            {
+                cooldownRemaining = 0f;
+                buffRemaining = 0f;
+                return false;
+            }
+
             public bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining)
             {
                 cooldownRemaining = 0f;

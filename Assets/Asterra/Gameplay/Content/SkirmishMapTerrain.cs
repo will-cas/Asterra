@@ -67,7 +67,17 @@ namespace Asterra.Gameplay.Content
         /// </summary>
         private static void PaintRiverCrossing(WorldTerrainGrid grid)
         {
-            grid.FillWorldRect(-450f, -28f, 450f, 28f, DefaultTerrainCatalog.WaterRiver);
+            // Outer banks stay beach; mid-channel is deep (boats only).
+            grid.FillWorldRect(-450f, -28f, 450f, 28f, DefaultTerrainCatalog.WaterDeep);
+
+            // Fast current stretches (boats speed through).
+            grid.FillWorldRect(-280f, -18f, -200f, 18f, DefaultTerrainCatalog.WaterFast);
+            grid.FillWorldRect(60f, -18f, 140f, 18f, DefaultTerrainCatalog.WaterFast);
+
+            // Shallow fords — land troops can wade slowly.
+            grid.FillWorldRect(-35f, -28f, 35f, 28f, DefaultTerrainCatalog.WaterShallow);
+            grid.FillWorldRect(-150f, -28f, -110f, 28f, DefaultTerrainCatalog.WaterShallow);
+            grid.FillWorldRect(110f, -28f, 150f, 28f, DefaultTerrainCatalog.WaterShallow);
 
             grid.FillWorldRect(-450f, -40f, -380f, 40f, DefaultTerrainCatalog.WaterOcean);
             grid.FillWorldRect(380f, -40f, 450f, 40f, DefaultTerrainCatalog.WaterOcean);
@@ -78,10 +88,6 @@ namespace Asterra.Gameplay.Content
 
             grid.FillWorldRect(-380f, -48f, 380f, -28f, DefaultTerrainCatalog.Beach);
             grid.FillWorldRect(-380f, 28f, 380f, 48f, DefaultTerrainCatalog.Beach);
-
-            grid.FillWorldRect(-35f, -28f, 35f, 28f, DefaultTerrainCatalog.Beach);
-            grid.FillWorldRect(-150f, -28f, -110f, 28f, DefaultTerrainCatalog.Beach);
-            grid.FillWorldRect(110f, -28f, 150f, 28f, DefaultTerrainCatalog.Beach);
 
             grid.FillWorldRect(175f, -15f, 205f, 15f, DefaultTerrainCatalog.IceThick);
 
@@ -94,11 +100,11 @@ namespace Asterra.Gameplay.Content
             grid.FillWorldRect(-320f, -260f, -260f, -180f, DefaultTerrainCatalog.Hill);
             grid.FillWorldRect(260f, 180f, 320f, 260f, DefaultTerrainCatalog.Hill);
 
-            EnsureLandDisk(grid, 0f, 0f, 18f, DefaultTerrainCatalog.Beach);
-            EnsureLandDisk(grid, -120f, 8f, 10f, DefaultTerrainCatalog.Beach);
-            EnsureLandDisk(grid, -40f, -12f, 10f, DefaultTerrainCatalog.Beach);
-            EnsureLandDisk(grid, 50f, 10f, 10f, DefaultTerrainCatalog.Beach);
-            EnsureLandDisk(grid, 130f, -8f, 10f, DefaultTerrainCatalog.Beach);
+            EnsureLandDisk(grid, 0f, 0f, 18f, DefaultTerrainCatalog.WaterShallow);
+            EnsureLandDisk(grid, -120f, 8f, 10f, DefaultTerrainCatalog.WaterShallow);
+            EnsureLandDisk(grid, -40f, -12f, 10f, DefaultTerrainCatalog.WaterShallow);
+            EnsureLandDisk(grid, 50f, 10f, 10f, DefaultTerrainCatalog.WaterShallow);
+            EnsureLandDisk(grid, 130f, -8f, 10f, DefaultTerrainCatalog.WaterShallow);
             EnsureLandDisk(grid, -250f, -160f, 12f);
             EnsureLandDisk(grid, 250f, 160f, 12f);
             EnsureLandDisk(grid, -300f, -220f, 20f, DefaultTerrainCatalog.GrassBare);

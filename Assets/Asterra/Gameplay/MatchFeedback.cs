@@ -1,4 +1,5 @@
 using UnityEngine;
+using Asterra.Gameplay.Audio;
 
 namespace Asterra.Gameplay
 {
@@ -11,6 +12,7 @@ namespace Asterra.Gameplay
 
         public string CurrentMessage { get; private set; } = string.Empty;
         public float ExpireAt { get; private set; }
+        public Color Accent { get; private set; } = new Color(0.92f, 0.88f, 0.55f, 1f);
 
         public bool HasActiveMessage =>
             !string.IsNullOrEmpty(CurrentMessage) && Time.unscaledTime < ExpireAt;
@@ -40,6 +42,7 @@ namespace Asterra.Gameplay
             }
 
             _instance = this;
+            _ = AsterraAudio.Instance;
         }
 
         private void OnDestroy()
@@ -48,16 +51,20 @@ namespace Asterra.Gameplay
                 _instance = null;
         }
 
-        public static void Show(string message, float seconds = -1f)
-        {
-            Instance.ShowInternal(message, seconds);
-        }
+        public static void Show(string message, float seconds = -1f) =>
+            Instance.ShowInternal(message, seconds, null);
 
-        private void ShowInternal(string message, float seconds)
+        public static void Show(string message, AsterraSfx sfx, float seconds = -1f) =>
+            Instance.ShowInternal(message, seconds, sfx);
+
+        private void ShowInternal(string message, float seconds, AsterraSfx? sfx)
         {
             CurrentMessage = message ?? string.Empty;
             float duration = seconds > 0f ? seconds : defaultSeconds;
             ExpireAt = Time.unscaledTime + duration;
+            Accent = new Color(0.95f, 0.9f, 0.55f, 1f);
+            if (sfx.HasValue)
+                AsterraAudio.Play(sfx.Value);
         }
 
         private void Update()

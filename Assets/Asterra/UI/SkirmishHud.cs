@@ -46,6 +46,10 @@ namespace Asterra.UI
 
         private void OnGUI()
         {
+            // MatchHud owns in-match chrome; keep this component for status strings only.
+            if (FindFirstObjectByType<MatchHud>() != null)
+                return;
+
             if (match == null)
                 return;
 

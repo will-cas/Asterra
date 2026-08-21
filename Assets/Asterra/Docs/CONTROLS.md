@@ -7,6 +7,7 @@ Local offline / skirmish input (keyboard + mouse).
 - LMB click / drag: select units (Shift/Cmd additive)
 - RMB: move / attack / gather / set rally (context)
 - Middle-mouse / edge pan via camera rig
+- WASD + arrow keys also pan (A/S suppressed while attack-move / place / patrol armed)
 - Minimap click: pan camera
 - Minimap cyan view box + yellow crosshair: current camera focus / approximate view
 
@@ -23,7 +24,8 @@ Local offline / skirmish input (keyboard + mouse).
 | B | Place producer (barracks / grove / forge) — requires builder selected |
 | N | Place watchtower — requires builder selected |
 | M | Place palisade wall — requires builder selected |
-| O | Place outpost (gold income + vision) — requires builder selected |
+| O | Place gold mine (passive gold income + vision) — requires builder selected |
+| Q / E / [ / ] / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
 | Esc | Cancel armed order / place mode |
 | Shift while placing | Keep place mode after one building |
 | . or I | Select idle workers |
@@ -31,7 +33,7 @@ Local offline / skirmish input (keyboard + mouse).
 | X | Cancel production (when building is producing/queued) |
 | C | Capture nearest territory order |
 | U | Buy faction upgrade |
-| Q | Iron Wall (Aurelian / Lucien Vale) |
+| Q | Iron Wall (Aurelian / Lucien Vale) — outside place mode |
 | R | Reselect all owned units |
 
 ## Control groups
@@ -55,7 +57,7 @@ The bottom panel only shows actions valid for the current selection:
 | Context | What appears |
 | --- | --- |
 | Always | Idle workers button |
-| Builder(s) selected (or place mode) | Barracks / Tower / Wall / Outpost (or Cancel Build) |
+| Builder(s) selected (or place mode) | Barracks / Tower / Wall / Gold Mine (or Cancel Build) |
 | Combat unit(s) selected | Stop, Aggro / Defend / Hold |
 | Keep selected | Builder train |
 | Producer selected | Soldier / Archer / Cavalry / Siege train |

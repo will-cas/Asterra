@@ -64,7 +64,7 @@ namespace Asterra.Gameplay
             var enemy = new PlayerId(1);
             var playerFaction = FactionDefaultContent.IronCovenant;
             var enemyFaction = FactionDefaultContent.VerdantCourt;
-            wallet.Seed(player, ResourceType.Gold, 500);
+            wallet.Seed(player, ResourceType.Gold, 900);
             wallet.Seed(player, ResourceType.Timber, 300);
             wallet.Seed(enemy, ResourceType.Gold, 500);
             wallet.Seed(enemy, ResourceType.Timber, 300);
@@ -108,9 +108,23 @@ namespace Asterra.Gameplay
                 Player = player,
                 Commands = new GameCommand[]
                 {
+                    new UnlockPowerCommand
+                    {
+                        Issuer = player,
+                        PowerDefId = playerFaction.PowerId,
+                    },
+                },
+            });
+            bus.EnqueueRemote(new CommandFrame
+            {
+                TargetTick = new Tick(6),
+                Player = player,
+                Commands = new GameCommand[]
+                {
                     new ActivateCommanderAbilityCommand
                     {
                         Issuer = player,
+                        PowerDefId = playerFaction.PowerId,
                     },
                 },
             });
@@ -137,6 +151,20 @@ namespace Asterra.Gameplay
                     {
                         Issuer = player,
                         UpgradeDefId = playerFaction.BasicUpgradeId,
+                    },
+                },
+            });
+            bus.EnqueueRemote(new CommandFrame
+            {
+                TargetTick = new Tick(210),
+                Player = player,
+                Commands = new GameCommand[]
+                {
+                    new ApplyUnitUpgradeCommand
+                    {
+                        Issuer = player,
+                        UpgradeDefId = playerFaction.BasicUpgradeId,
+                        UnitIds = owned.ToArray(),
                     },
                 },
             });

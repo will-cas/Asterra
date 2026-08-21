@@ -138,6 +138,14 @@ namespace Asterra.Core.World
             return false;
         }
 
+        public bool TryGetDefIndex(string terrainDefId, out int index)
+        {
+            if (terrainDefId != null && _defIndexById.TryGetValue(terrainDefId, out index))
+                return true;
+            index = -1;
+            return false;
+        }
+
         public TerrainDefData GetDef(ushort defIndex)
         {
             if (defIndex >= _defs.Length)

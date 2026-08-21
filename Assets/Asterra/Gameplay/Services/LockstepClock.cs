@@ -16,5 +16,7 @@ namespace Asterra.Gameplay
         }
 
         public void Advance() => CurrentTick = CurrentTick.Next();
+
+        public void Seek(Tick tick) => CurrentTick = tick;
     }
 }

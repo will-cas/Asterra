@@ -311,23 +311,27 @@ namespace Asterra.Core.World
 
         private void TickEnvironment(float dt)
         {
-            PrecipitationRate = 0f;
-            SnowfallRate = 0f;
-            FogDensity = 0f;
-
-            var active = _transitioning ? BlendDefsVisual() : _currentDef;
-            float intensity = _displayIntensity;
-            if (active.Kind == WeatherKind.Rain || active.Kind == WeatherKind.Storm)
-                PrecipitationRate = active.PrecipitationRate * intensity;
-            if (active.Kind == WeatherKind.Snow)
-                SnowfallRate = active.SnowfallRate * intensity;
-            if (active.Kind == WeatherKind.Fog)
-                FogDensity = intensity;
-            else if (active.Kind == WeatherKind.Storm || active.Kind == WeatherKind.Rain)
-                FogDensity = intensity * 0.15f;
+            if (_transitioning)
+            {
+                float t = _transitionDuration <= 0.001f ? 1f : Math.Min(1f, _transitionElapsed / _transitionDuration);
+                float blend = t * t * (3f - 2f * t);
+                float fromInt = _currentDef.DefaultIntensity;
+                float toInt = _targetDef.DefaultIntensity;
+                PrecipitationRate = Lerp(PrecipOf(_currentDef) * fromInt, PrecipOf(_targetDef) * toInt, blend);
+                SnowfallRate = Lerp(SnowOf(_currentDef) * fromInt, SnowOf(_targetDef) * toInt, blend);
+                FogDensity = Lerp(FogOf(_currentDef) * fromInt, FogOf(_targetDef) * toInt, blend);
+            }
+            else
+            {
+                PrecipitationRate = PrecipOf(_currentDef) * _displayIntensity;
+                SnowfallRate = SnowOf(_currentDef) * _displayIntensity;
+                FogDensity = FogOf(_currentDef) * _displayIntensity;
+            }
 
             if (_grid == null)
                 return;
+
+            var active = _transitioning ? BlendDefsVisual() : _currentDef;
 
             _envAcc += dt;
             if (_envAcc < EnvInterval)
@@ -438,6 +442,29 @@ namespace Asterra.Core.World
                 if (changed)
                     _grid.SetCell(cx, cz, cell);
             }
+        }
+
+        private static float PrecipOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Rain || def.Kind == WeatherKind.Storm)
+                return def.PrecipitationRate;
+            return 0f;
+        }
+
+        private static float SnowOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Snow)
+                return def.SnowfallRate;
+            return 0f;
+        }
+
+        private static float FogOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Fog)
+                return 1f;
+            if (def.Kind == WeatherKind.Storm || def.Kind == WeatherKind.Rain)
+                return 0.15f;
+            return 0f;
         }
 
         private WeatherDefData BlendDefsVisual()

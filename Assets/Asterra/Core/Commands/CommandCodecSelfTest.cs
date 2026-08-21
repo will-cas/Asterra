@@ -55,6 +55,7 @@ namespace Asterra.Core
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
                         UpgradeDefId = "upgrade_militia_training",
+                        BuildingId = new SimEntityId(7),
                     },
                     new SetStanceCommand
                     {
@@ -110,6 +111,15 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
+                        PowerDefId = "ability_lucien_iron_wall",
+                    },
+                    new AttachBuildingCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        ParentBuildingId = new SimEntityId(7),
+                        SlotIndex = 1,
+                        BuildingDefId = "building_keep_turret",
                     },
                 },
             };

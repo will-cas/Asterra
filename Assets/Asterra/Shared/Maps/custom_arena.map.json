@@ -1,0 +1,113 @@
+{
+    "id": "custom_arena",
+    "displayName": "Custom Arena",
+    "formatVersion": 1,
+    "playableHalfExtent": 450.0,
+    "cellSize": 10.0,
+    "defaultTerrain": 1,
+    "cameraFocusX": -300.0,
+    "cameraFocusZ": 0.0,
+    "terrain": [
+        {
+            "shape": "disk",
+            "minX": 0.0,
+            "minZ": 0.0,
+            "maxX": 0.0,
+            "maxZ": 0.0,
+            "x": -320.0,
+            "z": 0.0,
+            "radius": 40.0,
+            "terrainIndex": 0,
+            "terrainId": ""
+        },
+        {
+            "shape": "disk",
+            "minX": 0.0,
+            "minZ": 0.0,
+            "maxX": 0.0,
+            "maxZ": 0.0,
+            "x": 320.0,
+            "z": 0.0,
+            "radius": 40.0,
+            "terrainIndex": 0,
+            "terrainId": ""
+        },
+        {
+            "shape": "rect",
+            "minX": -80.0,
+            "minZ": -80.0,
+            "maxX": 80.0,
+            "maxZ": 80.0,
+            "x": 0.0,
+            "z": 0.0,
+            "radius": 10.0,
+            "terrainIndex": 1,
+            "terrainId": ""
+        },
+        {
+            "shape": "rect",
+            "minX": -200.0,
+            "minZ": 100.0,
+            "maxX": 200.0,
+            "maxZ": 180.0,
+            "x": 0.0,
+            "z": 0.0,
+            "radius": 10.0,
+            "terrainIndex": 2,
+            "terrainId": ""
+        },
+        {
+            "shape": "rect",
+            "minX": -200.0,
+            "minZ": -180.0,
+            "maxX": 200.0,
+            "maxZ": -100.0,
+            "x": 0.0,
+            "z": 0.0,
+            "radius": 10.0,
+            "terrainIndex": 5,
+            "terrainId": ""
+        },
+        {
+            "shape": "rect",
+            "minX": -40.0,
+            "minZ": -20.0,
+            "maxX": 40.0,
+            "maxZ": 20.0,
+            "x": 0.0,
+            "z": 0.0,
+            "radius": 10.0,
+            "terrainIndex": 9,
+            "terrainId": ""
+        }
+    ],
+    "blocked": [],
+    "keeps": [
+        { "seatIndex": 0, "x": -320.0, "z": 0.0 },
+        { "seatIndex": 1, "x": 320.0, "z": 0.0 }
+    ],
+    "units": [
+        { "seatIndex": 0, "role": "basic", "x": -290.0, "z": -15.0 },
+        { "seatIndex": 0, "role": "basic", "x": -290.0, "z": 15.0 },
+        { "seatIndex": 0, "role": "builder", "x": -270.0, "z": 0.0 },
+        { "seatIndex": 1, "role": "basic", "x": 290.0, "z": -15.0 },
+        { "seatIndex": 1, "role": "basic", "x": 290.0, "z": 15.0 },
+        { "seatIndex": 1, "role": "builder", "x": 270.0, "z": 0.0 }
+    ],
+    "buildings": [],
+    "resources": [
+        { "type": "gold", "amount": 2200, "x": -80.0, "z": 60.0 },
+        { "type": "timber", "amount": 1800, "x": 80.0, "z": -60.0 },
+        { "type": "gold", "amount": 2400, "x": -260.0, "z": 50.0 },
+        { "type": "timber", "amount": 2000, "x": -260.0, "z": -50.0 },
+        { "type": "gold", "amount": 2400, "x": 260.0, "z": -50.0 },
+        { "type": "timber", "amount": 2000, "x": 260.0, "z": 50.0 }
+    ],
+    "territories": [
+        { "x": 0.0, "z": 0.0, "radius": 40.0, "goldPerSecond": 8 }
+    ],
+    "destructibles": [
+        { "catalogId": "tree", "x": -100.0, "z": -120.0 },
+        { "catalogId": "rock", "x": 90.0, "z": 110.0 }
+    ]
+}

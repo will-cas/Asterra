@@ -14,6 +14,9 @@ namespace Asterra.Gameplay.Presentation
         private ParticleSystem _snow;
         private Light _flashLight;
         private float _flashRemaining;
+        private float _rainRate;
+        private float _snowRate;
+        [SerializeField] private float precipEaseSeconds = 3.5f;
 
         private void Awake()
         {
@@ -36,17 +39,18 @@ namespace Asterra.Gameplay.Presentation
             var weather = sim.Environment.WeatherSim;
             var w = weather.Current;
 
-            float rainRate = 0f;
-            float snowRate = 0f;
-            if (w.Kind == WeatherKind.Rain)
-                rainRate = 40f + w.Intensity * 90f;
-            else if (w.Kind == WeatherKind.Storm)
-                rainRate = 80f + w.Intensity * 140f;
-            else if (w.Kind == WeatherKind.Snow)
-                snowRate = 25f + w.Intensity * 70f;
+            float targetRain = Mathf.Max(0f, weather.PrecipitationRate) * 120f;
+            float targetSnow = Mathf.Max(0f, weather.SnowfallRate) * 90f;
+            // Storms punch rain a bit harder once precip is up.
+            if (w.Kind == WeatherKind.Storm)
+                targetRain = Mathf.Max(targetRain, (80f + w.Intensity * 140f) * Mathf.Clamp01(weather.PrecipitationRate));
 
-            SetEmission(_rain, rainRate);
-            SetEmission(_snow, snowRate);
+            float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.05f, precipEaseSeconds * 0.4f));
+            _rainRate = Mathf.Lerp(_rainRate, targetRain, ease);
+            _snowRate = Mathf.Lerp(_snowRate, targetSnow, ease);
+
+            SetEmission(_rain, _rainRate);
+            SetEmission(_snow, _snowRate);
             FollowCamera(_rain);
             FollowCamera(_snow);
 

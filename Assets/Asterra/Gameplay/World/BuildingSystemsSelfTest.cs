@@ -94,6 +94,70 @@ namespace Asterra.Gameplay
             float nightTemp = env.CombinedTemperature();
             Expect(ref fails, sb, "night colder bias", nightTemp < dayTemp);
 
+            // Foundations can be placed without a builder nearby.
+            int buildingsBefore = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new PlaceBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    X = -120f,
+                    Z = 120f,
+                },
+            });
+            Expect(ref fails, sb, "foundation placed without nearby builder", sim.Buildings.Count == buildingsBefore + 1);
+            bool sawConstructing = false;
+            for (int i = 0; i < sim.Buildings.Count; i++)
+            {
+                var snap = sim.Buildings[i];
+                if (snap.DefinitionId == FactionDefaultContent.BarracksId
+                    && snap.State == BuildingState.Constructing
+                    && Abs(snap.X + 120f) < 0.5f)
+                {
+                    sawConstructing = true;
+                    break;
+                }
+            }
+
+            Expect(ref fails, sb, "placed building starts constructing", sawConstructing);
+
+            // Construction progress requires a builder on site.
+            float siteX = -40f;
+            float siteZ = 40f;
+            var foundation = sim.SpawnBuilding(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.BarracksId,
+                siteX,
+                siteZ,
+                startActive: false);
+            float remainingBefore = foundation.BuildSecondsRemaining;
+            for (int i = 0; i < 20; i++)
+                sim.Tick(0.25f);
+            Expect(
+                ref fails,
+                sb,
+                "no progress without builder on site",
+                Abs(foundation.BuildSecondsRemaining - remainingBefore) < 0.001f);
+
+            sim.SpawnUnit(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.IronBuilderId,
+                siteX + 2f,
+                siteZ + 2f);
+            float remainingAtArrive = foundation.BuildSecondsRemaining;
+            for (int i = 0; i < 8; i++)
+                sim.Tick(0.25f);
+            Expect(
+                ref fails,
+                sb,
+                "progress with builder on site",
+                foundation.BuildSecondsRemaining < remainingAtArrive - 0.5f);
+
             sb.Append(fails == 0 ? "BuildingSystemsSelfTest: OK" : $"BuildingSystemsSelfTest: FAIL ({fails})");
             return sb.ToString();
         }

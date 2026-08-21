@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Asterra.Core;
 using Asterra.Core.World;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -21,6 +23,7 @@ namespace Asterra.Gameplay.Presentation
         private WorldTerrainGrid _builtForGrid;
         private int _builtCellFingerprint = int.MinValue;
         private Material _terrainMat;
+        private Material _waterMat;
         private Material _trunkMat;
         private Material _canopyMat;
         private Material _rockMat;
@@ -28,6 +31,12 @@ namespace Asterra.Gameplay.Presentation
         private Material _reedMat;
         private Material _crystalMat;
         private Texture2D _detailTex;
+
+        /// <summary>
+        /// Units render at <see cref="EntityView.UnitVisualScale"/> (~14 world units tall).
+        /// Props were authored for 1-unit silhouettes — multiply into that space.
+        /// </summary>
+        private const float PropToUnitScale = 5.5f;
 
         private void Awake()
         {
@@ -98,6 +107,7 @@ namespace Asterra.Gameplay.Presentation
             int w = grid.Width;
             int h = grid.Height;
             var categories = new TerrainCategory[w * h];
+            var defIndices = new ushort[w * h];
             var rawHeight = new float[w * h];
             var colors = new Color[w * h];
 
@@ -108,8 +118,12 @@ namespace Asterra.Gameplay.Presentation
                     int i = cz * w + cx;
                     var cat = ResolveCategory(grid, cx, cz);
                     categories[i] = cat;
-                    rawHeight[i] = yBias + HeightFor(cat) + MicroRelief(cx, cz, cat);
-                    colors[i] = ColorFor(cat);
+                    ushort defIndex = 0;
+                    if (grid.TryGetCellAt(cx, cz, out var cell))
+                        defIndex = cell.TerrainDefIndex;
+                    defIndices[i] = defIndex;
+                    rawHeight[i] = yBias + HeightFor(cat, defIndex) + MicroRelief(cx, cz, cat);
+                    colors[i] = ColorFor(cat, defIndex);
                 }
             }
 
@@ -117,7 +131,7 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < smoothHeight.Length; i++)
             {
                 var cat = categories[i];
-                float target = yBias + HeightFor(cat);
+                float target = yBias + HeightFor(cat, defIndices[i]);
                 if (IsWater(cat))
                     smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.35f);
                 else if (cat == TerrainCategory.Mountain)
@@ -128,16 +142,34 @@ namespace Asterra.Gameplay.Presentation
                     smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.5f);
             }
 
-            BuildContinuousMesh(grid, smoothHeight, colors);
+            BuildContinuousMesh(grid, smoothHeight, colors, categories);
+            BuildWaterSurface(grid, smoothHeight, categories);
             ScatterTrees(grid, smoothHeight, categories, propRoot);
             ScatterDeco(grid, smoothHeight, categories, propRoot);
         }
 
-        private void BuildContinuousMesh(WorldTerrainGrid grid, float[] heights, Color[] colors)
+        private void BuildContinuousMesh(
+            WorldTerrainGrid grid,
+            float[] heights,
+            Color[] colors,
+            TerrainCategory[] categories)
         {
             int w = grid.Width;
             int h = grid.Height;
             int sub = Mathf.Clamp(cellSubdivisions, 1, 3);
+
+            // Land colors: water cells become a visible riverbed under the water sheet.
+            var landColors = new Color[colors.Length];
+            for (int i = 0; i < colors.Length; i++)
+            {
+                landColors[i] = IsWater(categories[i])
+                    ? new Color(0.2f, 0.42f, 0.58f)
+                    : colors[i];
+                if (categories[i] == TerrainCategory.Trench)
+                    landColors[i] = new Color(0.52f, 0.42f, 0.28f);
+                if (categories[i] == TerrainCategory.Gap)
+                    landColors[i] = new Color(0.3f, 0.28f, 0.26f);
+            }
 
             int cw = w + 1;
             int ch = h + 1;
@@ -150,10 +182,10 @@ namespace Asterra.Gameplay.Presentation
                     float hSum = 0f;
                     Color cSum = Color.clear;
                     int n = 0;
-                    AccumulateCorner(heights, colors, w, h, cx - 1, cz - 1, ref hSum, ref cSum, ref n);
-                    AccumulateCorner(heights, colors, w, h, cx, cz - 1, ref hSum, ref cSum, ref n);
-                    AccumulateCorner(heights, colors, w, h, cx - 1, cz, ref hSum, ref cSum, ref n);
-                    AccumulateCorner(heights, colors, w, h, cx, cz, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx - 1, cz - 1, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx, cz - 1, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx - 1, cz, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx, cz, ref hSum, ref cSum, ref n);
                     int i = cz * cw + cx;
                     cornerH[i] = n > 0 ? hSum / n : 0f;
                     cornerC[i] = n > 0 ? cSum / n : ColorFor(TerrainCategory.GrassShort);
@@ -177,8 +209,13 @@ namespace Asterra.Gameplay.Presentation
                     float worldX = originX + u * cell;
                     float worldZ = originZ + v * cell;
                     BilinearCorner(cornerH, cornerC, cw, ch, u, v, out float y, out Color c);
-                    y += Mathf.PerlinNoise(worldX * 0.035f + 3.1f, worldZ * 0.035f) * 0.65f;
-                    y -= Mathf.PerlinNoise(worldX * 0.012f + 9.7f, worldZ * 0.012f) * 0.4f;
+                    // Keep water beds flatter so the water sheet sits cleanly.
+                    float ripple = Mathf.PerlinNoise(worldX * 0.035f + 3.1f, worldZ * 0.035f) * 0.65f
+                                   - Mathf.PerlinNoise(worldX * 0.012f + 9.7f, worldZ * 0.012f) * 0.4f;
+                    int cx = Mathf.Clamp(Mathf.FloorToInt(u), 0, w - 1);
+                    int cz = Mathf.Clamp(Mathf.FloorToInt(v), 0, h - 1);
+                    if (!IsWater(categories[cz * w + cx]))
+                        y += ripple;
 
                     int idx = vz * vertsX + vx;
                     verts[idx] = new Vector3(worldX, y, worldZ);
@@ -223,6 +260,116 @@ namespace Asterra.Gameplay.Presentation
             rend.receiveShadows = true;
         }
 
+        /// <summary>
+        /// Continuous lit water sheet (shared corner verts) — no per-cell grid seams.
+        /// </summary>
+        private void BuildWaterSurface(WorldTerrainGrid grid, float[] heights, TerrainCategory[] categories)
+        {
+            int w = grid.Width;
+            int h = grid.Height;
+            int cw = w + 1;
+            int ch = h + 1;
+            const float waterLift = 0.85f;
+
+            var cornerY = new float[cw * ch];
+            var cornerN = new int[cw * ch];
+            int waterCells = 0;
+
+            for (int cz = 0; cz < h; cz++)
+            {
+                for (int cx = 0; cx < w; cx++)
+                {
+                    if (!IsWater(categories[cz * w + cx]))
+                        continue;
+                    waterCells++;
+                    float y = heights[cz * w + cx] + waterLift;
+                    AccumulateWaterCorner(cornerY, cornerN, cw, cx, cz, y);
+                    AccumulateWaterCorner(cornerY, cornerN, cw, cx + 1, cz, y);
+                    AccumulateWaterCorner(cornerY, cornerN, cw, cx, cz + 1, y);
+                    AccumulateWaterCorner(cornerY, cornerN, cw, cx + 1, cz + 1, y);
+                }
+            }
+
+            if (waterCells == 0)
+                return;
+
+            float cell = grid.CellSize;
+            float originX = grid.OriginX;
+            float originZ = grid.OriginZ;
+            var remap = new int[cw * ch];
+            var verts = new List<Vector3>(waterCells * 2);
+            for (int i = 0; i < remap.Length; i++)
+                remap[i] = -1;
+
+            for (int cz = 0; cz < ch; cz++)
+            {
+                for (int cx = 0; cx < cw; cx++)
+                {
+                    int i = cz * cw + cx;
+                    if (cornerN[i] <= 0)
+                        continue;
+                    remap[i] = verts.Count;
+                    float y = cornerY[i] / cornerN[i];
+                    verts.Add(new Vector3(originX + cx * cell, y, originZ + cz * cell));
+                }
+            }
+
+            var tris = new List<int>(waterCells * 6);
+            for (int cz = 0; cz < h; cz++)
+            {
+                for (int cx = 0; cx < w; cx++)
+                {
+                    if (!IsWater(categories[cz * w + cx]))
+                        continue;
+                    int i = cz * cw + cx;
+                    int a = remap[i];
+                    int b = remap[i + cw];
+                    int c = remap[i + cw + 1];
+                    int d = remap[i + 1];
+                    if (a < 0 || b < 0 || c < 0 || d < 0)
+                        continue;
+                    tris.Add(a);
+                    tris.Add(b);
+                    tris.Add(c);
+                    tris.Add(a);
+                    tris.Add(c);
+                    tris.Add(d);
+                }
+            }
+
+            if (verts.Count == 0 || tris.Count == 0)
+                return;
+
+            var mesh = new Mesh { name = "WaterSurface" };
+            if (verts.Count > 65000)
+                mesh.indexFormat = IndexFormat.UInt32;
+            mesh.SetVertices(verts);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            var go = new GameObject("WaterSurface");
+            go.transform.SetParent(_root, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var rend = go.AddComponent<MeshRenderer>();
+            rend.sharedMaterial = _waterMat;
+            rend.shadowCastingMode = ShadowCastingMode.Off;
+            rend.receiveShadows = true;
+        }
+
+        private static void AccumulateWaterCorner(
+            float[] cornerY,
+            int[] cornerN,
+            int cw,
+            int cx,
+            int cz,
+            float y)
+        {
+            int i = cz * cw + cx;
+            cornerY[i] += y;
+            cornerN[i]++;
+        }
+
         private void ScatterTrees(
             WorldTerrainGrid grid,
             float[] heights,
@@ -252,6 +399,8 @@ namespace Asterra.Gameplay.Presentation
                     grid.CellCenter(cx, cz, out float wx, out float wz);
                     wx += (((hash >> 3) & 7) / 7f - 0.5f) * grid.CellSize * 0.55f;
                     wz += (((hash >> 6) & 7) / 7f - 0.5f) * grid.CellSize * 0.55f;
+                    if (NearSimTreeDestructible(wx, wz))
+                        continue;
                     float groundY = heights[cz * w + cx] + Mathf.PerlinNoise(wx * 0.05f, wz * 0.05f) * 0.3f;
                     SpawnFantasyTree(propRoot, wx, groundY, wz, dense, hash);
                     spawned++;
@@ -259,11 +408,32 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
+        private bool NearSimTreeDestructible(float x, float z)
+        {
+            if (match?.World?.Destructibles == null)
+                return false;
+            const float r2 = 14f * 14f;
+            for (int i = 0; i < match.World.Destructibles.Count; i++)
+            {
+                var d = match.World.Destructibles[i];
+                if (d.State == DestructibleState.Destroyed)
+                    continue;
+                if (d.DefinitionId == null || !d.DefinitionId.Contains("tree"))
+                    continue;
+                float dx = d.X - x;
+                float dz = d.Z - z;
+                if (dx * dx + dz * dz <= r2)
+                    return true;
+            }
+
+            return false;
+        }
+
         private void SpawnFantasyTree(Transform parent, float x, float groundY, float z, bool dense, int hash)
         {
-            float scale = (dense ? 1.15f : 0.85f) * (0.85f + ((hash >> 9) & 7) / 14f);
-            float trunkH = (dense ? 6.5f : 4.8f) * scale;
-            float trunkR = (dense ? 0.55f : 0.38f) * scale;
+            float scale = (dense ? 1.15f : 0.85f) * (0.85f + ((hash >> 9) & 7) / 14f) * PropToUnitScale;
+            float trunkH = (dense ? 5.2f : 3.8f) * scale;
+            float trunkR = (dense ? 0.42f : 0.3f) * scale;
 
             var root = new GameObject(dense ? "Heartwood" : "GroveTree");
             root.transform.SetParent(parent, false);
@@ -276,6 +446,7 @@ namespace Asterra.Gameplay.Presentation
             trunk.transform.localPosition = new Vector3(0f, trunkH * 0.45f, 0f);
             trunk.transform.localScale = new Vector3(trunkR, trunkH * 0.45f, trunkR * 0.92f);
             trunk.GetComponent<Renderer>().sharedMaterial = _trunkMat;
+            trunk.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.On;
 
             int layers = dense ? 3 : 2;
             for (int i = 0; i < layers; i++)
@@ -284,12 +455,13 @@ namespace Asterra.Gameplay.Presentation
                 Object.Destroy(canopy.GetComponent<Collider>());
                 canopy.transform.SetParent(root.transform, false);
                 float y = trunkH * (0.7f + i * 0.18f);
-                float ox = ((hash >> (i * 3)) & 3) * 0.35f - 0.35f;
-                float oz = ((hash >> (i * 3 + 2)) & 3) * 0.35f - 0.35f;
-                float s = (dense ? 3.4f : 2.6f) * scale * (1f - i * 0.12f);
+                float ox = (((hash >> (i * 3)) & 3) * 0.35f - 0.35f) * PropToUnitScale * 0.25f;
+                float oz = (((hash >> (i * 3 + 2)) & 3) * 0.35f - 0.35f) * PropToUnitScale * 0.25f;
+                float s = (dense ? 2.8f : 2.15f) * scale * (1f - i * 0.12f);
                 canopy.transform.localPosition = new Vector3(ox, y, oz);
                 canopy.transform.localScale = new Vector3(s, s * 0.72f, s);
                 canopy.GetComponent<Renderer>().sharedMaterial = _canopyMat;
+                canopy.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.On;
             }
         }
 
@@ -393,9 +565,10 @@ namespace Asterra.Gameplay.Presentation
                 var rock = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 Object.Destroy(rock.GetComponent<Collider>());
                 rock.transform.SetParent(root.transform, false);
-                float s = (large ? 2.4f : 1.3f) * (0.7f + ((hash >> (i * 4)) & 7) / 12f);
-                float ox = ((hash >> (i * 3)) & 5) * 0.45f - 0.9f;
-                float oz = ((hash >> (i * 3 + 1)) & 5) * 0.45f - 0.9f;
+                // ~waist–chest for field rocks; larger mountain boulders vs ~14-tall units.
+                float s = (large ? 2.0f : 1.15f) * PropToUnitScale * (0.7f + ((hash >> (i * 4)) & 7) / 12f);
+                float ox = (((hash >> (i * 3)) & 5) * 0.45f - 0.9f) * PropToUnitScale * 0.35f;
+                float oz = (((hash >> (i * 3 + 1)) & 5) * 0.45f - 0.9f) * PropToUnitScale * 0.35f;
                 rock.transform.localPosition = new Vector3(ox, s * 0.28f, oz);
                 rock.transform.localRotation = Quaternion.Euler(
                     12f + (hash & 40),
@@ -413,7 +586,8 @@ namespace Asterra.Gameplay.Presentation
             Object.Destroy(bush.GetComponent<Collider>());
             bush.name = "Bush";
             bush.transform.SetParent(parent, false);
-            float s = 1.4f + ((hash >> 5) & 7) * 0.12f;
+            // Knee-to-waist shrubs next to infantry.
+            float s = (1.05f + ((hash >> 5) & 7) * 0.08f) * PropToUnitScale * 0.85f;
             bush.transform.position = new Vector3(x, groundY + s * 0.28f, z);
             bush.transform.localScale = new Vector3(s, s * 0.62f, s);
             bush.GetComponent<Renderer>().sharedMaterial = _bushMat;
@@ -432,15 +606,15 @@ namespace Asterra.Gameplay.Presentation
                 var stem = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 Object.Destroy(stem.GetComponent<Collider>());
                 stem.transform.SetParent(root.transform, false);
-                float h = 1.6f + ((hash >> (i + 2)) & 3) * 0.35f;
-                float ox = ((i * 3 + (hash & 3)) % 5) * 0.22f - 0.4f;
-                float oz = ((i * 5 + (hash >> 2)) % 5) * 0.22f - 0.4f;
+                float h = (1.35f + ((hash >> (i + 2)) & 3) * 0.28f) * PropToUnitScale;
+                float ox = (((i * 3 + (hash & 3)) % 5) * 0.22f - 0.4f) * PropToUnitScale * 0.3f;
+                float oz = (((i * 5 + (hash >> 2)) % 5) * 0.22f - 0.4f) * PropToUnitScale * 0.3f;
                 stem.transform.localPosition = new Vector3(ox, h * 0.5f, oz);
                 stem.transform.localRotation = Quaternion.Euler(
                     ((hash >> i) & 7) - 3,
                     i * 40f,
                     ((hash >> (i + 3)) & 7) - 3);
-                stem.transform.localScale = new Vector3(0.08f, h * 0.5f, 0.08f);
+                stem.transform.localScale = new Vector3(0.08f * PropToUnitScale * 0.45f, h * 0.5f, 0.08f * PropToUnitScale * 0.45f);
                 stem.GetComponent<Renderer>().sharedMaterial = _reedMat;
                 stem.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             }
@@ -452,10 +626,11 @@ namespace Asterra.Gameplay.Presentation
             Object.Destroy(crystal.GetComponent<Collider>());
             crystal.name = "AetherCrystal";
             crystal.transform.SetParent(parent, false);
-            float h = 2.2f + ((hash >> 8) & 3) * 0.4f;
+            float h = (1.8f + ((hash >> 8) & 3) * 0.35f) * PropToUnitScale;
+            float w = 0.45f * PropToUnitScale;
             crystal.transform.position = new Vector3(x, groundY + h * 0.45f, z);
             crystal.transform.rotation = Quaternion.Euler(-18f, hash & 359, 12f);
-            crystal.transform.localScale = new Vector3(0.55f, h, 0.55f);
+            crystal.transform.localScale = new Vector3(w, h, w);
             crystal.GetComponent<Renderer>().sharedMaterial = _crystalMat;
             crystal.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
         }
@@ -467,7 +642,8 @@ namespace Asterra.Gameplay.Presentation
 
             if (_terrainMat == null)
             {
-                var shader = Shader.Find("Asterra/TerrainLit")
+                var shader = Shader.Find("Asterra/VertexColorLit")
+                             ?? Shader.Find("Asterra/TerrainLit")
                              ?? Shader.Find("Universal Render Pipeline/Lit")
                              ?? Shader.Find("Standard");
                 _terrainMat = new Material(shader);
@@ -475,6 +651,8 @@ namespace Asterra.Gameplay.Presentation
                     _terrainMat.SetColor("_Color", Color.white);
                 if (_terrainMat.HasProperty("_BaseColor"))
                     _terrainMat.SetColor("_BaseColor", Color.white);
+                if (_terrainMat.HasProperty("_AmbientFloor"))
+                    _terrainMat.SetFloat("_AmbientFloor", 0.38f);
                 if (_terrainMat.HasProperty("_Gloss"))
                     _terrainMat.SetFloat("_Gloss", 0.42f);
                 if (_terrainMat.HasProperty("_DetailTex"))
@@ -491,6 +669,12 @@ namespace Asterra.Gameplay.Presentation
 
             if (_trunkMat == null)
                 _trunkMat = CreateSimpleLit(new Color(0.28f, 0.17f, 0.1f), 0.12f);
+            if (_waterMat == null)
+            {
+                _waterMat = CreateSimpleLit(new Color(0.28f, 0.62f, 0.92f), 0.95f);
+                if (_waterMat.HasProperty("_Metallic"))
+                    _waterMat.SetFloat("_Metallic", 0.05f);
+            }
             if (_canopyMat == null)
                 _canopyMat = CreateSimpleLit(new Color(0.14f, 0.36f, 0.16f), 0.15f);
             if (_rockMat == null)
@@ -690,18 +874,37 @@ namespace Asterra.Gameplay.Presentation
                 rend.enabled = false;
         }
 
-        private static float HeightFor(TerrainCategory category)
+        public void ClearPaint()
         {
+            if (_root != null)
+            {
+                Destroy(_root.gameObject);
+                _root = null;
+            }
+
+            _builtForGrid = null;
+            _builtCellFingerprint = int.MinValue;
+        }
+
+        private static float HeightFor(TerrainCategory category, ushort defIndex = 0)
+        {
+            if (defIndex == DefaultTerrainCatalog.WaterShallow)
+                return -0.18f;
+            if (defIndex == DefaultTerrainCatalog.WaterDeep)
+                return -0.55f;
+            if (defIndex == DefaultTerrainCatalog.WaterFast)
+                return -0.4f;
+
             switch (category)
             {
-                case TerrainCategory.WaterOcean: return -1.35f;
-                case TerrainCategory.WaterLake: return -1.1f;
-                case TerrainCategory.WaterRiver: return -0.85f;
-                case TerrainCategory.WaterWaterfall: return -0.45f;
+                case TerrainCategory.WaterOcean: return -0.55f;
+                case TerrainCategory.WaterLake: return -0.45f;
+                case TerrainCategory.WaterRiver: return -0.35f;
+                case TerrainCategory.WaterWaterfall: return -0.2f;
                 case TerrainCategory.Beach: return -0.15f;
                 case TerrainCategory.Swamp: return -0.35f;
-                case TerrainCategory.Trench: return -3.2f;
-                case TerrainCategory.Gap: return -5.5f;
+                case TerrainCategory.Trench: return -1.6f;
+                case TerrainCategory.Gap: return -3.5f;
                 case TerrainCategory.Ice: return -0.55f;
                 case TerrainCategory.Hill: return 7.5f;
                 case TerrainCategory.Mountain: return 24f;
@@ -715,8 +918,15 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private static Color ColorFor(TerrainCategory category)
+        private static Color ColorFor(TerrainCategory category, ushort defIndex = 0)
         {
+            if (defIndex == DefaultTerrainCatalog.WaterShallow)
+                return new Color(0.45f, 0.72f, 0.82f);
+            if (defIndex == DefaultTerrainCatalog.WaterDeep)
+                return new Color(0.14f, 0.32f, 0.58f);
+            if (defIndex == DefaultTerrainCatalog.WaterFast)
+                return new Color(0.28f, 0.62f, 0.88f);
+
             switch (category)
             {
                 case TerrainCategory.GrassBare: return new Color(0.5f, 0.54f, 0.32f);
@@ -734,8 +944,8 @@ namespace Asterra.Gameplay.Presentation
                 case TerrainCategory.WaterOcean: return new Color(0.18f, 0.4f, 0.65f);
                 case TerrainCategory.WaterWaterfall: return new Color(0.48f, 0.7f, 0.88f);
                 case TerrainCategory.Ice: return new Color(0.86f, 0.93f, 0.98f);
-                case TerrainCategory.Trench: return new Color(0.34f, 0.28f, 0.2f);
-                case TerrainCategory.Gap: return new Color(0.12f, 0.12f, 0.14f);
+                case TerrainCategory.Trench: return new Color(0.55f, 0.44f, 0.3f);
+                case TerrainCategory.Gap: return new Color(0.32f, 0.3f, 0.28f);
                 case TerrainCategory.NoEntry: return new Color(0.22f, 0.2f, 0.2f);
                 default: return new Color(0.36f, 0.46f, 0.28f);
             }

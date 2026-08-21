@@ -60,19 +60,35 @@ namespace Asterra.Gameplay.Content
             PlayerSlotState[] slots,
             SkirmishMapId map = SkirmishMapId.TwinKeeps)
         {
+            PopulateFromSlots(world, ids, slots, MapCatalog.BuiltinChoice(map).Id);
+        }
+
+        /// <summary>Load built-in or custom map by catalog id (e.g. twin_keeps, my_custom_map).</summary>
+        public static void PopulateFromSlots(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerSlotState[] slots,
+            string mapKey)
+        {
             if (slots == null || slots.Length < 2)
                 throw new System.ArgumentException("Need at least two player slots.", nameof(slots));
 
             var a = slots[0];
             var b = slots[1];
-            PopulateTwoPlayer(
-                world,
-                ids,
-                a.Player,
-                FactionDefaultContent.Get(new FactionId(a.FactionIndex)),
-                b.Player,
-                FactionDefaultContent.Get(new FactionId(b.FactionIndex)),
-                map);
+            var westFaction = FactionDefaultContent.Get(new FactionId(a.FactionIndex));
+            var eastFaction = FactionDefaultContent.Get(new FactionId(b.FactionIndex));
+
+            if (MapCatalog.TryLoad(mapKey, out var custom))
+            {
+                SkirmishMapLoader.Apply(
+                    world, ids, a.Player, westFaction, b.Player, eastFaction, custom);
+                return;
+            }
+
+            if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
+                builtin = SkirmishMapId.TwinKeeps;
+
+            PopulateTwoPlayer(world, ids, a.Player, westFaction, b.Player, eastFaction, builtin);
         }
 
         private static void PopulateTwoPlayer(
@@ -268,6 +284,25 @@ namespace Asterra.Gameplay.Content
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, -290f, -70f);
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 280f, -60f);
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 290f, 70f);
+        }
+
+        public static void ApplyMapEnvironmentOnly(SkirmishWorldSim world, string mapKey)
+        {
+            if (world?.Environment == null)
+                return;
+
+            if (MapCatalog.TryLoad(mapKey, out var custom))
+            {
+                SkirmishMapLoader.ApplyTerrain(world.Environment, custom);
+                SkirmishMapLoader.ApplyTraversal(world.Environment, custom);
+                return;
+            }
+
+            if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
+                builtin = SkirmishMapId.TwinKeeps;
+
+            SkirmishMapTerrain.Apply(world.Environment, builtin);
+            SkirmishMapTraversal.Apply(world.Environment, builtin);
         }
 
         public static string GetMapDisplayName(SkirmishMapId map)

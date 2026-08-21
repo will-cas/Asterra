@@ -30,11 +30,22 @@ namespace Asterra.Gameplay.Presentation
 
             float size = mapSize;
             Rect mapRect = new Rect(Screen.width - size - margin, Screen.height - size - margin, size, size);
+            HudClickBlocker.Block(mapRect);
 
-            // Ground + fog-ish dark backdrop
-            DrawRect(mapRect, new Color(0.12f, 0.16f, 0.12f, 0.92f));
-            DrawRectBorder(mapRect, 2f, new Color(0.35f, 0.4f, 0.35f, 0.95f));
+            // Soft terrain tint under fog
+            DrawRect(mapRect, new Color(0.18f, 0.28f, 0.16f, 0.95f));
+            DrawRect(new Rect(mapRect.x + 4f, mapRect.y + 4f, mapRect.width - 8f, mapRect.height - 8f),
+                new Color(0.14f, 0.22f, 0.14f, 0.55f));
+            DrawRectBorder(mapRect, 2f, new Color(0.45f, 0.55f, 0.4f, 0.95f));
 
+            // Fog veil (approx) — darken unknown corners toward edges when fog presenter exists.
+            if (_fog != null)
+            {
+                DrawRect(new Rect(mapRect.x, mapRect.y, mapRect.width, 18f), new Color(0.02f, 0.03f, 0.04f, 0.35f));
+                DrawRect(new Rect(mapRect.x, mapRect.yMax - 18f, mapRect.width, 18f), new Color(0.02f, 0.03f, 0.04f, 0.35f));
+                DrawRect(new Rect(mapRect.x, mapRect.y, 18f, mapRect.height), new Color(0.02f, 0.03f, 0.04f, 0.28f));
+                DrawRect(new Rect(mapRect.xMax - 18f, mapRect.y, 18f, mapRect.height), new Color(0.02f, 0.03f, 0.04f, 0.28f));
+            }
             var local = match.Session.LocalPlayer;
             float half = MapBounds.PlayableHalfExtent;
 

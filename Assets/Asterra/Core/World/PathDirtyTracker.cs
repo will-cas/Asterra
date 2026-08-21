@@ -46,6 +46,7 @@ namespace Asterra.Core.World
         BridgeDisabled = 1,
         WallRemoved = 2,
         TerrainPainted = 3,
+        WallAdded = 4,
     }
 
     public readonly struct PathDirtyRegion

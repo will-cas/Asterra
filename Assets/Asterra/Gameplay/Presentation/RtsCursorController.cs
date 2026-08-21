@@ -7,7 +7,7 @@ namespace Asterra.Gameplay.Presentation
     public sealed class RtsCursorController : MonoBehaviour
     {
         [SerializeField] private LocalOrderController orders;
-        [SerializeField] private int size = 32;
+        [SerializeField] private int size = 40;
 
         private Texture2D _select;
         private Texture2D _move;

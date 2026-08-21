@@ -109,58 +109,64 @@ namespace Asterra.Core.World
             float dayAngle = _time01 * (float)(Math.PI * 2.0) - (float)(Math.PI * 0.5);
             SunDirX = (float)Math.Cos(dayAngle);
             SunDirZ = (float)Math.Sin(dayAngle) * 0.35f;
-            float elev = _phase == TimeOfDayPhase.Night
-                ? 0.12f
-                : (_phase == TimeOfDayPhase.Dawn || _phase == TimeOfDayPhase.Dusk ? 0.35f : 0.85f);
+
+            // Continuous solar elevation (peaks mid-afternoon, soft through dawn/dusk).
+            float elev = SampleDayCurve(_time01,
+                dawn: 0.28f, morning: 0.7f, afternoon: 0.95f, evening: 0.55f, dusk: 0.28f, night: 0.1f);
             SunDirY = elev;
             NormalizeSun();
 
-            switch (_phase)
-            {
-                case TimeOfDayPhase.Dawn:
-                    SunIntensity = 0.45f;
-                    AmbientIntensity = 0.28f;
-                    ShadowStrength = 0.55f;
-                    VisibilityModifier = 0.85f;
-                    TemperatureBias = -0.05f;
-                    break;
-                case TimeOfDayPhase.Morning:
-                    SunIntensity = 0.85f;
-                    AmbientIntensity = 0.38f;
-                    ShadowStrength = 0.8f;
-                    VisibilityModifier = 1f;
-                    TemperatureBias = 0.05f;
-                    break;
-                case TimeOfDayPhase.Afternoon:
-                    SunIntensity = 1f;
-                    AmbientIntensity = 0.42f;
-                    ShadowStrength = 0.9f;
-                    VisibilityModifier = 1.05f;
-                    TemperatureBias = 0.12f;
-                    break;
-                case TimeOfDayPhase.Evening:
-                    SunIntensity = 0.7f;
-                    AmbientIntensity = 0.34f;
-                    ShadowStrength = 0.75f;
-                    VisibilityModifier = 0.95f;
-                    TemperatureBias = 0f;
-                    break;
-                case TimeOfDayPhase.Dusk:
-                    SunIntensity = 0.35f;
-                    AmbientIntensity = 0.25f;
-                    ShadowStrength = 0.45f;
-                    VisibilityModifier = 0.7f;
-                    TemperatureBias = -0.12f;
-                    break;
-                default:
-                    SunIntensity = 0.08f;
-                    AmbientIntensity = 0.16f;
-                    ShadowStrength = 0.2f;
-                    VisibilityModifier = 0.55f;
-                    TemperatureBias = -0.25f;
-                    break;
-            }
+            SunIntensity = SampleDayCurve(_time01,
+                dawn: 0.4f, morning: 0.85f, afternoon: 1f, evening: 0.68f, dusk: 0.32f, night: 0.08f);
+            AmbientIntensity = SampleDayCurve(_time01,
+                dawn: 0.27f, morning: 0.38f, afternoon: 0.42f, evening: 0.34f, dusk: 0.24f, night: 0.16f);
+            ShadowStrength = SampleDayCurve(_time01,
+                dawn: 0.5f, morning: 0.8f, afternoon: 0.9f, evening: 0.72f, dusk: 0.42f, night: 0.2f);
+            VisibilityModifier = SampleDayCurve(_time01,
+                dawn: 0.85f, morning: 1f, afternoon: 1.05f, evening: 0.95f, dusk: 0.7f, night: 0.55f);
+            TemperatureBias = SampleDayCurve(_time01,
+                dawn: -0.05f, morning: 0.05f, afternoon: 0.12f, evening: 0f, dusk: -0.12f, night: -0.25f);
         }
+
+        /// <summary>
+        /// Smoothstep across phase boundaries so lighting never hard-snaps at dawn/dusk/etc.
+        /// </summary>
+        private static float SampleDayCurve(
+            float time01,
+            float dawn,
+            float morning,
+            float afternoon,
+            float evening,
+            float dusk,
+            float night)
+        {
+            time01 = Wrap01(time01);
+            // Keys match PhaseFromTime boundaries.
+            if (time01 < DawnEnd)
+                return Lerp(night, dawn, Smooth01(time01 / DawnEnd));
+            if (time01 < MorningEnd)
+                return Lerp(dawn, morning, Smooth01((time01 - DawnEnd) / (MorningEnd - DawnEnd)));
+            if (time01 < AfternoonEnd)
+                return Lerp(morning, afternoon, Smooth01((time01 - MorningEnd) / (AfternoonEnd - MorningEnd)));
+            if (time01 < EveningEnd)
+                return Lerp(afternoon, evening, Smooth01((time01 - AfternoonEnd) / (EveningEnd - AfternoonEnd)));
+            if (time01 < DuskEnd)
+                return Lerp(evening, dusk, Smooth01((time01 - EveningEnd) / (DuskEnd - EveningEnd)));
+            // Night wraps softly into next dawn; reach night levels by mid-night segment.
+            float nightT = (time01 - DuskEnd) / (1f - DuskEnd);
+            return Lerp(dusk, night, Smooth01(Math.Min(1f, nightT * 2f)));
+        }
+
+        private static float Smooth01(float t)
+        {
+            if (t <= 0f)
+                return 0f;
+            if (t >= 1f)
+                return 1f;
+            return t * t * (3f - 2f * t);
+        }
+
+        private static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
         private void NormalizeSun()
         {

@@ -13,11 +13,16 @@ namespace Asterra.Gameplay
             if (!Application.isPlaying)
                 return;
 
-            if (Object.FindFirstObjectByType<MatchBootstrap>() != null)
+            EnsureLighting();
+            _ = Asterra.Gameplay.Audio.AsterraAudio.Instance;
+            if (Object.FindFirstObjectByType<Asterra.Gameplay.Presentation.AsterraAmbiencePresenter>() == null)
             {
-                EnsureLighting();
-                return;
+                var amb = new GameObject("AsterraAmbience");
+                amb.AddComponent<Asterra.Gameplay.Presentation.AsterraAmbiencePresenter>();
             }
+
+            if (Object.FindFirstObjectByType<MatchBootstrap>() != null)
+                return;
 
             Debug.Log("[Asterra] Empty scene detected — spawning offline 1v1 demo root.");
             EnsureLighting();

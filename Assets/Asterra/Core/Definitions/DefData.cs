@@ -60,6 +60,18 @@ namespace Asterra.Core
         /// </summary>
         public TraversalCapability TraversalCapabilities = TraversalCapability.Land;
         public float SightRadius = 110f;
+        /// <summary>Faction leader / hero. At most one alive per player; trained from the keep.</summary>
+        public bool IsLeader;
+        /// <summary>Hard collision radius vs units and building footprints.</summary>
+        public float CollisionRadius = 2.2f;
+    }
+
+    public enum UpgradeKind : byte
+    {
+        /// <summary>Researched at the keep; affects keeps / faction keep bonuses.</summary>
+        Keep = 0,
+        /// <summary>Equipment researched at barracks/workshop; applied to combat units.</summary>
+        Equipment = 1,
     }
 
     public sealed class BuildingDefData
@@ -87,6 +99,12 @@ namespace Asterra.Core
         public float CommandRadius;
         public bool SnapToWallGrid;
         public float WallSegmentLength = 14f;
+        /// <summary>How many attachment pads this building exposes (keeps use 4 cardinal pads).</summary>
+        public int AttachmentSlotCount;
+        /// <summary>Building defs allowed on attachment pads (e.g. watchtower).</summary>
+        public string[] AttachmentAllowedBuildingIds = System.Array.Empty<string>();
+        /// <summary>World-space offset from keep center to each slot (slot 0 = north).</summary>
+        public float AttachmentRadius = 22f;
     }
 
     public sealed class UpgradeDefData
@@ -96,6 +114,37 @@ namespace Asterra.Core
         public int GoldCost = 200;
         public float TrainTimeMultiplier = 1f;
         public float UnitDamageMultiplier = 1f;
+        /// <summary>Flat armor added when this equipment is applied to a unit.</summary>
+        public float ArmorBonus;
+        /// <summary>Flat attack damage added when this equipment is applied to a unit.</summary>
+        public float AttackDamageBonus;
+        /// <summary>Flat max-health added to owned keeps when researched.</summary>
+        public float KeepHealthBonus;
+        /// <summary>Extra keep sight radius when researched.</summary>
+        public float KeepSightBonus;
+        /// <summary>Seconds to research (0 = instant unlock).</summary>
+        public float ResearchSeconds = 8f;
+        public UpgradeKind Kind = UpgradeKind.Equipment;
+    }
+
+    public enum PowerEffectKind : byte
+    {
+        ArmorAura = 0,
+        MoveSpeedAura = 1,
+        DamageAura = 2,
+    }
+
+    /// <summary>Unlockable commander power with cooldown (sim plain-data).</summary>
+    public sealed class PowerDefData
+    {
+        public string Id;
+        public string DisplayName;
+        public int UnlockGoldCost = 150;
+        public float CooldownSeconds = 45f;
+        public float DurationSeconds = 12f;
+        public PowerEffectKind Effect = PowerEffectKind.ArmorAura;
+        public float EffectMagnitude = 3f;
+        public float BuildingMitigation;
     }
 
     /// <summary>Deterministic role vs role / building damage multipliers.</summary>

@@ -110,10 +110,12 @@ namespace Asterra.Core
                 case CaptureTerritoryCommand capture:
                     writer.Write((byte)CommandType.CaptureTerritory);
                     writer.Write(capture.TerritoryNodeId.Value);
+                    WriteEntityIds(writer, capture.UnitIds);
                     break;
                 case ChooseUpgradeCommand upgrade:
                     writer.Write((byte)CommandType.ChooseUpgrade);
                     WriteString(writer, upgrade.UpgradeDefId);
+                    writer.Write(upgrade.BuildingId.Value);
                     break;
                 case SetStanceCommand stance:
                     writer.Write((byte)CommandType.SetStance);
@@ -151,8 +153,24 @@ namespace Asterra.Core
                     WriteQuantized(writer, patrol.TargetX);
                     WriteQuantized(writer, patrol.TargetZ);
                     break;
-                case ActivateCommanderAbilityCommand:
+                case ActivateCommanderAbilityCommand ability:
                     writer.Write((byte)CommandType.ActivateCommanderAbility);
+                    WriteString(writer, ability.PowerDefId);
+                    break;
+                case ApplyUnitUpgradeCommand applyUpgrade:
+                    writer.Write((byte)CommandType.ApplyUnitUpgrade);
+                    WriteString(writer, applyUpgrade.UpgradeDefId);
+                    WriteEntityIds(writer, applyUpgrade.UnitIds);
+                    break;
+                case UnlockPowerCommand unlockPower:
+                    writer.Write((byte)CommandType.UnlockPower);
+                    WriteString(writer, unlockPower.PowerDefId);
+                    break;
+                case AttachBuildingCommand attach:
+                    writer.Write((byte)CommandType.AttachBuilding);
+                    writer.Write(attach.ParentBuildingId.Value);
+                    writer.Write(attach.SlotIndex);
+                    WriteString(writer, attach.BuildingDefId);
                     break;
                 case EnterGarrisonCommand enter:
                     writer.Write((byte)CommandType.EnterGarrison);
@@ -212,12 +230,14 @@ namespace Asterra.Core
                     command = new CaptureTerritoryCommand
                     {
                         TerritoryNodeId = new SimEntityId(reader.ReadUInt32()),
+                        UnitIds = ReadEntityIds(reader),
                     };
                     break;
                 case CommandType.ChooseUpgrade:
                     command = new ChooseUpgradeCommand
                     {
                         UpgradeDefId = ReadString(reader),
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
                     };
                     break;
                 case CommandType.SetStance:
@@ -271,7 +291,31 @@ namespace Asterra.Core
                     };
                     break;
                 case CommandType.ActivateCommanderAbility:
-                    command = new ActivateCommanderAbilityCommand();
+                    command = new ActivateCommanderAbilityCommand
+                    {
+                        PowerDefId = ReadString(reader),
+                    };
+                    break;
+                case CommandType.ApplyUnitUpgrade:
+                    command = new ApplyUnitUpgradeCommand
+                    {
+                        UpgradeDefId = ReadString(reader),
+                        UnitIds = ReadEntityIds(reader),
+                    };
+                    break;
+                case CommandType.UnlockPower:
+                    command = new UnlockPowerCommand
+                    {
+                        PowerDefId = ReadString(reader),
+                    };
+                    break;
+                case CommandType.AttachBuilding:
+                    command = new AttachBuildingCommand
+                    {
+                        ParentBuildingId = new SimEntityId(reader.ReadUInt32()),
+                        SlotIndex = reader.ReadByte(),
+                        BuildingDefId = ReadString(reader),
+                    };
                     break;
                 case CommandType.EnterGarrison:
                     command = new EnterGarrisonCommand

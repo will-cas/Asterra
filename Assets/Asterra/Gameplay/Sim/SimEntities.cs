@@ -33,7 +33,17 @@ namespace Asterra.Gameplay.Sim
         public TraversalCapability TraversalCapabilities;
         /// <summary>Active Iron Wall (or similar) armor bonus currently applied to this unit.</summary>
         public float CommanderArmorBonus;
+        /// <summary>Temporary move-speed bonus from a commander power.</summary>
+        public float CommanderMoveBonus;
+        /// <summary>Temporary flat damage bonus from a commander power.</summary>
+        public float CommanderDamageBonus;
+        /// <summary>Legacy single-slot id (first applied equipment); prefer AppliedEquipmentIds.</summary>
+        public string AppliedUpgradeId;
+        public const int MaxAppliedEquipment = 4;
+        public readonly string[] AppliedEquipmentIds = new string[MaxAppliedEquipment];
+        public int AppliedEquipmentCount;
         public float SightRadius = 110f;
+        public float CollisionRadius = 1.6f;
 
         /// <summary>Active traversal link id, or -1 when not traversing.</summary>
         public int ActiveTraversalLinkId = -1;
@@ -63,6 +73,8 @@ namespace Asterra.Gameplay.Sim
         public float PatrolBX;
         public float PatrolBZ;
         public bool PatrolToB = true;
+        /// <summary>Fractional gather accrual so GatherRate is units/second, not ≥1 per tick.</summary>
+        public float GatherProgress;
 
         public SimUnit(SimEntityId id, PlayerId owner, FactionId faction, UnitDefData def, float x, float z)
         {
@@ -87,8 +99,32 @@ namespace Asterra.Gameplay.Sim
                 ? def.TraversalCapabilities
                 : TraversalCapability.Land;
             SightRadius = def.SightRadius > 1f ? def.SightRadius : 110f;
+            CollisionRadius = def.CollisionRadius > 0.1f ? def.CollisionRadius : 1.6f;
             X = x;
             Z = z;
+        }
+
+        public bool HasAppliedEquipment(string upgradeId)
+        {
+            if (string.IsNullOrEmpty(upgradeId))
+                return false;
+            for (int i = 0; i < AppliedEquipmentCount; i++)
+            {
+                if (AppliedEquipmentIds[i] == upgradeId)
+                    return true;
+            }
+
+            return AppliedUpgradeId == upgradeId;
+        }
+
+        public bool TryRecordEquipment(string upgradeId)
+        {
+            if (HasAppliedEquipment(upgradeId) || AppliedEquipmentCount >= MaxAppliedEquipment)
+                return false;
+            AppliedEquipmentIds[AppliedEquipmentCount++] = upgradeId;
+            if (string.IsNullOrEmpty(AppliedUpgradeId))
+                AppliedUpgradeId = upgradeId;
+            return true;
         }
 
         public bool IsGarrisoned => GarrisonBuildingId.HasValue;
@@ -141,6 +177,8 @@ namespace Asterra.Gameplay.Sim
                         && !AttackMoving
                         && !ReturningToDeposit
                         && ActiveTraversalLinkId < 0;
+            string eq0 = AppliedEquipmentCount > 0 ? AppliedEquipmentIds[0] : null;
+            string eq1 = AppliedEquipmentCount > 1 ? AppliedEquipmentIds[1] : null;
             return new UnitSnapshot(
                 Id,
                 Owner,
@@ -157,7 +195,34 @@ namespace Asterra.Gameplay.Sim
                 idle,
                 Stance,
                 IsGarrisoned,
-                SightRadius);
+                SightRadius,
+                eq0,
+                eq1,
+                ComputeEquipmentVisualFlags(),
+                MoveTargetX.HasValue,
+                MoveTargetX ?? X,
+                MoveTargetZ ?? Z,
+                AttackTargetId.HasValue,
+                AttackTargetId.HasValue ? AttackTargetId.Value.Value : 0u,
+                AttackMoving,
+                Patrolling);
+        }
+
+        public byte ComputeEquipmentVisualFlags()
+        {
+            byte flags = 0;
+            for (int i = 0; i < AppliedEquipmentCount; i++)
+            {
+                string id = AppliedEquipmentIds[i];
+                if (string.IsNullOrEmpty(id))
+                    continue;
+                if (id.Contains("fire") || id.Contains("thorn") || id.Contains("sacred") || id.Contains("blade"))
+                    flags |= 1; // flame weapon visual
+                if (id.Contains("armour") || id.Contains("armor") || id.Contains("bark") || id.Contains("plate"))
+                    flags |= 2; // reinforced armour visual
+            }
+
+            return flags;
         }
     }
 
@@ -171,18 +236,23 @@ namespace Asterra.Gameplay.Sim
         public string DefinitionId { get; }
         public BuildingState State { get; set; }
         public float Health { get; set; }
-        public float MaxHealth { get; }
+        public float MaxHealth { get; set; }
         public bool CanProduce => State == BuildingState.Active && _canProduce;
 
         public float X;
         public float Z;
         public float FootprintRadius;
+        public float FootprintHalfX;
+        public float FootprintHalfZ;
         public float BuildSecondsTotal;
         public float BuildSecondsRemaining;
         public string[] TrainableUnitIds;
         public string ProductionUnitDefId;
         public float ProductionSecondsRemaining;
         public float ProductionSecondsTotal;
+        public string ResearchUpgradeDefId;
+        public float ResearchSecondsRemaining;
+        public float ResearchSecondsTotal;
         public readonly string[] Queue = new string[MaxQueue];
         public int QueueCount;
         public int QueueCapacity;
@@ -203,10 +273,20 @@ namespace Asterra.Gameplay.Sim
         public float WallSegmentLength;
         /// <summary>Bit0=N,1=E,2=S,3=W — neighbour wall segments.</summary>
         public byte WallLinks;
+        /// <summary>Placement yaw snapped to 0/90/180/270. Swaps wall footprint axes at 90/270.</summary>
+        public float YawDegrees;
         public const int MaxGarrison = 16;
         public readonly uint[] GarrisonUnitIds = new uint[MaxGarrison];
         public int GarrisonCount;
+        public const int MaxAttachmentSlots = 4;
+        public int AttachmentSlotCount;
+        public float AttachmentRadius = 22f;
+        public string[] AttachmentAllowedBuildingIds = System.Array.Empty<string>();
+        public readonly uint[] AttachmentOccupantIds = new uint[MaxAttachmentSlots];
+        public SimEntityId? ParentBuildingId;
+        public byte AttachmentSlotIndex;
         public bool IsProducing => !string.IsNullOrEmpty(ProductionUnitDefId);
+        public bool IsResearching => !string.IsNullOrEmpty(ResearchUpgradeDefId);
 
         private readonly bool _canProduce;
 
@@ -227,11 +307,11 @@ namespace Asterra.Gameplay.Sim
             Health = def.MaxHealth;
             X = x;
             Z = z;
-            FootprintRadius = MathF.Max(def.FootprintX, def.FootprintZ) * 0.65f;
-            if (FootprintRadius < 6f)
-                FootprintRadius = 6f;
+            FootprintHalfX = def.FootprintX > 0.5f ? def.FootprintX * 0.5f : 2f;
+            FootprintHalfZ = def.FootprintZ > 0.5f ? def.FootprintZ * 0.5f : 2f;
+            FootprintRadius = MathF.Max(FootprintHalfX, FootprintHalfZ);
             if (def.Kind == BuildingKind.Wall)
-                FootprintRadius = MathF.Max(FootprintRadius, 10f);
+                FootprintRadius = MathF.Max(FootprintRadius, MathF.Min(FootprintHalfX, FootprintHalfZ) + 1f);
             _canProduce = def.CanProduce;
             TrainableUnitIds = def.TrainableUnitIds ?? System.Array.Empty<string>();
             QueueCapacity = def.QueueCapacity > 0 ? System.Math.Min(def.QueueCapacity, MaxQueue) : 3;
@@ -252,6 +332,11 @@ namespace Asterra.Gameplay.Sim
             AttackCooldown = def.AttackCooldown > 0f ? def.AttackCooldown : 1.5f;
             SightRadius = def.SightRadius;
             GoldPerSecond = def.GoldPerSecond;
+            AttachmentSlotCount = def.AttachmentSlotCount > 0
+                ? Math.Min(def.AttachmentSlotCount, MaxAttachmentSlots)
+                : 0;
+            AttachmentRadius = def.AttachmentRadius > 1f ? def.AttachmentRadius : 22f;
+            AttachmentAllowedBuildingIds = def.AttachmentAllowedBuildingIds ?? System.Array.Empty<string>();
             if (startActive)
             {
                 State = BuildingState.Active;
@@ -294,6 +379,9 @@ namespace Asterra.Gameplay.Sim
             float buildProgress = 1f;
             if (State == BuildingState.Constructing && BuildSecondsTotal > 0.001f)
                 buildProgress = 1f - (BuildSecondsRemaining / BuildSecondsTotal);
+            float researchProgress = 0f;
+            if (IsResearching && ResearchSecondsTotal > 0.001f)
+                researchProgress = 1f - (ResearchSecondsRemaining / ResearchSecondsTotal);
 
             return new BuildingSnapshot(
                 Id,
@@ -322,7 +410,24 @@ namespace Asterra.Gameplay.Sim
                 WallLinks,
                 GarrisonCount,
                 GarrisonCapacity,
-                AllowsGarrison);
+                AllowsGarrison,
+                AttachmentSlotCount,
+                AttachmentOccupiedMask(),
+                ResearchUpgradeDefId,
+                researchProgress,
+                YawDegrees);
+        }
+
+        public byte AttachmentOccupiedMask()
+        {
+            byte mask = 0;
+            for (int i = 0; i < AttachmentSlotCount; i++)
+            {
+                if (AttachmentOccupantIds[i] != 0)
+                    mask |= (byte)(1 << i);
+            }
+
+            return mask;
         }
 
         public bool TryAddGarrison(uint unitId)

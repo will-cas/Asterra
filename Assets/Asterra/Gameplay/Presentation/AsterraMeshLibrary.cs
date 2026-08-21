@@ -17,13 +17,18 @@ namespace Asterra.Gameplay.Presentation
             if (string.IsNullOrEmpty(definitionId))
                 return GetOrCreate("unit_militia", BuildMilitia);
 
+            if (definitionId.Contains("lucien") || definitionId.Contains("captain") || definitionId.Contains("hierophant"))
+                return GetOrCreate("unit_leader", BuildLeader);
             if (definitionId.Contains("builder"))
                 return GetOrCreate("unit_builder", BuildBuilder);
-            if (definitionId.Contains("archer"))
+            if (definitionId.Contains("archer") || definitionId.Contains("ranger") || definitionId.Contains("acolyte"))
                 return GetOrCreate("unit_archer", BuildArcher);
-            if (definitionId.Contains("knight") || definitionId.Contains("cavalry"))
+            if (definitionId.Contains("ashen_knight") || definitionId.Contains("mage"))
+                return GetOrCreate("unit_mage", BuildMage);
+            if (definitionId.Contains("knight") || definitionId.Contains("cavalry") || definitionId.Contains("rider"))
                 return GetOrCreate("unit_cavalry", BuildCavalry);
-            if (definitionId.Contains("catapult") || definitionId.Contains("siege") || definitionId.Contains("mortar"))
+            if (definitionId.Contains("catapult") || definitionId.Contains("siege") || definitionId.Contains("mortar")
+                || definitionId.Contains("ballista") || definitionId.Contains("guardian"))
                 return GetOrCreate("unit_siege", BuildSiege);
             if (definitionId.Contains("dryad"))
                 return GetOrCreate("unit_dryad", BuildDryad);
@@ -34,6 +39,11 @@ namespace Asterra.Gameplay.Presentation
 
         public static Mesh GetBuildingMesh(string definitionId)
         {
+            if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
+            {
+                // Prefer enlarged procedural mesh; the Shared OBJ silhouette is undersized for keep pads.
+                return GetOrCreate("building_turret_lg", BuildTurret);
+            }
             if (IsKeep(definitionId))
                 return GetOrCreate("building_keep", BuildKeep);
             if (!string.IsNullOrEmpty(definitionId))
@@ -42,8 +52,10 @@ namespace Asterra.Gameplay.Presentation
                     return GetOrCreate("building_tower", BuildTower);
                 if (definitionId.Contains("palisade") || definitionId.Contains("wall"))
                     return GetOrCreate("building_wall", BuildWall);
-                if (definitionId.Contains("outpost"))
+                if (definitionId.Contains("outpost") || definitionId.Contains("mine"))
                     return GetOrCreate("building_outpost", BuildOutpost);
+                if (definitionId.Contains("grove") || definitionId.Contains("forge") || definitionId.Contains("barracks"))
+                    return GetOrCreate("building_producer", BuildProducer);
             }
 
             return GetOrCreate("building_producer", BuildProducer);
@@ -56,9 +68,37 @@ namespace Asterra.Gameplay.Presentation
                 : GetOrCreate("resource_timber", BuildTimberLog);
         }
 
+        public static Mesh GetDestructibleMesh(string definitionId)
+        {
+            if (!string.IsNullOrEmpty(definitionId))
+            {
+                if (definitionId.Contains("bridge"))
+                    return GetOrCreate("prop_bridge", BuildBridge);
+                if (definitionId.Contains("rock"))
+                    return GetOrCreate("prop_rock", BuildRock);
+            }
+
+            return GetOrCreate("prop_tree", BuildTree);
+        }
+
+        public static Color DestructibleColor(string definitionId)
+        {
+            if (!string.IsNullOrEmpty(definitionId))
+            {
+                if (definitionId.Contains("bridge"))
+                    return new Color(0.45f, 0.32f, 0.18f);
+                if (definitionId.Contains("rock"))
+                    return new Color(0.55f, 0.55f, 0.58f);
+            }
+
+            return new Color(0.18f, 0.42f, 0.22f);
+        }
+
         public static bool IsKeep(string definitionId)
         {
             if (string.IsNullOrEmpty(definitionId))
+                return false;
+            if (definitionId.Contains("turret"))
                 return false;
             return definitionId.Contains("keep")
                    || definitionId.Contains("heartwood")
@@ -135,6 +175,28 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
+        public static Color FactionBodyColor(byte factionIndex, bool isUnit, string definitionId)
+        {
+            Color faction = FactionColor(factionIndex);
+            Color trim = factionIndex switch
+            {
+                0 => new Color(0.75f, 0.78f, 0.85f), // steel
+                1 => new Color(0.45f, 0.7f, 0.4f), // leaf
+                2 => new Color(0.9f, 0.45f, 0.2f), // ember
+                _ => Color.gray,
+            };
+
+            if (!isUnit)
+                return Color.Lerp(faction, trim, 0.22f);
+
+            var role = InferRole(definitionId);
+            if (definitionId != null
+                && (definitionId.Contains("lucien") || definitionId.Contains("captain") || definitionId.Contains("hierophant")))
+                return Color.Lerp(faction, new Color(0.95f, 0.85f, 0.35f), 0.45f);
+
+            return Color.Lerp(faction, Color.Lerp(RoleAccent(role), trim, 0.35f), 0.4f);
+        }
+
         public static Color ResourceColor(ResourceType type)
         {
             return type == ResourceType.Gold
@@ -146,6 +208,12 @@ namespace Asterra.Gameplay.Presentation
         {
             if (Cache.TryGetValue(key, out var mesh) && mesh != null)
                 return mesh;
+            if (ObjMeshLoader.TryLoad(key, out mesh) && mesh != null)
+            {
+                Cache[key] = mesh;
+                return mesh;
+            }
+
             mesh = builder();
             mesh.name = key;
             Cache[key] = mesh;
@@ -234,86 +302,126 @@ namespace Asterra.Gameplay.Presentation
                 Box(0.6f, 1.0f, 0, 0.4f, 0.28f, 0.55f));
         }
 
+        private static Mesh BuildLeader()
+        {
+            // Caped commander with taller helm / banner spike.
+            return Combine(
+                Box(0, 0, 0, 0.85f, 1.55f, 0.6f),
+                Box(0, 1.55f, 0, 0.55f, 0.55f, 0.55f),
+                Box(0, 2.05f, 0, 0.25f, 0.55f, 0.25f),
+                Box(-0.15f, 0.7f, -0.45f, 0.95f, 1.2f, 0.12f),
+                Box(0.65f, 0.95f, 0, 0.18f, 0.18f, 1.5f),
+                Box(0.65f, 1.55f, 0.55f, 0.35f, 0.55f, 0.12f));
+        }
+
+        private static Mesh BuildMage()
+        {
+            return Combine(
+                Box(0, 0, 0, 0.55f, 1.45f, 0.5f),
+                Box(0, 1.45f, 0, 0.7f, 0.35f, 0.7f),
+                Box(0, 1.8f, 0, 0.35f, 0.45f, 0.35f),
+                Box(0.7f, 0.85f, 0, 0.18f, 1.4f, 0.18f),
+                Box(0.7f, 1.55f, 0, 0.35f, 0.35f, 0.35f));
+        }
+
         // --- Buildings ---
 
         private static Mesh BuildKeep()
         {
-            // Wide base keep with corner battlements — largest silhouette.
+            // Fortress: wide bailey, keep tower, gatehouse, corner turrets.
             return Combine(
-                Box(0, 0, 0, 7f, 3.2f, 7f),
-                Box(0, 3.2f, 0, 4.2f, 5.5f, 4.2f),
-                Box(0, 8.5f, 0, 2.2f, 1.8f, 2.2f),
-                Box(-2.0f, 8.7f, -2.0f, 1.4f, 1.6f, 1.4f),
-                Box(2.0f, 8.7f, -2.0f, 1.4f, 1.6f, 1.4f),
-                Box(-2.0f, 8.7f, 2.0f, 1.4f, 1.6f, 1.4f),
-                Box(2.0f, 8.7f, 2.0f, 1.4f, 1.6f, 1.4f));
+                Box(0, 0, 0, 8.2f, 2.6f, 8.2f),
+                Box(0, 2.6f, 0, 5.2f, 6.2f, 5.2f),
+                Box(0, 8.6f, 0, 2.6f, 2.4f, 2.6f),
+                Box(0, 2.2f, 4.4f, 3.2f, 3.4f, 1.4f),
+                Box(-3.4f, 8.2f, -3.4f, 1.6f, 2.2f, 1.6f),
+                Box(3.4f, 8.2f, -3.4f, 1.6f, 2.2f, 1.6f),
+                Box(-3.4f, 8.2f, 3.4f, 1.6f, 2.2f, 1.6f),
+                Box(3.4f, 8.2f, 3.4f, 1.6f, 2.2f, 1.6f),
+                Box(0, 10.8f, 0, 0.35f, 1.6f, 0.35f));
         }
 
         private static Mesh BuildProducer()
         {
-            // Barracks / hall: wide roofed hall with twin chimneys.
+            // Barracks / hall: wide roofed hall with twin chimneys and drill yard porch.
             return Combine(
-                Box(0, 0, 0, 5.5f, 2.4f, 4.4f),
-                Box(0, 2.4f, 0, 4.2f, 1.2f, 3.4f),
-                Box(0, 3.5f, 0, 5.8f, 0.45f, 0.9f),
-                Box(-2.4f, 0, -1.6f, 1.1f, 4.2f, 1.1f),
-                Box(2.4f, 0, -1.6f, 1.1f, 4.2f, 1.1f),
-                Box(0, 0.2f, 2.3f, 1.6f, 2.0f, 0.35f));
+                Box(0, 0, 0, 6.2f, 2.6f, 4.8f),
+                Box(0, 2.6f, 0, 4.6f, 1.4f, 3.6f),
+                Box(0, 3.8f, 0, 6.6f, 0.5f, 1.0f),
+                Box(-2.6f, 0, -1.8f, 1.2f, 4.6f, 1.2f),
+                Box(2.6f, 0, -1.8f, 1.2f, 4.6f, 1.2f),
+                Box(0, 0.15f, 2.6f, 2.2f, 2.2f, 0.4f),
+                Box(-1.8f, 0.1f, 1.6f, 0.8f, 1.1f, 0.8f),
+                Box(1.8f, 0.1f, 1.6f, 0.8f, 1.1f, 0.8f));
         }
 
         private static Mesh BuildTower()
         {
-            // Tall thin watchtower with lookout cupola.
             return Combine(
-                Box(0, 0, 0, 2.6f, 1.6f, 2.6f),
-                Box(0, 1.6f, 0, 1.7f, 8.5f, 1.7f),
-                Box(0, 10.0f, 0, 2.6f, 1.0f, 2.6f),
-                Box(0, 11.0f, 0, 1.2f, 1.4f, 1.2f),
-                Box(0, 12.3f, 0, 0.35f, 1.2f, 0.35f));
+                Box(0, 0, 0, 2.8f, 1.8f, 2.8f),
+                Box(0, 1.8f, 0, 1.8f, 9.2f, 1.8f),
+                Box(0, 10.8f, 0, 2.8f, 1.1f, 2.8f),
+                Box(0, 11.8f, 0, 1.3f, 1.5f, 1.3f),
+                Box(0, 13.2f, 0, 0.35f, 1.3f, 0.35f),
+                Box(-1.1f, 10.9f, -1.1f, 0.7f, 1.0f, 0.7f),
+                Box(1.1f, 10.9f, 1.1f, 0.7f, 1.0f, 0.7f));
+        }
+
+        private static Mesh BuildTurret()
+        {
+            return Combine(
+                Box(0, 0, 0, 3.4f, 1.6f, 3.4f),
+                Box(0, 1.6f, 0, 2.2f, 6.2f, 2.2f),
+                Box(0, 7.6f, 0, 3.2f, 1.1f, 3.2f),
+                Box(-1.2f, 8.5f, -1.2f, 0.85f, 1.2f, 0.85f),
+                Box(1.2f, 8.5f, -1.2f, 0.85f, 1.2f, 0.85f),
+                Box(-1.2f, 8.5f, 1.2f, 0.85f, 1.2f, 0.85f),
+                Box(1.2f, 8.5f, 1.2f, 0.85f, 1.2f, 0.85f),
+                Box(1.4f, 8.0f, 0, 2.4f, 0.45f, 0.45f));
         }
 
         private static Mesh BuildWall()
         {
-            // Flat palisade segment with stake tops.
             return Combine(
                 Box(0, 0, 0, 11f, 3.6f, 1.4f),
                 Box(-4.5f, 3.6f, 0, 0.9f, 1.4f, 0.9f),
                 Box(-1.5f, 3.6f, 0, 0.9f, 1.6f, 0.9f),
                 Box(1.5f, 3.6f, 0, 0.9f, 1.4f, 0.9f),
-                Box(4.5f, 3.6f, 0, 0.9f, 1.6f, 0.9f));
+                Box(4.5f, 3.6f, 0, 0.9f, 1.6f, 0.9f),
+                Box(0, 1.4f, 0.55f, 2.2f, 1.6f, 0.25f));
         }
 
         private static Mesh BuildOutpost()
         {
-            // Medium post with flag-like top.
             return Combine(
-                Box(0, 0, 0, 3.8f, 1.8f, 3.8f),
-                Box(0, 1.8f, 0, 2.4f, 2.8f, 2.4f),
-                Box(0, 4.6f, 0, 0.4f, 3.2f, 0.4f),
-                Box(0.7f, 6.8f, 0, 1.5f, 0.9f, 0.12f),
-                Box(0.15f, 7.4f, 0, 0.25f, 0.25f, 0.25f));
+                Box(0, 0, 0, 4.0f, 1.8f, 4.0f),
+                Box(0, 1.8f, 0, 2.6f, 3.0f, 2.6f),
+                Box(0, 4.8f, 0, 0.4f, 3.4f, 0.4f),
+                Box(0.85f, 7.0f, 0, 1.7f, 1.0f, 0.14f),
+                Box(0.2f, 7.7f, 0, 0.3f, 0.3f, 0.3f),
+                Box(-1.4f, 0.1f, 1.4f, 0.9f, 1.2f, 0.9f));
         }
 
         // --- Resources ---
 
         private static Mesh BuildGoldNugget()
         {
-            // Stacked / chunky gold crystals.
             return Combine(
-                Box(0, 0, 0, 1.4f, 0.9f, 1.1f),
-                Box(0.45f, 0.7f, 0.15f, 0.9f, 0.85f, 0.75f),
-                Box(-0.4f, 0.55f, -0.25f, 0.7f, 0.7f, 0.65f),
-                Box(0.1f, 1.35f, 0, 0.55f, 0.55f, 0.5f));
+                Box(0, 0, 0, 1.5f, 0.85f, 1.2f),
+                Box(0.55f, 0.75f, 0.2f, 0.95f, 1.0f, 0.8f),
+                Box(-0.5f, 0.6f, -0.3f, 0.8f, 0.85f, 0.7f),
+                Box(0.05f, 1.45f, 0, 0.6f, 0.7f, 0.55f),
+                Box(-0.15f, 1.9f, 0.1f, 0.35f, 0.45f, 0.35f));
         }
 
         private static Mesh BuildTimberLog()
         {
-            // Horizontal log + stump.
             return Combine(
-                Box(0, 0.35f, 0, 2.4f, 0.7f, 0.7f),
-                Box(-0.95f, 0.0f, 0, 0.55f, 0.7f, 0.55f),
-                Box(0.95f, 0.0f, 0, 0.55f, 0.7f, 0.55f),
-                Box(0.2f, 0.85f, 0.15f, 1.4f, 0.45f, 0.45f));
+                Box(0, 0.4f, 0, 2.6f, 0.75f, 0.75f),
+                Box(-1.05f, 0.0f, 0, 0.6f, 0.8f, 0.6f),
+                Box(1.05f, 0.0f, 0, 0.6f, 0.8f, 0.6f),
+                Box(0.25f, 0.95f, 0.2f, 1.5f, 0.5f, 0.5f),
+                Box(-0.2f, 1.2f, -0.15f, 0.9f, 0.35f, 0.35f));
         }
 
         private static Mesh Combine(params MeshPart[] parts)
@@ -373,6 +481,31 @@ namespace Asterra.Gameplay.Presentation
                 Verts = verts;
                 Tris = tris;
             }
+        }
+
+        private static Mesh BuildTree()
+        {
+            return Combine(
+                Box(0f, 1.1f, 0f, 0.35f, 2.2f, 0.35f),
+                Box(0f, 3.0f, 0f, 1.6f, 1.4f, 1.6f),
+                Box(0f, 4.1f, 0f, 1.1f, 1.0f, 1.1f));
+        }
+
+        private static Mesh BuildRock()
+        {
+            return Combine(
+                Box(0f, 0.55f, 0f, 1.4f, 1.1f, 1.2f),
+                Box(0.35f, 0.85f, 0.2f, 0.8f, 0.7f, 0.7f));
+        }
+
+        private static Mesh BuildBridge()
+        {
+            return Combine(
+                Box(0f, 0.35f, 0f, 6.5f, 0.35f, 2.2f),
+                Box(-3.0f, 0.9f, -1.0f, 0.35f, 1.4f, 0.35f),
+                Box(-3.0f, 0.9f, 1.0f, 0.35f, 1.4f, 0.35f),
+                Box(3.0f, 0.9f, -1.0f, 0.35f, 1.4f, 0.35f),
+                Box(3.0f, 0.9f, 1.0f, 0.35f, 1.4f, 0.35f));
         }
     }
 }

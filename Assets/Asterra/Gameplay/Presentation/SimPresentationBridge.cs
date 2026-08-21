@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Core.World;
 using Asterra.Gameplay.Presentation;
 using UnityEngine;
 
@@ -14,12 +15,14 @@ namespace Asterra.Gameplay
         [SerializeField] private Transform unitRoot;
         [SerializeField] private Transform buildingRoot;
         [SerializeField] private Transform resourceRoot;
+        [SerializeField] private Transform destructibleRoot;
         [SerializeField] private float yPosition;
         [SerializeField] private bool createGround = true;
 
         private readonly Dictionary<uint, EntityView> _unitViews = new();
         private readonly Dictionary<uint, EntityView> _buildingViews = new();
         private readonly Dictionary<uint, ResourceNodeView> _resourceViews = new();
+        private readonly Dictionary<uint, DestructibleView> _destructibleViews = new();
         private System.Func<IReadOnlyList<SimEntityId>> _getSelected;
         private System.Func<SimEntityId?> _getSelectedBuilding;
 
@@ -31,6 +34,38 @@ namespace Asterra.Gameplay
         public void BindSelectedBuilding(System.Func<SimEntityId?> getSelectedBuilding)
         {
             _getSelectedBuilding = getSelectedBuilding;
+        }
+
+        /// <summary>Destroy all mirrored entity views (used by soft rematch / main menu).</summary>
+        public void ClearAllViews()
+        {
+            DestroyViewMap(_unitViews);
+            DestroyViewMap(_buildingViews);
+            foreach (var pair in _resourceViews)
+            {
+                if (pair.Value != null)
+                    Destroy(pair.Value.gameObject);
+            }
+
+            _resourceViews.Clear();
+            foreach (var pair in _destructibleViews)
+            {
+                if (pair.Value != null)
+                    Destroy(pair.Value.gameObject);
+            }
+
+            _destructibleViews.Clear();
+        }
+
+        private static void DestroyViewMap(Dictionary<uint, EntityView> views)
+        {
+            foreach (var pair in views)
+            {
+                if (pair.Value != null)
+                    Destroy(pair.Value.gameObject);
+            }
+
+            views.Clear();
         }
 
         public bool TryGetEntityView(SimEntityId id, out EntityView view)
@@ -69,6 +104,13 @@ namespace Asterra.Gameplay
                 resourceRoot = go.transform;
             }
 
+            if (destructibleRoot == null)
+            {
+                var go = new GameObject("Destructibles");
+                go.transform.SetParent(transform, false);
+                destructibleRoot = go.transform;
+            }
+
             if (createGround)
                 MapBorderVisual.Ensure(transform);
         }
@@ -81,6 +123,7 @@ namespace Asterra.Gameplay
             SyncUnits(match.World.Units);
             SyncBuildings(match.World.Buildings);
             SyncResources(match.World.Resources);
+            SyncDestructibles(match.World.Destructibles);
             RefreshSelectionHighlights();
         }
 
@@ -106,8 +149,9 @@ namespace Asterra.Gameplay
                     _unitViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
+                view.SyncPresentation(new Vector3(snap.X, yPosition, snap.Z));
                 view.SetHealth(snap.Health, snap.MaxHealth);
+                view.SetEquipmentVisuals(snap.EquipmentVisualFlags);
             }
 
             RemoveMissing(_unitViews, alive);
@@ -135,13 +179,19 @@ namespace Asterra.Gameplay
                     _buildingViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
+                if (view.IsCollapsing)
+                    continue;
+
+                view.SyncPresentation(new Vector3(snap.X, yPosition, snap.Z));
                 view.SetHealth(snap.Health, snap.MaxHealth);
                 if (snap.Kind == BuildingKind.Wall || snap.Kind == BuildingKind.Gate)
-                    view.ApplyWallLinks(snap.WallLinks);
+                    view.ApplyWallLinks(snap.WallLinks, snap.YawDegrees);
+                else if (Mathf.Abs(snap.YawDegrees) > 0.01f)
+                    view.transform.rotation = Quaternion.Euler(0f, snap.YawDegrees, 0f);
+                view.SetBuildingVisual(snap.State, snap.BuildProgress);
             }
 
-            RemoveMissing(_buildingViews, alive);
+            RemoveMissingBuildings(alive);
         }
 
         private void SyncResources(IReadOnlyList<ResourceSnapshot> resources)
@@ -206,6 +256,67 @@ namespace Asterra.Gameplay
             return view;
         }
 
+        private void SyncDestructibles(IReadOnlyList<DestructibleSnapshot> destructibles)
+        {
+            if (destructibles == null)
+                return;
+
+            var alive = new HashSet<uint>();
+            for (int i = 0; i < destructibles.Count; i++)
+            {
+                var snap = destructibles[i];
+                if (snap.State == DestructibleState.Destroyed)
+                    continue;
+                alive.Add(snap.Id.Value);
+                if (!_destructibleViews.TryGetValue(snap.Id.Value, out var view) || view == null)
+                {
+                    view = SpawnDestructible(snap);
+                    _destructibleViews[snap.Id.Value] = view;
+                }
+
+                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
+                view.SetDamaged(snap.State == DestructibleState.Damaged);
+            }
+
+            var stale = new List<uint>();
+            foreach (var pair in _destructibleViews)
+            {
+                if (!alive.Contains(pair.Key))
+                    stale.Add(pair.Key);
+            }
+
+            for (int i = 0; i < stale.Count; i++)
+            {
+                var id = stale[i];
+                if (_destructibleViews.TryGetValue(id, out var view) && view != null)
+                    Destroy(view.gameObject);
+                _destructibleViews.Remove(id);
+            }
+        }
+
+        private DestructibleView SpawnDestructible(DestructibleSnapshot snap)
+        {
+            var go = new GameObject($"Destructible_{snap.Id.Value}");
+            go.transform.SetParent(destructibleRoot, false);
+
+            var filter = go.AddComponent<MeshFilter>();
+            filter.sharedMesh = AsterraMeshLibrary.GetDestructibleMesh(snap.DefinitionId);
+            var color = AsterraMeshLibrary.DestructibleColor(snap.DefinitionId);
+            var rend = go.AddComponent<MeshRenderer>();
+            rend.sharedMaterial = CreateColorMaterial(color);
+
+            float scale = snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 1.15f : 1.35f;
+            go.transform.localScale = new Vector3(scale, scale, scale);
+
+            var sphere = go.AddComponent<SphereCollider>();
+            sphere.center = new Vector3(0f, 1.2f, 0f);
+            sphere.radius = snap.FootprintRadius > 0.5f ? snap.FootprintRadius * 0.35f : 1.4f;
+
+            var view = go.AddComponent<DestructibleView>();
+            view.Initialize(snap.Id, snap.DefinitionId, color);
+            return view;
+        }
+
         private void RefreshSelectionHighlights()
         {
             var selectedSet = new HashSet<uint>();
@@ -232,11 +343,15 @@ namespace Asterra.Gameplay
             }
 
             foreach (var pair in _unitViews)
-                pair.Value.SetSelected(selectedSet.Contains(pair.Key));
+            {
+                // Building selection is exclusive — hide unit rings while a building is selected.
+                bool unitSelected = !hasBuilding && selectedSet.Contains(pair.Key);
+                pair.Value.SetSelected(unitSelected);
+            }
             foreach (var pair in _buildingViews)
             {
-                bool selected = selectedSet.Contains(pair.Key)
-                                || (hasBuilding && pair.Key == selectedBuilding);
+                bool selected = (hasBuilding && pair.Key == selectedBuilding)
+                                || (!hasBuilding && selectedSet.Contains(pair.Key));
                 pair.Value.SetSelected(selected);
             }
         }
@@ -255,6 +370,35 @@ namespace Asterra.Gameplay
             var view = go.AddComponent<EntityView>();
             view.Initialize(id, isUnit, owner, definitionId, factionIndex);
             return view;
+        }
+
+        private void RemoveMissingBuildings(HashSet<uint> alive)
+        {
+            var stale = new List<uint>();
+            foreach (var pair in _buildingViews)
+            {
+                if (!alive.Contains(pair.Key))
+                    stale.Add(pair.Key);
+            }
+
+            for (int i = 0; i < stale.Count; i++)
+            {
+                var id = stale[i];
+                if (!_buildingViews.TryGetValue(id, out var view) || view == null)
+                {
+                    _buildingViews.Remove(id);
+                    continue;
+                }
+
+                if (!view.IsCollapsing)
+                    view.BeginCollapse();
+
+                if (view.CollapseFinished)
+                {
+                    Destroy(view.gameObject);
+                    _buildingViews.Remove(id);
+                }
+            }
         }
 
         private static void RemoveMissing(Dictionary<uint, EntityView> views, HashSet<uint> alive)
