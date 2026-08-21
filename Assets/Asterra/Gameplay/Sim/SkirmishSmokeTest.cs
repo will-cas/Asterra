@@ -1,5 +1,6 @@
 using System.Text;
 using Asterra.Core;
+using Asterra.Core.World;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Sim;
 
@@ -13,6 +14,30 @@ namespace Asterra.Gameplay
     {
         public static string Run(int ticks = 2000)
         {
+            var worldReport = WorldTerrainGridSelfTest.Run();
+            if (worldReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return worldReport + "\nWorld terrain self-test failed — aborting further smoke.";
+
+            var envReport = WorldEnvironmentSelfTest.Run();
+            if (envReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return envReport + "\nWorld environment self-test failed — aborting further smoke.";
+
+            var mapTerrainReport = SkirmishMapTerrainSelfTest.Run();
+            if (mapTerrainReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return mapTerrainReport + "\nMap terrain self-test failed — aborting further smoke.";
+
+            var traversalReport = TraversalSelfTest.Run();
+            if (traversalReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return traversalReport + "\nTraversal self-test failed — aborting further smoke.";
+
+            var destructionReport = DestructionSelfTest.Run();
+            if (destructionReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return destructionReport + "\nDestruction self-test failed — aborting further smoke.";
+
+            var weatherReport = WeatherSelfTest.Run();
+            if (weatherReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return weatherReport + "\nWeather self-test failed — aborting further smoke.";
+
             var codecReport = CommandCodecSelfTest.Run();
 
             var ids = new SequentialIdFactory();
@@ -147,6 +172,12 @@ namespace Asterra.Gameplay
             }
 
             var sb = new StringBuilder();
+            sb.AppendLine(worldReport);
+            sb.AppendLine(envReport);
+            sb.AppendLine(mapTerrainReport);
+            sb.AppendLine(traversalReport);
+            sb.AppendLine(destructionReport);
+            sb.AppendLine(weatherReport);
             sb.Append(codecReport);
             sb.Append(LockstepFrameGateSelfTest.Run());
             sb.Append(MatchLobbyStateSelfTest.Run());

@@ -50,6 +50,10 @@ namespace Asterra.Gameplay.Content
         public const float LucienIronWallDurationSeconds = 12f;
         public const float LucienIronWallCooldownSeconds = 45f;
 
+        // Shared vehicles / traversal specialists
+        public const string RiverBoatId = "unit_river_boat";
+        public const string PathfinderId = "unit_pathfinder";
+
         // Shared fortifications
         public const string WatchtowerId = "building_watchtower";
         public const string PalisadeId = "building_palisade";
@@ -499,6 +503,37 @@ namespace Asterra.Gameplay.Content
             });
 
             // Shared fortifications / economy
+            registry.Register(new UnitDefData
+            {
+                Id = RiverBoatId,
+                DisplayName = "River Boat",
+                MaxHealth = 220f,
+                MoveSpeed = 6.5f,
+                AttackDamage = 8f,
+                AttackRange = 10f,
+                AttackCooldown = 1.6f,
+                GoldCost = 120,
+                TrainSeconds = 8f,
+                Role = UnitRole.Siege,
+                Armor = 2f,
+                ProjectileSpeed = 28f,
+                TraversalCapabilities = Asterra.Core.World.TraversalCapability.Water,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = PathfinderId,
+                DisplayName = "Pathfinder",
+                MaxHealth = 70f,
+                MoveSpeed = 5.8f,
+                AttackDamage = 9f,
+                AttackRange = 2f,
+                AttackCooldown = 1f,
+                GoldCost = 70,
+                TrainSeconds = 5f,
+                Role = UnitRole.Infantry,
+                TraversalCapabilities = Asterra.Core.World.TraversalCapability.Land
+                    | Asterra.Core.World.TraversalCapability.Jump,
+            });
             registry.Register(new BuildingDefData
             {
                 Id = WatchtowerId,

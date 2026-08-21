@@ -1,3 +1,5 @@
+using Asterra.Core.World;
+
 namespace Asterra.Core
 {
     public enum UnitRole : byte
@@ -39,6 +41,11 @@ namespace Asterra.Core
         public float BuildingDamageMultiplier = 1f;
         public float Armor;
         public float ProjectileSpeed; // 0 = hitscan
+        /// <summary>
+        /// Where this unit may path. Default Land. Boats = Water; amphibious = Amphibious; flyers = Flying.
+        /// Consumed by terrain/pathfinding once wired; unused by Phase-1 steer movement.
+        /// </summary>
+        public TraversalCapability TraversalCapabilities = TraversalCapability.Land;
     }
 
     public sealed class BuildingDefData

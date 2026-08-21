@@ -110,6 +110,8 @@ namespace Asterra.Core
         Death = 2,
         Deposit = 3,
         BuildComplete = 4,
+        /// <summary>World prop / bridge / tree destroyed (TargetId is the destructible).</summary>
+        WorldDestroyed = 5,
     }
 
     public readonly struct CombatEvent

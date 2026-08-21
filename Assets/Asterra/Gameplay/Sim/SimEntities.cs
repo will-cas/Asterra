@@ -1,5 +1,6 @@
 using System;
 using Asterra.Core;
+using Asterra.Core.World;
 
 namespace Asterra.Gameplay.Sim
 {
@@ -28,8 +29,17 @@ namespace Asterra.Gameplay.Sim
         public UnitRole Role;
         public float Armor;
         public float ProjectileSpeed;
+        /// <summary>Path capability mask from def.</summary>
+        public TraversalCapability TraversalCapabilities;
         /// <summary>Active Iron Wall (or similar) armor bonus currently applied to this unit.</summary>
         public float CommanderArmorBonus;
+
+        /// <summary>Active traversal link id, or -1 when not traversing.</summary>
+        public int ActiveTraversalLinkId = -1;
+        /// <summary>0..1 progress along the active link.</summary>
+        public float TraversalProgress;
+        /// <summary>True = Start→End, false = End→Start.</summary>
+        public bool TraversalForward = true;
 
         public float? MoveTargetX;
         public float? MoveTargetZ;
@@ -65,6 +75,9 @@ namespace Asterra.Gameplay.Sim
             Role = def.IsBuilder ? UnitRole.Builder : def.Role;
             Armor = def.Armor;
             ProjectileSpeed = def.ProjectileSpeed;
+            TraversalCapabilities = def.TraversalCapabilities != TraversalCapability.None
+                ? def.TraversalCapabilities
+                : TraversalCapability.Land;
             X = x;
             Z = z;
         }
@@ -78,7 +91,8 @@ namespace Asterra.Gameplay.Sim
                         && !GatherTargetId.HasValue
                         && !Patrolling
                         && !AttackMoving
-                        && !ReturningToDeposit;
+                        && !ReturningToDeposit
+                        && ActiveTraversalLinkId < 0;
             return new UnitSnapshot(
                 Id,
                 Owner,

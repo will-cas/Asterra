@@ -84,6 +84,9 @@ namespace Asterra.Gameplay.Content
             FactionRoster eastFaction,
             SkirmishMapId map)
         {
+            SkirmishMapTerrain.Apply(world.Environment, map);
+            SkirmishMapTraversal.Apply(world.Environment, map);
+
             switch (map)
             {
                 case SkirmishMapId.TwinKeeps:
@@ -98,6 +101,8 @@ namespace Asterra.Gameplay.Content
                 default:
                     throw new System.ArgumentOutOfRangeException(nameof(map), map, null);
             }
+
+            SkirmishMapDestructibles.Apply(world, ids, map);
         }
 
         private static void PopulateTwinKeeps(
@@ -181,6 +186,12 @@ namespace Asterra.Gameplay.Content
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 250f, 160f);
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 220f, 180f);
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 1700, 180f, 140f);
+
+            // Shared river boats start on water near each shore.
+            world.SpawnUnit(
+                ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.RiverBoatId, -390f, 0f);
+            world.SpawnUnit(
+                ids.Next(), eastPlayer, eastFaction.Id, FactionDefaultContent.RiverBoatId, 390f, 0f);
         }
 
         /// <summary>
@@ -207,6 +218,8 @@ namespace Asterra.Gameplay.Content
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 18f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.RangedUnitId, -310f, -30f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 8f);
+            world.SpawnUnit(
+                ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.PathfinderId, -305f, -20f);
 
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, -15f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, 15f);

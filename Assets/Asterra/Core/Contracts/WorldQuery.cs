@@ -195,6 +195,41 @@ namespace Asterra.Core
         }
     }
 
+    public readonly struct DestructibleSnapshot
+    {
+        public readonly SimEntityId Id;
+        public readonly string DefinitionId;
+        public readonly float X;
+        public readonly float Z;
+        public readonly float Health;
+        public readonly float MaxHealth;
+        public readonly Asterra.Core.World.DestructibleState State;
+        public readonly float FootprintRadius;
+        public readonly int LinkedTraversalLinkId;
+
+        public DestructibleSnapshot(
+            SimEntityId id,
+            string definitionId,
+            float x,
+            float z,
+            float health,
+            float maxHealth,
+            Asterra.Core.World.DestructibleState state,
+            float footprintRadius,
+            int linkedTraversalLinkId)
+        {
+            Id = id;
+            DefinitionId = definitionId;
+            X = x;
+            Z = z;
+            Health = health;
+            MaxHealth = maxHealth;
+            State = state;
+            FootprintRadius = footprintRadius;
+            LinkedTraversalLinkId = linkedTraversalLinkId;
+        }
+    }
+
     public interface IWorldQuery
     {
         IReadOnlyList<UnitSnapshot> Units { get; }
@@ -203,6 +238,7 @@ namespace Asterra.Core
         IReadOnlyList<ResourceSnapshot> Resources { get; }
         IReadOnlyList<CombatEvent> CombatEvents { get; }
         IReadOnlyList<ProjectileSnapshot> Projectiles { get; }
+        IReadOnlyList<DestructibleSnapshot> Destructibles { get; }
         bool HasUpgrade(PlayerId player, string upgradeDefId);
         /// <summary>Commander ability timers. Returns false if the player has no ability state.</summary>
         bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining);

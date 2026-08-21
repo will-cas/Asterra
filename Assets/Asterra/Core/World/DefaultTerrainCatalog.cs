@@ -1,0 +1,109 @@
+using Asterra.Core.World;
+
+namespace Asterra.Core.World
+{
+    /// <summary>
+    /// Built-in terrain defs for skirmish. Designers can register additional defs later via SO → DefData.
+    /// Indices are stable for save/replay; append-only when extending.
+    /// </summary>
+    public static class DefaultTerrainCatalog
+    {
+        public const ushort GrassBare = 0;
+        public const ushort GrassShort = 1;
+        public const ushort GrassLong = 2;
+        public const ushort Rock = 3;
+        public const ushort Swamp = 4;
+        public const ushort Forest = 5;
+        public const ushort Tree = 6;
+        public const ushort Beach = 7;
+        public const ushort Mountain = 8;
+        public const ushort Hill = 9;
+        public const ushort WaterRiver = 10;
+        public const ushort WaterLake = 11;
+        public const ushort WaterOcean = 12;
+        public const ushort WaterWaterfall = 13;
+        public const ushort IceThick = 14;
+        public const ushort IceThin = 15;
+        public const ushort Trench = 16;
+        public const ushort NoEntry = 17;
+
+        public static TerrainDefData[] CreateDefs()
+        {
+            return new[]
+            {
+                Def("terrain_grass_bare", "Bare Grass", TerrainCategory.GrassBare, 1.05f, 1f, TraversalCapability.Land, visibility: 1.05f, drainage: 1.2f, waterlog: 0.7f),
+                Def("terrain_grass_short", "Short Grass", TerrainCategory.GrassShort, 1f, 1f, TraversalCapability.Land),
+                Def("terrain_grass_long", "Long Grass", TerrainCategory.GrassLong, 0.92f, 1.15f, TraversalCapability.Land, visibility: 0.85f, sound: 0.9f, cover: 0.1f, los: 0.15f, waterlog: 1.1f),
+                Def("terrain_rock", "Rocks", TerrainCategory.Rock, 0.75f, 2f, TraversalCapability.Land, allowsBuild: false, gatherMod: 0.5f, destructible: true),
+                Def("terrain_swamp", "Swamp", TerrainCategory.Swamp, 0.45f, 3.5f, TraversalCapability.Land, visibility: 0.9f, combat: 0.95f, allowsBuild: false, drainage: 0.35f, waterlog: 1.8f),
+                Def("terrain_forest", "Forest", TerrainCategory.Forest, 0.85f, 1.4f, TraversalCapability.Land, visibility: 0.7f, sound: 0.85f, cover: 0.25f, los: 0.55f),
+                Def("terrain_tree", "Tree Stand", TerrainCategory.Tree, 0f, TerrainDefData.PathCostBlocked, TraversalCapability.Land, visibility: 0.6f, allowsBuild: false, gatherMod: 1.2f, destructible: true, los: 0.8f),
+                Def("terrain_beach", "Beach", TerrainCategory.Beach, 0.9f, 1.1f, TraversalCapability.Land, drainage: 1.4f, waterlog: 0.5f),
+                Def("terrain_mountain", "Mountain", TerrainCategory.Mountain, 0.55f, 5f, TraversalCapability.Mountain, allowsBuild: false, allowsGather: false),
+                Def("terrain_hill", "Hills", TerrainCategory.Hill, 0.88f, 1.25f, TraversalCapability.Land, combat: 1.05f, cover: 0.05f),
+                Def("terrain_water_river", "River", TerrainCategory.WaterRiver, 1f, 1.2f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
+                Def("terrain_water_lake", "Lake", TerrainCategory.WaterLake, 1f, 1f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
+                Def("terrain_water_ocean", "Ocean", TerrainCategory.WaterOcean, 1f, 1f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
+                Def("terrain_waterfall", "Waterfall", TerrainCategory.WaterWaterfall, 0f, TerrainDefData.PathCostBlocked, TraversalCapability.None, allowsBuild: false, allowsGather: false, change: false),
+                Def("terrain_ice_thick", "Thick Ice", TerrainCategory.Ice, 0.95f, 1.1f, TraversalCapability.Land, sound: 1.15f, destructible: true, drainage: 0.2f),
+                Def("terrain_ice_thin", "Thin Ice", TerrainCategory.Ice, 0.8f, 1.35f, TraversalCapability.Land, sound: 1.25f, combat: 0.9f, destructible: true, drainage: 0.15f),
+                Def("terrain_trench", "Trench", TerrainCategory.Trench, 0.7f, 1.3f, TraversalCapability.Land, visibility: 0.75f, cover: 0.4f, los: 0.35f, combat: 1.1f, allowsBuild: false),
+                TerrainDefData.CreateNoEntry("terrain_no_entry"),
+            };
+        }
+
+        /// <summary>Playable grid filled with short grass; outside cells are treated as blocked by the grid.</summary>
+        public static WorldTerrainGrid CreatePlayableGrid(float playableHalfExtent = 450f, float cellSize = 10f)
+        {
+            var defs = CreateDefs();
+            int cells = (int)System.Math.Ceiling((playableHalfExtent * 2f) / cellSize);
+            if (cells < 1)
+                cells = 1;
+            float origin = -playableHalfExtent;
+            return new WorldTerrainGrid(cells, cells, cellSize, origin, origin, defs, defaultDefIndex: GrassShort);
+        }
+
+        private static TerrainDefData Def(
+            string id,
+            string name,
+            TerrainCategory category,
+            float move,
+            float pathCost,
+            TraversalCapability required,
+            float visibility = 1f,
+            float sound = 1f,
+            float combat = 1f,
+            bool allowsBuild = true,
+            bool allowsGather = true,
+            float gatherMod = 1f,
+            bool destructible = false,
+            bool change = true,
+            float drainage = 1f,
+            float waterlog = 1f,
+            float cover = 0f,
+            float los = 0f)
+        {
+            return new TerrainDefData
+            {
+                Id = id,
+                DisplayName = name,
+                Category = category,
+                MovementSpeedModifier = move,
+                PathfindingCost = pathCost,
+                RequiredCapabilities = required,
+                VisibilityModifier = visibility,
+                SoundNoiseModifier = sound,
+                CombatModifier = combat,
+                AllowsBuilding = allowsBuild,
+                AllowsResourceGathering = allowsGather,
+                ResourceGatherModifier = gatherMod,
+                IsDestructible = destructible,
+                CanChangeAtRuntime = change,
+                DrainageRate = drainage,
+                WaterlogSensitivity = waterlog,
+                CoverBonus = cover,
+                LosBlockFactor = los,
+            };
+        }
+    }
+}

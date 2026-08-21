@@ -6,14 +6,20 @@
     <Nullable>disable</Nullable>
     <RootNamespace>Asterra.Smoke</RootNamespace>
   </PropertyGroup>
-  <ItemGroup>
+    <ItemGroup>
     <!-- Pure C# slice (no UnityEngine) for CI / pre-Editor validation -->
     <Compile Include="../../Assets/Asterra/Core/**/*.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Services/ResourceWallet.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Services/CommandBus.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Services/LockstepClock.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Sim/**/*.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/World/**/*.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishDefaultContent.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishMapTerrain.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishMapTraversal.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/SkirmishMapDestructibles.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/Content/DefaultDestructibleCatalog.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Content/FactionDefaultContent.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/MapBounds.cs" />
   </ItemGroup>
 </Project>

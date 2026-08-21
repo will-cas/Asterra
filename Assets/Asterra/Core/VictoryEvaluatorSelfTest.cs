@@ -55,6 +55,8 @@ namespace Asterra.Core
             public System.Collections.Generic.IReadOnlyList<ResourceSnapshot> Resources => _resources;
             public System.Collections.Generic.IReadOnlyList<CombatEvent> CombatEvents => _combat;
             public System.Collections.Generic.IReadOnlyList<ProjectileSnapshot> Projectiles => _projectiles;
+            public System.Collections.Generic.IReadOnlyList<DestructibleSnapshot> Destructibles =>
+                System.Array.Empty<DestructibleSnapshot>();
 
             public bool HasUpgrade(PlayerId player, string upgradeDefId) => false;
 

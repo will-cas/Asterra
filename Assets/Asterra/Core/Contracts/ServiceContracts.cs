@@ -60,10 +60,28 @@ namespace Asterra.Core
         void Tick(float deltaSeconds);
     }
 
+    /// <summary>
+    /// Path API for units. Slice 1 may return direct steers; slice 2 flow fields.
+    /// Cost-aware overloads accept traversal capabilities so terrain/water/no-entry can participate
+    /// without branching on unit type names. Existing callers keep using the 2D overload.
+    /// </summary>
     public interface IPathfindingService
     {
         bool TryGetPath(float fromX, float fromZ, float toX, float toZ, List<(float x, float z)> pathOut);
         void RequestFlowField(float toX, float toZ, int fieldId);
+
+        /// <summary>
+        /// Cost-aware path. Default delegates to the capability-agnostic overload until a
+        /// terrain-aware implementation is wired.
+        /// </summary>
+        bool TryGetPath(
+            float fromX,
+            float fromZ,
+            float toX,
+            float toZ,
+            Asterra.Core.World.TraversalCapability capabilities,
+            List<(float x, float z)> pathOut)
+            => TryGetPath(fromX, fromZ, toX, toZ, pathOut);
     }
 
     public interface IIdFactory

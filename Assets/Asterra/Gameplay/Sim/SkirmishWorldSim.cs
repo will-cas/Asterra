@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Core.World;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Sim;
+using Asterra.Gameplay.World;
 
 namespace Asterra.Gameplay
 {
@@ -15,11 +17,13 @@ namespace Asterra.Gameplay
         private readonly IIdFactory _ids;
         private readonly DefinitionRegistry _defs;
         private readonly UpgradeState _upgrades;
+        private readonly WorldEnvironmentSim _environment;
 
         private readonly List<SimUnit> _units = new();
         private readonly List<SimBuilding> _buildings = new();
         private readonly List<SimTerritory> _territories = new();
         private readonly List<SimResourceNode> _resources = new();
+        private readonly List<SimDestructible> _destructibles = new();
 
         private readonly List<UnitSnapshot> _unitSnapshots = new();
         private readonly List<BuildingSnapshot> _buildingSnapshots = new();
@@ -27,12 +31,14 @@ namespace Asterra.Gameplay
         private readonly List<ResourceSnapshot> _resourceSnapshots = new();
         private readonly List<CombatEvent> _combatEvents = new();
         private readonly List<ProjectileSnapshot> _projectileSnapshots = new();
+        private readonly List<DestructibleSnapshot> _destructibleSnapshots = new();
         private readonly List<SimProjectile> _projectiles = new();
 
         private readonly Dictionary<uint, SimUnit> _unitsById = new();
         private readonly Dictionary<uint, SimBuilding> _buildingsById = new();
         private readonly Dictionary<uint, SimTerritory> _territoriesById = new();
         private readonly Dictionary<uint, SimResourceNode> _resourcesById = new();
+        private readonly Dictionary<uint, SimDestructible> _destructiblesById = new();
 
         private float _gatherAcc;
         private float _incomeAcc;
@@ -57,13 +63,21 @@ namespace Asterra.Gameplay
             public bool VsBuilding;
         }
 
-        public SkirmishWorldSim(IResourceWallet wallet, IIdFactory ids, DefinitionRegistry defs)
+        public SkirmishWorldSim(
+            IResourceWallet wallet,
+            IIdFactory ids,
+            DefinitionRegistry defs,
+            WorldEnvironmentSim environment = null)
         {
             _wallet = wallet;
             _ids = ids;
             _defs = defs;
             _upgrades = new UpgradeState(wallet, defs);
+            _environment = environment ?? new WorldEnvironmentSim();
         }
+
+        /// <summary>World terrain / weather / time. Presentation and tests may query; orders stay command-driven.</summary>
+        public WorldEnvironmentSim Environment => _environment;
 
         public IReadOnlyList<UnitSnapshot> Units => _unitSnapshots;
         public IReadOnlyList<BuildingSnapshot> Buildings => _buildingSnapshots;
@@ -71,6 +85,7 @@ namespace Asterra.Gameplay
         public IReadOnlyList<ResourceSnapshot> Resources => _resourceSnapshots;
         public IReadOnlyList<CombatEvent> CombatEvents => _combatEvents;
         public IReadOnlyList<ProjectileSnapshot> Projectiles => _projectileSnapshots;
+        public IReadOnlyList<DestructibleSnapshot> Destructibles => _destructibleSnapshots;
 
         public bool HasUpgrade(PlayerId player, string upgradeDefId) => _upgrades.Has(player, upgradeDefId);
 
@@ -149,6 +164,27 @@ namespace Asterra.Gameplay
             RebuildSnapshots();
         }
 
+        public SimDestructible SpawnDestructible(
+            SimEntityId id,
+            DestructibleDefData def,
+            float x,
+            float z,
+            int linkedTraversalLinkId = -1)
+        {
+            var prop = new SimDestructible(id, def, x, z, linkedTraversalLinkId);
+            _destructibles.Add(prop);
+            _destructiblesById[id.Value] = prop;
+            RebuildSnapshots();
+            return prop;
+        }
+
+        /// <summary>Test / ability hook for applying structure damage without spawning an attacker.</summary>
+        public void ApplyWorldDamage(SimEntityId targetId, float damage, bool vsStructure = true)
+        {
+            DealDamage(targetId, damage, vsStructure);
+            RebuildSnapshots();
+        }
+
         public void ApplyCommands(IReadOnlyList<GameCommand> commands)
         {
             for (int i = 0; i < commands.Count; i++)
@@ -209,6 +245,7 @@ namespace Asterra.Gameplay
         public void Tick(float deltaSeconds)
         {
             _combatEvents.Clear();
+            _environment.Tick(deltaSeconds);
             TickCommanderAbilities(deltaSeconds);
             TickConstruction(deltaSeconds);
             TickProduction(deltaSeconds);
@@ -220,6 +257,8 @@ namespace Asterra.Gameplay
             TickTerritory(deltaSeconds);
             TickTerritoryIncome(deltaSeconds);
             CullDead();
+            // Dirty regions are applied immediately on destroy; clear the queue for listeners/pathfinding.
+            _environment.PathDirty.Clear();
             RebuildSnapshots();
         }
 
@@ -227,6 +266,7 @@ namespace Asterra.Gameplay
         {
             ulong hash = 14695981039346656037ul;
             hash ^= _mutationCounter;
+            hash ^= _environment.Grid.MutationVersion * 1099511628211ul;
             hash ^= (ulong)_units.Count * 1099511628211ul;
             hash ^= (ulong)_buildings.Count * 1099511628211ul;
             hash ^= (ulong)_resources.Count * 1099511628211ul;
@@ -353,6 +393,7 @@ namespace Asterra.Gameplay
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = false;
                 unit.Patrolling = false;
+                ClearTraversal(unit);
                 _mutationCounter ^= unit.Id.Value * 17ul;
             }
         }
@@ -457,6 +498,9 @@ namespace Asterra.Gameplay
                 return;
 
             if (!IsInsidePlayable(place.X, place.Z))
+                return;
+
+            if (!_environment.CanPlaceBuilding(place.X, place.Z))
                 return;
 
             if (!HasNearbyBuilder(place.Issuer, place.X, place.Z, builderPlaceRadius: 55f))
@@ -866,6 +910,9 @@ namespace Asterra.Gameplay
                 if (unit.GatherTargetId.HasValue)
                     continue;
 
+                if (TickUnitTraversal(unit, dt))
+                    continue;
+
                 if (unit.AttackTargetId.HasValue)
                 {
                     if (TryGetAttackTargetPosition(unit.AttackTargetId.Value, out float tx, out float tz))
@@ -874,7 +921,16 @@ namespace Asterra.Gameplay
                         if (dist > unit.AttackRange)
                         {
                             if (unit.Stance != UnitStance.Hold)
+                            {
+                                TryBeginTraversal(unit, tx, tz);
+                                if (unit.ActiveTraversalLinkId >= 0)
+                                {
+                                    TickUnitTraversal(unit, dt);
+                                    continue;
+                                }
+
                                 StepTowardAvoiding(unit, tx, tz, dt);
+                            }
                         }
                     }
                     else
@@ -943,6 +999,13 @@ namespace Asterra.Gameplay
                     continue;
                 }
 
+                TryBeginTraversal(unit, mx, mz);
+                if (unit.ActiveTraversalLinkId >= 0)
+                {
+                    TickUnitTraversal(unit, dt);
+                    continue;
+                }
+
                 StepTowardAvoiding(unit, mx, mz, dt);
             }
 
@@ -950,7 +1013,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < _units.Count; i++)
             {
                 var a = _units[i];
-                if (!a.IsAlive)
+                if (!a.IsAlive || a.ActiveTraversalLinkId >= 0)
                     continue;
                 for (int j = i + 1; j < _units.Count; j++)
                 {
@@ -967,10 +1030,8 @@ namespace Asterra.Gameplay
                     float push = (minDist - d) * 0.5f;
                     float nx = dx / d;
                     float nz = dz / d;
-                    a.X -= nx * push * 0.5f;
-                    a.Z -= nz * push * 0.5f;
-                    b.X += nx * push * 0.5f;
-                    b.Z += nz * push * 0.5f;
+                    TrySetUnitPosition(a, a.X - nx * push * 0.5f, a.Z - nz * push * 0.5f);
+                    TrySetUnitPosition(b, b.X + nx * push * 0.5f, b.Z + nz * push * 0.5f);
                 }
             }
         }
@@ -984,17 +1045,21 @@ namespace Asterra.Gameplay
                     continue;
                 if (unit.AttackCooldownRemaining > 0f)
                     unit.AttackCooldownRemaining -= dt;
+                if (unit.ActiveTraversalLinkId >= 0
+                    && _environment.TraversalGraph.TryGetLink(unit.ActiveTraversalLinkId, out var travelLink)
+                    && !travelLink.AllowsCombat)
+                    continue;
                 if (unit.Role == UnitRole.Builder || unit.AttackDamage <= 0f)
                     continue;
                 if (!unit.AttackTargetId.HasValue)
                     continue;
-                if (!TryGetDamageable(unit.AttackTargetId.Value, out var targetUnit, out var targetBuilding, out float tx, out float tz, out PlayerId targetOwner))
+                if (!TryGetDamageable(unit.AttackTargetId.Value, out var targetUnit, out var targetBuilding, out var targetDestructible, out float tx, out float tz, out PlayerId targetOwner))
                 {
                     unit.AttackTargetId = null;
                     continue;
                 }
 
-                if (targetOwner == unit.Owner)
+                if (targetDestructible == null && targetOwner == unit.Owner)
                 {
                     unit.AttackTargetId = null;
                     continue;
@@ -1006,8 +1071,8 @@ namespace Asterra.Gameplay
                     continue;
 
                 float damage = unit.AttackDamage;
-                bool isBuilding = targetBuilding != null;
-                if (isBuilding)
+                bool isStructure = targetBuilding != null || targetDestructible != null;
+                if (isStructure)
                     damage *= unit.BuildingDamageMultiplier;
                 else if (targetUnit != null)
                     damage *= CombatMath.RoleMultiplier(unit.Role, targetUnit.Role);
@@ -1021,12 +1086,12 @@ namespace Asterra.Gameplay
                         Speed = unit.ProjectileSpeed,
                         Damage = damage,
                         TargetId = unit.AttackTargetId.Value,
-                        VsBuilding = isBuilding,
+                        VsBuilding = isStructure,
                     });
                 }
                 else
                 {
-                    DealDamage(unit.AttackTargetId.Value, damage, isBuilding);
+                    DealDamage(unit.AttackTargetId.Value, damage, isStructure);
                 }
 
                 unit.AttackCooldownRemaining = unit.AttackCooldown;
@@ -1220,6 +1285,14 @@ namespace Asterra.Gameplay
                 _buildingsById.Remove(_buildings[i].Id.Value);
                 _buildings.RemoveAt(i);
             }
+
+            for (int i = _destructibles.Count - 1; i >= 0; i--)
+            {
+                if (_destructibles[i].IsAlive)
+                    continue;
+                _destructiblesById.Remove(_destructibles[i].Id.Value);
+                _destructibles.RemoveAt(i);
+            }
         }
 
         private void TryAcquireInRadius(SimUnit unit, float acquire)
@@ -1258,6 +1331,21 @@ namespace Asterra.Gameplay
                 }
             }
 
+            for (int i = 0; i < _destructibles.Count; i++)
+            {
+                var d = _destructibles[i];
+                if (!d.IsAlive)
+                    continue;
+                float dx = d.X - unit.X;
+                float dz = d.Z - unit.Z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < best)
+                {
+                    best = d2;
+                    bestId = d.Id;
+                }
+            }
+
             if (bestId.HasValue)
                 unit.AttackTargetId = bestId;
         }
@@ -1274,6 +1362,7 @@ namespace Asterra.Gameplay
                 {
                     preferredBuilding.State = BuildingState.Destroyed;
                     _combatEvents.Add(new CombatEvent(CombatEventKind.Death, preferredBuilding.Id, preferredBuilding.X, preferredBuilding.Z, true));
+                    OnBuildingDestroyed(preferredBuilding);
                 }
 
                 return;
@@ -1289,6 +1378,12 @@ namespace Asterra.Gameplay
                 return;
             }
 
+            if (_destructiblesById.TryGetValue(targetId.Value, out var targetProp) && targetProp.IsAlive)
+            {
+                ApplyDestructibleDamage(targetProp, damage, preferBuilding ? DamageType.Siege : DamageType.Blunt);
+                return;
+            }
+
             if (_buildingsById.TryGetValue(targetId.Value, out var targetBuilding)
                 && targetBuilding.State != BuildingState.Destroyed)
             {
@@ -1298,8 +1393,84 @@ namespace Asterra.Gameplay
                 {
                     targetBuilding.State = BuildingState.Destroyed;
                     _combatEvents.Add(new CombatEvent(CombatEventKind.Death, targetBuilding.Id, targetBuilding.X, targetBuilding.Z, true));
+                    OnBuildingDestroyed(targetBuilding);
                 }
             }
+        }
+
+        private void ApplyDestructibleDamage(SimDestructible prop, float damage, DamageType damageType)
+        {
+            if ((prop.Resistances & damageType) != 0)
+                damage *= prop.ResistanceFactor;
+            damage = CombatMath.ApplyArmor(damage, prop.Armor);
+            prop.Health -= damage;
+            if (prop.Health > 0f)
+                prop.State = prop.Health < prop.MaxHealth * 0.5f ? DestructibleState.Damaged : DestructibleState.Intact;
+            _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, prop.Id, prop.X, prop.Z, false));
+            if (prop.Health <= 0f)
+            {
+                prop.Health = 0f;
+                prop.State = DestructibleState.Destroyed;
+                _combatEvents.Add(new CombatEvent(CombatEventKind.WorldDestroyed, prop.Id, prop.X, prop.Z, false));
+                FinalizeDestructible(prop);
+            }
+        }
+
+        private void FinalizeDestructible(SimDestructible prop)
+        {
+            float r = prop.FootprintRadius;
+            if (prop.ClearsTerrainOnDestroy)
+            {
+                _environment.Grid.FillWorldRect(
+                    prop.X - r,
+                    prop.Z - r,
+                    prop.X + r,
+                    prop.Z + r,
+                    prop.ReplaceTerrainDefIndex);
+                _environment.RebuildFeatureIndex();
+            }
+
+            if (prop.DisableTraversalOnDestroy && prop.LinkedTraversalLinkId >= 0)
+            {
+                _environment.TraversalGraph.SetLinkEnabled(prop.LinkedTraversalLinkId, false);
+                for (int i = 0; i < _units.Count; i++)
+                {
+                    if (_units[i].ActiveTraversalLinkId == prop.LinkedTraversalLinkId)
+                        ClearTraversal(_units[i]);
+                }
+
+                _environment.PathDirty.MarkRadius(prop.X, prop.Z, r + 8f, PathDirtyReason.BridgeDisabled);
+            }
+            else
+            {
+                _environment.PathDirty.MarkRadius(prop.X, prop.Z, r + 4f, PathDirtyReason.DestructibleCleared);
+            }
+
+            if (prop.ResourceDropType.HasValue && prop.ResourceDropAmount > 0)
+            {
+                AddResourceNode(
+                    _ids.Next(),
+                    prop.ResourceDropType.Value,
+                    prop.ResourceDropAmount,
+                    prop.X + 2f,
+                    prop.Z + 2f);
+            }
+
+            _mutationCounter ^= prop.Id.Value * 1303ul;
+        }
+
+        private void OnBuildingDestroyed(SimBuilding building)
+        {
+            if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Tower)
+            {
+                _environment.PathDirty.MarkRadius(
+                    building.X,
+                    building.Z,
+                    building.FootprintRadius + 6f,
+                    PathDirtyReason.WallRemoved);
+            }
+
+            _mutationCounter ^= building.Id.Value * 1409ul;
         }
 
         private void AutoGatherNearbyBuilders(PlayerId owner, float x, float z)
@@ -1399,6 +1570,13 @@ namespace Asterra.Gameplay
                 return true;
             }
 
+            if (_destructiblesById.TryGetValue(id.Value, out var prop) && prop.IsAlive)
+            {
+                x = prop.X;
+                z = prop.Z;
+                return true;
+            }
+
             x = 0f;
             z = 0f;
             return false;
@@ -1408,12 +1586,14 @@ namespace Asterra.Gameplay
             SimEntityId id,
             out SimUnit targetUnit,
             out SimBuilding targetBuilding,
+            out SimDestructible targetDestructible,
             out float x,
             out float z,
             out PlayerId owner)
         {
             targetUnit = null;
             targetBuilding = null;
+            targetDestructible = null;
             if (_unitsById.TryGetValue(id.Value, out var unit) && unit.IsAlive)
             {
                 targetUnit = unit;
@@ -1432,10 +1612,86 @@ namespace Asterra.Gameplay
                 return true;
             }
 
+            if (_destructiblesById.TryGetValue(id.Value, out var prop) && prop.IsAlive)
+            {
+                targetDestructible = prop;
+                x = prop.X;
+                z = prop.Z;
+                owner = new PlayerId(255); // neutral world object
+                return true;
+            }
+
             x = 0f;
             z = 0f;
             owner = default;
             return false;
+        }
+
+        private void ClearTraversal(SimUnit unit)
+        {
+            unit.ActiveTraversalLinkId = -1;
+            unit.TraversalProgress = 0f;
+            unit.TraversalForward = true;
+        }
+
+        private bool TickUnitTraversal(SimUnit unit, float dt)
+        {
+            if (unit.ActiveTraversalLinkId < 0)
+                return false;
+            if (!_environment.TraversalGraph.TryGetLink(unit.ActiveTraversalLinkId, out var link) || !link.Enabled)
+            {
+                ClearTraversal(unit);
+                return false;
+            }
+
+            float dur = link.DurationSeconds > 0.05f ? link.DurationSeconds : 0.05f;
+            unit.TraversalProgress += dt / dur;
+            float t = unit.TraversalProgress;
+            if (t > 1f)
+                t = 1f;
+
+            float ax = unit.TraversalForward ? link.StartX : link.EndX;
+            float az = unit.TraversalForward ? link.StartZ : link.EndZ;
+            float bx = unit.TraversalForward ? link.EndX : link.StartX;
+            float bz = unit.TraversalForward ? link.EndZ : link.StartZ;
+            // Traversal ignores terrain blockers (bridge over water, jump over gap).
+            unit.X = ax + (bx - ax) * t;
+            unit.Z = az + (bz - az) * t;
+
+            if (unit.TraversalProgress >= 1f)
+            {
+                unit.X = bx;
+                unit.Z = bz;
+                ClearTraversal(unit);
+            }
+
+            return true;
+        }
+
+        private void TryBeginTraversal(SimUnit unit, float destX, float destZ)
+        {
+            if (unit.ActiveTraversalLinkId >= 0)
+                return;
+            if (!_environment.TraversalGraph.TryFindLinkForMove(
+                    unit.X,
+                    unit.Z,
+                    destX,
+                    destZ,
+                    unit.TraversalCapabilities,
+                    approachRadius: 0f,
+                    out var link,
+                    out bool forward))
+                return;
+
+            float approachX = forward ? link.StartX : link.EndX;
+            float approachZ = forward ? link.StartZ : link.EndZ;
+            if (Distance(unit.X, unit.Z, approachX, approachZ) > link.ApproachRadius)
+                return;
+
+            unit.ActiveTraversalLinkId = link.Id;
+            unit.TraversalForward = forward;
+            unit.TraversalProgress = 0f;
+            _mutationCounter ^= (ulong)(link.Id + 1) * 911ul;
         }
 
         private void StepTowardAvoiding(SimUnit unit, float tx, float tz, float dt)
@@ -1468,6 +1724,23 @@ namespace Asterra.Gameplay
                 }
             }
 
+            for (int i = 0; i < _destructibles.Count; i++)
+            {
+                var d = _destructibles[i];
+                if (!d.IsAlive || !d.BlocksMovement)
+                    continue;
+                float bx = unit.X - d.X;
+                float bz = unit.Z - d.Z;
+                float dist = MathF.Sqrt(bx * bx + bz * bz);
+                float avoid = d.FootprintRadius + 3f;
+                if (dist < avoid && dist > 0.001f)
+                {
+                    float strength = (avoid - dist) / avoid;
+                    steerX += (bx / dist) * strength;
+                    steerZ += (bz / dist) * strength;
+                }
+            }
+
             nx += steerX * 1.25f;
             nz += steerZ * 1.25f;
             float nlen = MathF.Sqrt(nx * nx + nz * nz);
@@ -1477,16 +1750,44 @@ namespace Asterra.Gameplay
                 nz /= nlen;
             }
 
-            float step = unit.MoveSpeed * dt;
+            float terrainMod = _environment.MovementModifier(unit.X, unit.Z, unit.TraversalCapabilities);
+            if (terrainMod <= 0.0001f)
+                return;
+
+            float step = unit.MoveSpeed * terrainMod * dt;
             if (step >= len && steerX * steerX + steerZ * steerZ < 0.01f)
             {
-                unit.X = tx;
-                unit.Z = tz;
+                TrySetUnitPosition(unit, tx, tz);
                 return;
             }
 
-            unit.X += nx * step;
-            unit.Z += nz * step;
+            TrySetUnitPosition(unit, unit.X + nx * step, unit.Z + nz * step);
+        }
+
+        /// <summary>
+        /// Applies a position if the cell is traversable for the unit; otherwise leaves the unit in place.
+        /// Records snow footprints when depth is present (ring buffer — no GameObjects).
+        /// </summary>
+        private bool TrySetUnitPosition(SimUnit unit, float x, float z)
+        {
+            if (!IsInsidePlayable(x, z))
+                return false;
+            if (!_environment.CanUnitEnter(x, z, unit.TraversalCapabilities))
+                return false;
+
+            float oldX = unit.X;
+            float oldZ = unit.Z;
+            unit.X = x;
+            unit.Z = z;
+
+            if (_environment.Grid.TryGetCell(x, z, out var cell) && cell.SnowDepth01 > 24)
+            {
+                float moved2 = (x - oldX) * (x - oldX) + (z - oldZ) * (z - oldZ);
+                if (moved2 > 0.15f * 0.15f)
+                    _environment.WeatherSim.Footprints.Add(x, z, (byte)Math.Min(255, 80 + cell.SnowDepth01 / 2));
+            }
+
+            return true;
         }
 
         private bool HasNearbyBuilder(PlayerId owner, float x, float z, float builderPlaceRadius)
@@ -1510,7 +1811,7 @@ namespace Asterra.Gameplay
 
         private static bool IsInsidePlayable(float x, float z)
         {
-            const float half = 450f;
+            float half = MapBounds.PlayableHalfExtent;
             return x >= -half && x <= half && z >= -half && z <= half;
         }
 
@@ -1556,6 +1857,10 @@ namespace Asterra.Gameplay
             _resourceSnapshots.Clear();
             for (int i = 0; i < _resources.Count; i++)
                 _resourceSnapshots.Add(_resources[i].ToSnapshot());
+
+            _destructibleSnapshots.Clear();
+            for (int i = 0; i < _destructibles.Count; i++)
+                _destructibleSnapshots.Add(_destructibles[i].ToSnapshot());
 
             _projectileSnapshots.Clear();
             for (int i = 0; i < _projectiles.Count; i++)
