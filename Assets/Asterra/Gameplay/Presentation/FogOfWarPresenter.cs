@@ -5,39 +5,44 @@ using UnityEngine;
 namespace Asterra.Gameplay.Presentation
 {
     /// <summary>
-    /// Client-only fog of war: vision circles from owned units/buildings,
-    /// hide enemies outside sight, and darken unexplored map cells.
+    /// Soft circular fog of war (no grid cells). Explored memory is a continuous texture;
+    /// live vision is evaluated smoothly in the fog shader.
     /// </summary>
     public sealed class FogOfWarPresenter : MonoBehaviour
     {
+        private const int MaxVision = 48;
+        private const int ExploredResolution = 192;
+
         [SerializeField] private MatchBootstrap match;
         [SerializeField] private float unitSightRadius = 110f;
         [SerializeField] private float keepSightRadius = 160f;
         [SerializeField] private float buildingSightRadius = 85f;
         [SerializeField] private float mapHalfExtent = MapBounds.PlayableHalfExtent;
-        [SerializeField] private float cellSize = 30f;
-        [SerializeField] private float fogHeight = 0.4f;
+        [SerializeField] private float fogHeight = 40f;
 
         private readonly List<Vector2> _visionCenters = new();
         private readonly List<float> _visionRadii = new();
-        private readonly List<FogCell> _cells = new();
-        private Transform _fogRoot;
-        private Material _unexploredMat;
-        private Material _exploredMat;
-        private bool _built;
+        private readonly Vector4[] _visionData = new Vector4[MaxVision];
+        private readonly Color32[] _exploredPixels = new Color32[ExploredResolution * ExploredResolution];
 
-        private struct FogCell
-        {
-            public float X;
-            public float Z;
-            public Renderer Renderer;
-            public bool Explored;
-        }
+        private Texture2D _exploredTex;
+        private Material _fogMat;
+        private Transform _fogPlane;
+        private bool _built;
+        private float _mapSize;
 
         private void Awake()
         {
             if (match == null)
                 match = FindFirstObjectByType<MatchBootstrap>();
+        }
+
+        private void OnDestroy()
+        {
+            if (_exploredTex != null)
+                Destroy(_exploredTex);
+            if (_fogMat != null)
+                Destroy(_fogMat);
         }
 
         private void LateUpdate()
@@ -46,10 +51,11 @@ namespace Asterra.Gameplay.Presentation
                 return;
 
             if (!_built)
-                BuildFogGrid();
+                BuildFogPlane();
 
             CollectVision(match.Session.LocalPlayer);
-            UpdateFogCells();
+            StampExplored();
+            PushVisionToMaterial();
             ApplyEntityVisibility(match.Session.LocalPlayer);
         }
 
@@ -111,32 +117,67 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private void UpdateFogCells()
+        private void StampExplored()
         {
-            for (int i = 0; i < _cells.Count; i++)
+            if (_exploredTex == null)
+                return;
+
+            float origin = -mapHalfExtent;
+            bool dirty = false;
+            for (int i = 0; i < _visionCenters.Count; i++)
             {
-                var cell = _cells[i];
-                bool visible = IsWorldVisible(cell.X, cell.Z);
-                if (visible)
-                    cell.Explored = true;
+                float cx = _visionCenters[i].x;
+                float cz = _visionCenters[i].y;
+                float radius = _visionRadii[i] * 0.92f;
+                int minX = Mathf.Clamp(Mathf.FloorToInt(((cx - radius) - origin) / _mapSize * ExploredResolution), 0, ExploredResolution - 1);
+                int maxX = Mathf.Clamp(Mathf.CeilToInt(((cx + radius) - origin) / _mapSize * ExploredResolution), 0, ExploredResolution - 1);
+                int minZ = Mathf.Clamp(Mathf.FloorToInt(((cz - radius) - origin) / _mapSize * ExploredResolution), 0, ExploredResolution - 1);
+                int maxZ = Mathf.Clamp(Mathf.CeilToInt(((cz + radius) - origin) / _mapSize * ExploredResolution), 0, ExploredResolution - 1);
 
-                if (visible)
+                for (int pz = minZ; pz <= maxZ; pz++)
                 {
-                    cell.Renderer.enabled = false;
-                }
-                else if (cell.Explored)
-                {
-                    cell.Renderer.enabled = true;
-                    cell.Renderer.sharedMaterial = _exploredMat;
-                }
-                else
-                {
-                    cell.Renderer.enabled = true;
-                    cell.Renderer.sharedMaterial = _unexploredMat;
-                }
+                    for (int px = minX; px <= maxX; px++)
+                    {
+                        float wx = origin + (px + 0.5f) / ExploredResolution * _mapSize;
+                        float wz = origin + (pz + 0.5f) / ExploredResolution * _mapSize;
+                        float dx = wx - cx;
+                        float dz = wz - cz;
+                        float dist = Mathf.Sqrt(dx * dx + dz * dz);
+                        float falloff = 1f - Mathf.SmoothStep(radius * 0.55f, radius, dist);
+                        if (falloff <= 0.01f)
+                            continue;
 
-                _cells[i] = cell;
+                        int idx = pz * ExploredResolution + px;
+                        byte next = (byte)Mathf.Min(255, _exploredPixels[idx].r + falloff * 90f);
+                        if (next > _exploredPixels[idx].r)
+                        {
+                            _exploredPixels[idx] = new Color32(next, next, next, 255);
+                            dirty = true;
+                        }
+                    }
+                }
             }
+
+            if (!dirty)
+                return;
+
+            _exploredTex.SetPixels32(_exploredPixels);
+            _exploredTex.Apply(updateMipmaps: false);
+        }
+
+        private void PushVisionToMaterial()
+        {
+            if (_fogMat == null)
+                return;
+
+            int count = Mathf.Min(_visionCenters.Count, MaxVision);
+            for (int i = 0; i < count; i++)
+                _visionData[i] = new Vector4(_visionCenters[i].x, _visionCenters[i].y, _visionRadii[i], 0f);
+            for (int i = count; i < MaxVision; i++)
+                _visionData[i] = Vector4.zero;
+
+            _fogMat.SetInt("_VisionCount", count);
+            _fogMat.SetVectorArray("_VisionData", _visionData);
         }
 
         private void ApplyEntityVisibility(PlayerId local)
@@ -159,66 +200,49 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private void BuildFogGrid()
+        private void BuildFogPlane()
         {
             _built = true;
-            EnsureMaterials();
+            _mapSize = mapHalfExtent * 2f;
 
-            var rootGo = new GameObject("FogOfWar");
-            rootGo.transform.SetParent(transform, false);
-            _fogRoot = rootGo.transform;
+            _exploredTex = new Texture2D(ExploredResolution, ExploredResolution, TextureFormat.RGB24, mipChain: false, linear: true);
+            _exploredTex.name = "FoWExplored";
+            _exploredTex.wrapMode = TextureWrapMode.Clamp;
+            _exploredTex.filterMode = FilterMode.Bilinear;
+            for (int i = 0; i < _exploredPixels.Length; i++)
+                _exploredPixels[i] = new Color32(0, 0, 0, 255);
+            _exploredTex.SetPixels32(_exploredPixels);
+            _exploredTex.Apply();
 
-            int cellsPerSide = Mathf.CeilToInt((mapHalfExtent * 2f) / cellSize);
-            float origin = -mapHalfExtent + cellSize * 0.5f;
-            for (int iz = 0; iz < cellsPerSide; iz++)
+            var shader = Shader.Find("Asterra/SoftFogOfWar");
+            if (shader == null)
             {
-                for (int ix = 0; ix < cellsPerSide; ix++)
-                {
-                    float x = origin + ix * cellSize;
-                    float z = origin + iz * cellSize;
-                    var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    Object.Destroy(quad.GetComponent<Collider>());
-                    quad.name = $"Fog_{ix}_{iz}";
-                    quad.transform.SetParent(_fogRoot, false);
-                    quad.transform.position = new Vector3(x, fogHeight, z);
-                    quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-                    quad.transform.localScale = new Vector3(cellSize * 0.98f, cellSize * 0.98f, 1f);
-                    var rend = quad.GetComponent<Renderer>();
-                    rend.sharedMaterial = _unexploredMat;
-                    _cells.Add(new FogCell
-                    {
-                        X = x,
-                        Z = z,
-                        Renderer = rend,
-                        Explored = false,
-                    });
-                }
-            }
-        }
-
-        private void EnsureMaterials()
-        {
-            if (_unexploredMat != null)
+                Debug.LogWarning("[Asterra] SoftFogOfWar shader missing — fog disabled.");
                 return;
+            }
 
-            var shader = Shader.Find("Asterra/UnlitColor")
-                         ?? Shader.Find("Universal Render Pipeline/Unlit")
-                         ?? Shader.Find("Unlit/Color")
-                         ?? Shader.Find("Sprites/Default");
+            _fogMat = new Material(shader);
+            _fogMat.SetTexture("_ExploredTex", _exploredTex);
+            _fogMat.SetColor("_FogColor", new Color(0.05f, 0.08f, 0.12f, 1f));
+            _fogMat.SetFloat("_UnexploredAlpha", 0.72f);
+            _fogMat.SetFloat("_ExploredAlpha", 0.28f);
+            _fogMat.SetVector("_MapOrigin", new Vector4(-mapHalfExtent, -mapHalfExtent, 0f, 0f));
+            _fogMat.SetFloat("_MapSize", _mapSize);
+            _fogMat.SetFloat("_EdgeSoftness", 0.38f);
+            _fogMat.renderQueue = 3200;
 
-            _unexploredMat = new Material(shader);
-            SetMatColor(_unexploredMat, new Color(0.02f, 0.03f, 0.05f, 0.92f));
-
-            _exploredMat = new Material(shader);
-            SetMatColor(_exploredMat, new Color(0.05f, 0.06f, 0.08f, 0.55f));
-        }
-
-        private static void SetMatColor(Material mat, Color color)
-        {
-            if (mat.HasProperty("_BaseColor"))
-                mat.SetColor("_BaseColor", color);
-            if (mat.HasProperty("_Color"))
-                mat.SetColor("_Color", color);
+            var plane = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(plane.GetComponent<Collider>());
+            plane.name = "SoftFogOfWar";
+            plane.transform.SetParent(transform, false);
+            plane.transform.position = new Vector3(0f, fogHeight, 0f);
+            plane.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            plane.transform.localScale = new Vector3(_mapSize, _mapSize, 1f);
+            var rend = plane.GetComponent<Renderer>();
+            rend.sharedMaterial = _fogMat;
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+            _fogPlane = plane.transform;
         }
     }
 }

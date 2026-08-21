@@ -22,16 +22,31 @@ namespace Asterra.Gameplay.World
 
         public IPathfindingService Pathfinding { get; }
 
+        /// <param name="dayLengthSeconds">Full day cycle length. Default ~3 minutes so phases are noticeable.</param>
+        /// <param name="startTime01">
+        /// Day fraction [0,1). Negative = derive from <paramref name="weatherSeed"/> (deterministic).
+        /// </param>
+        /// <param name="randomizeStartingWeather">
+        /// When true, snap to a seed-derived weather instead of always starting Clear.
+        /// </param>
         public WorldEnvironmentSim(
             WorldTerrainGrid grid = null,
             uint weatherSeed = 42u,
-            float dayLengthSeconds = 1200f,
-            float startTime01 = 0.32f)
+            float dayLengthSeconds = 180f,
+            float startTime01 = -1f,
+            bool randomizeStartingWeather = false)
         {
             Grid = grid ?? DefaultTerrainCatalog.CreatePlayableGrid(MapBounds.PlayableHalfExtent, cellSize: 10f);
             TraversalGraph = new TraversalGraph(Grid);
             WeatherSim = new WeatherSystem(weatherSeed, Grid);
-            TimeOfDaySim = new TimeOfDaySystem(dayLengthSeconds, startTime01);
+
+            var clockRng = new DeterministicRandom(weatherSeed ^ 0xC0FFEEu);
+            float todStart = startTime01 >= 0f ? startTime01 : clockRng.NextFloat();
+            TimeOfDaySim = new TimeOfDaySystem(dayLengthSeconds, todStart);
+
+            if (randomizeStartingWeather)
+                WeatherSim.SnapToRandom();
+
             Pathfinding = new GridAStarPathfindingService(Grid, TraversalGraph);
             Features = new EnvironmentFeatureIndex(Grid);
             Features.Rebuild();

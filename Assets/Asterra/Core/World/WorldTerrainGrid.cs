@@ -111,6 +111,21 @@ namespace Asterra.Core.World
             return true;
         }
 
+        public bool TryGetCellAt(int cellX, int cellZ, out TerrainCell cell)
+        {
+            if (!InBounds(cellX, cellZ))
+            {
+                cell = default;
+                return false;
+            }
+
+            cell = _cells[Index(cellX, cellZ)];
+            return true;
+        }
+
+        public bool IsBlockedAt(int cellX, int cellZ) =>
+            InBounds(cellX, cellZ) && _blocked[Index(cellX, cellZ)];
+
         public bool TryGetDef(string terrainDefId, out TerrainDefData def)
         {
             if (terrainDefId != null && _defIndexById.TryGetValue(terrainDefId, out int idx))

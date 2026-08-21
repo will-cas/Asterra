@@ -7,8 +7,8 @@ using UnityEngine.Rendering.Universal;
 namespace Asterra.Editor
 {
     /// <summary>
-    /// Pink Game view = URP package present but no pipeline asset assigned.
-    /// Creates and wires a default URP asset automatically.
+    /// Pink Game view / "Default Renderer is missing" = URP asset assigned but renderer slot broken.
+    /// Creates and wires AsterraURP + AsterraUniversalRenderer automatically.
     /// </summary>
     [InitializeOnLoad]
     public static class EnsureUrpPipeline
@@ -32,9 +32,6 @@ namespace Asterra.Editor
 
         private static void Ensure(bool force)
         {
-            if (!force && GraphicsSettings.defaultRenderPipeline != null)
-                return;
-
             EnsureFolder("Assets/Asterra");
             EnsureFolder("Assets/Asterra/Shared");
             EnsureFolder(SettingsFolder);
@@ -44,26 +41,38 @@ namespace Asterra.Editor
             {
                 renderer = ScriptableObject.CreateInstance<UniversalRendererData>();
                 AssetDatabase.CreateAsset(renderer, RendererPath);
+                force = true;
             }
 
             var pipeline = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(PipelinePath);
+            bool rendererMissing = pipeline == null
+                                   || pipeline.rendererDataList == null
+                                   || pipeline.rendererDataList.Length == 0
+                                   || pipeline.rendererDataList[0] == null;
+
             if (pipeline == null)
             {
                 pipeline = UniversalRenderPipelineAsset.Create(renderer);
                 AssetDatabase.CreateAsset(pipeline, PipelinePath);
+                force = true;
             }
-            else if (pipeline.rendererDataList == null || pipeline.rendererDataList.Length == 0 || pipeline.rendererDataList[0] == null)
+            else if (rendererMissing)
             {
-                // Recreate if corrupted/empty.
-                Object.DestroyImmediate(pipeline, true);
+                // Broken GUID / missing default renderer — recreate a clean asset.
+                AssetDatabase.DeleteAsset(PipelinePath);
                 pipeline = UniversalRenderPipelineAsset.Create(renderer);
                 AssetDatabase.CreateAsset(pipeline, PipelinePath);
+                force = true;
             }
+
+            bool graphicsWrong = GraphicsSettings.defaultRenderPipeline != pipeline
+                                 || QualitySettings.renderPipeline != pipeline;
+            if (!force && !graphicsWrong && !rendererMissing)
+                return;
 
             GraphicsSettings.defaultRenderPipeline = pipeline;
             QualitySettings.renderPipeline = pipeline;
 
-            // Apply to every quality level.
             int count = QualitySettings.names.Length;
             for (int i = 0; i < count; i++)
             {
@@ -74,7 +83,7 @@ namespace Asterra.Editor
             EditorUtility.SetDirty(pipeline);
             EditorUtility.SetDirty(renderer);
             AssetDatabase.SaveAssets();
-            Debug.Log("[Asterra] URP pipeline assigned. Pink Game view should clear — press Play again.");
+            Debug.Log("[Asterra] URP pipeline assigned with default renderer. Pink Game view should clear — press Play again.");
         }
 
         private static void EnsureFolder(string path)

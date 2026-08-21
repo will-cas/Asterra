@@ -4,8 +4,7 @@ using Asterra.Gameplay.World;
 namespace Asterra.Gameplay.Content
 {
     /// <summary>
-    /// Logical terrain layouts per skirmish map. Presentation can mirror these later;
-    /// gameplay queries the grid only (not meshes).
+    /// Logical terrain layouts per skirmish map. Mirrored visually by TerrainGridPresenter.
     /// </summary>
     public static class SkirmishMapTerrain
     {

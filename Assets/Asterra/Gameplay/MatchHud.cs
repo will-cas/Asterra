@@ -43,9 +43,17 @@ namespace Asterra.Gameplay
             }
 
             float hold = match.Victory != null ? match.Victory.GetHoldProgress(player) * 100f : 0f;
+            string envLine = string.Empty;
+            if (match.World is SkirmishWorldSim worldSim)
+            {
+                var tod = worldSim.Environment.TimeOfDaySim;
+                var weather = worldSim.Environment.WeatherSim.Current;
+                envLine = $"  {tod.Phase}  {weather.Kind}";
+            }
+
             string status =
                 $"Units {(match.World != null ? match.World.Units.Count : 0)}  " +
-                $"Territory {territory}  Hold {hold:0}%  Tick {match.Clock?.CurrentTick.Value}";
+                $"Territory {territory}  Hold {hold:0}%  Tick {match.Clock?.CurrentTick.Value}{envLine}";
 
             GUI.Label(new Rect(12f, 12f, 900f, 22f), resources);
             GUI.Label(new Rect(12f, 34f, 1000f, 22f), status);

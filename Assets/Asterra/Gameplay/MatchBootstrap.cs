@@ -5,6 +5,7 @@ using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Player;
 using Asterra.Gameplay.Presentation;
 using Asterra.Gameplay.Sim;
+using Asterra.Gameplay.World;
 using Asterra.Net;
 using UnityEngine;
 
@@ -177,7 +178,11 @@ namespace Asterra.Gameplay
             Ids = new SequentialIdFactory();
             Wallet = new ResourceWallet();
             Random = new DeterministicRandom(matchSeed);
-            _sim = new SkirmishWorldSim(Wallet, Ids, Definitions);
+            var environment = new WorldEnvironmentSim(
+                weatherSeed: matchSeed,
+                dayLengthSeconds: 180f,
+                randomizeStartingWeather: true);
+            _sim = new SkirmishWorldSim(Wallet, Ids, Definitions, environment);
             World = _sim;
             Session = new LocalMatchSession(localPlayer, includeAi ? 2 : (onlinePlayers?.Length ?? 1));
 
@@ -269,6 +274,8 @@ namespace Asterra.Gameplay
                     gameObject.AddComponent<WorldDebugOverlay>();
                 if (FindFirstObjectByType<WeatherAtmospherePresenter>() == null)
                     gameObject.AddComponent<WeatherAtmospherePresenter>();
+                if (FindFirstObjectByType<TerrainGridPresenter>() == null)
+                    gameObject.AddComponent<TerrainGridPresenter>();
             }
 
             if (attachLocalOrders)

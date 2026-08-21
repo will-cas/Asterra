@@ -8,12 +8,12 @@ namespace Asterra.Gameplay
         [SerializeField] private Camera rigCamera;
         [SerializeField] private float panSpeed = 180f;
         [SerializeField] private float zoomSpeed = 320f;
-        [SerializeField] private float minHeight = 80f;
+        [SerializeField] private float minHeight = 90f;
         [SerializeField] private float maxHeight = 480f;
         [SerializeField] private float edgePanPixels = 14f;
         [SerializeField] private Vector3 lookAt = new Vector3(-320f, 0f, 0f);
-        [SerializeField] private float defaultHeight = 240f;
-        [SerializeField] private float defaultBack = 42f;
+        [SerializeField] private float defaultHeight = 200f;
+        [SerializeField] private float defaultBack = 110f;
 
         /// <summary>Ground point the camera is currently looking at.</summary>
         public Vector3 LookAtPoint => lookAt;

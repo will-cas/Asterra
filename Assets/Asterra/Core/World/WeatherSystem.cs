@@ -163,6 +163,34 @@ namespace Asterra.Core.World
             BeginTransition(def);
         }
 
+        /// <summary>
+        /// Instantly adopt a random catalog weather (match start). Deterministic from system seed.
+        /// </summary>
+        public void SnapToRandom()
+        {
+            if (_defs.Length == 0)
+                return;
+            SnapToDef(_defs[_rng.NextInt(0, _defs.Length)]);
+        }
+
+        /// <summary>Instantly adopt a weather def with no transition (match start / tests).</summary>
+        public void SnapToDef(WeatherDefData def)
+        {
+            if (def == null)
+                return;
+            _currentDef = def;
+            _targetDef = def;
+            _transitioning = false;
+            _transitionElapsed = 0f;
+            TransitionTarget = null;
+            _displayIntensity = def.DefaultIntensity;
+            _temperature = Clamp(def.TemperatureDelta, -1f, 1f);
+            _holdRemaining = Lerp(def.MinDurationSeconds, def.MaxDurationSeconds, _rng.NextFloat());
+            _transitionDuration = def.TransitionSeconds;
+            PickNewWindTarget();
+            RebuildState(_holdRemaining);
+        }
+
         private void TickWeatherMachine(float dt)
         {
             if (_transitioning)

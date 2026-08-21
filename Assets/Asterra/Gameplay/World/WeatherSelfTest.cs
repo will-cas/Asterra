@@ -12,7 +12,7 @@ namespace Asterra.Gameplay
             var sb = new StringBuilder();
             int fails = 0;
 
-            var env = new WorldEnvironmentSim(weatherSeed: 99u);
+            var env = new WorldEnvironmentSim(weatherSeed: 99u, randomizeStartingWeather: false);
             var weather = env.WeatherSim;
 
             Expect(ref fails, sb, "starts clear/sunny-ish",
