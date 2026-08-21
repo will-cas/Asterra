@@ -53,6 +53,15 @@ namespace Asterra.Gameplay.Presentation
             ApplyEntityVisibility(match.Session.LocalPlayer);
         }
 
+        private float VisionScale()
+        {
+            // SkirmishWorldSim is in Asterra.Gameplay (parent namespace), not Asterra.Gameplay.Sim.
+            var sim = match.World as SkirmishWorldSim;
+            if (sim == null)
+                return 1f;
+            return Mathf.Clamp(sim.Environment.CombinedVisibility(), 0.45f, 1.15f);
+        }
+
         public bool IsWorldVisible(float x, float z)
         {
             for (int i = 0; i < _visionCenters.Count; i++)
@@ -79,7 +88,7 @@ namespace Asterra.Gameplay.Presentation
                 if (!u.IsAlive || u.Owner != local)
                     continue;
                 _visionCenters.Add(new Vector2(u.X, u.Z));
-                _visionRadii.Add(unitSightRadius);
+                _visionRadii.Add(unitSightRadius * VisionScale());
             }
 
             var buildings = match.World.Buildings;
@@ -94,7 +103,7 @@ namespace Asterra.Gameplay.Presentation
                 else if (AsterraMeshLibrary.IsKeep(b.DefinitionId))
                     radius = keepSightRadius;
                 _visionCenters.Add(new Vector2(b.X, b.Z));
-                _visionRadii.Add(radius);
+                _visionRadii.Add(radius * VisionScale());
             }
         }
 

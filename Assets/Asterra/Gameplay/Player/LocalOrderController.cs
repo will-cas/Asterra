@@ -1051,6 +1051,7 @@ namespace Asterra.Gameplay.Player
                         scale = new Vector3(6f, 14f, 6f);
                         break;
                     case BuildingKind.Wall:
+                    case BuildingKind.Gate:
                         scale = new Vector3(18f, 5f, 4f);
                         break;
                     case BuildingKind.Outpost:
@@ -1063,6 +1064,7 @@ namespace Asterra.Gameplay.Player
                         scale = new Vector3(16f, 10f, 16f);
                         break;
                     case BuildingKind.Generic:
+                    case BuildingKind.Special:
                         scale = new Vector3(10f, 6f, 10f);
                         break;
                     default:

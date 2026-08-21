@@ -112,6 +112,10 @@ namespace Asterra.Core
         BuildComplete = 4,
         /// <summary>World prop / bridge / tree destroyed (TargetId is the destructible).</summary>
         WorldDestroyed = 5,
+        CaptureStarted = 6,
+        CaptureContested = 7,
+        CaptureCompleted = 8,
+        CaptureLost = 9,
     }
 
     public readonly struct CombatEvent

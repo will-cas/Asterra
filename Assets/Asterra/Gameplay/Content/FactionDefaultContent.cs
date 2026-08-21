@@ -545,6 +545,9 @@ namespace Asterra.Gameplay.Content
                 FootprintX = 5f,
                 FootprintZ = 5f,
                 Kind = BuildingKind.Tower,
+                Category = BuildingCategory.Tower,
+                AllowsGarrison = true,
+                GarrisonCapacity = 2,
                 AttackDamage = 14f,
                 AttackRange = 22f,
                 AttackCooldown = 1.4f,
@@ -561,6 +564,9 @@ namespace Asterra.Gameplay.Content
                 FootprintX = 14f,
                 FootprintZ = 4f,
                 Kind = BuildingKind.Wall,
+                Category = BuildingCategory.Wall,
+                SnapToWallGrid = true,
+                WallSegmentLength = 14f,
                 SightRadius = 40f,
             });
             registry.Register(new BuildingDefData
@@ -574,6 +580,7 @@ namespace Asterra.Gameplay.Content
                 FootprintX = 6f,
                 FootprintZ = 6f,
                 Kind = BuildingKind.Outpost,
+                Category = BuildingCategory.Resource,
                 SightRadius = 130f,
                 GoldPerSecond = 4,
             });

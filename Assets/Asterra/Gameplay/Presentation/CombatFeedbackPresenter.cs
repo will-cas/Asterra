@@ -57,6 +57,16 @@ namespace Asterra.Gameplay.Presentation
                             case CombatEventKind.WorldDestroyed:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.55f, 0.35f, 0.15f, 0.95f), 7f, deathBurstSeconds);
                                 break;
+                            case CombatEventKind.CaptureStarted:
+                            case CombatEventKind.CaptureContested:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.85f, 0.2f, 0.9f), 5f, pulseSeconds);
+                                break;
+                            case CombatEventKind.CaptureCompleted:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.3f, 0.85f, 1f, 0.95f), 7f, pulseSeconds);
+                                break;
+                            case CombatEventKind.CaptureLost:
+                                SpawnBurst(ev.X, ev.Z, new Color(0.9f, 0.35f, 0.2f, 0.9f), 6f, pulseSeconds);
+                                break;
                             case CombatEventKind.Deposit:
                                 SpawnBurst(ev.X, ev.Z, new Color(0.25f, 0.95f, 0.4f, 0.9f), 4.5f, pulseSeconds);
                                 break;

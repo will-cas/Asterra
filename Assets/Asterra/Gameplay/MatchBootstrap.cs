@@ -263,6 +263,10 @@ namespace Asterra.Gameplay
                     gameObject.AddComponent<ProjectilePresenter>();
                 if (FindFirstObjectByType<MinimapPresenter>() == null)
                     gameObject.AddComponent<MinimapPresenter>();
+                if (FindFirstObjectByType<DayNightLightingPresenter>() == null)
+                    gameObject.AddComponent<DayNightLightingPresenter>();
+                if (FindFirstObjectByType<WorldDebugOverlay>() == null)
+                    gameObject.AddComponent<WorldDebugOverlay>();
             }
 
             if (attachLocalOrders)

@@ -19,6 +19,20 @@ namespace Asterra.Core
         Tower = 3,
         Wall = 4,
         Outpost = 5,
+        Gate = 6,
+        Special = 7,
+    }
+
+    /// <summary>Coarse designer category for UI / filters (maps onto Kind).</summary>
+    public enum BuildingCategory : byte
+    {
+        Castle = 0,
+        Troop = 1,
+        Tower = 2,
+        Wall = 3,
+        Resource = 4,
+        Capture = 5,
+        Special = 6,
     }
 
     /// <summary>Plain-data unit stats used by the lockstep sim (SO wrappers copy into these).</summary>
@@ -67,6 +81,12 @@ namespace Asterra.Core
         public float AttackCooldown = 1.5f;
         public float SightRadius;
         public int GoldPerSecond;
+        public BuildingCategory Category = BuildingCategory.Special;
+        public bool AllowsGarrison;
+        public int GarrisonCapacity;
+        public float CommandRadius;
+        public bool SnapToWallGrid;
+        public float WallSegmentLength = 14f;
     }
 
     public sealed class UpgradeDefData

@@ -22,11 +22,10 @@ namespace Asterra.Core.World
 
         public void Tick(float deltaSeconds)
         {
-            // No transitions until weather phase.
         }
     }
 
-    /// <summary>Fixed mid-day clock until day/night cycle is implemented.</summary>
+    /// <summary>Fixed mid-day clock retained for tests / offline tools.</summary>
     public sealed class StaticTimeOfDaySystem : ITimeOfDaySystem
     {
         public float DayLengthSeconds { get; }
@@ -34,6 +33,14 @@ namespace Asterra.Core.World
         public TimeOfDayPhase Phase => TimeOfDayPhase.Afternoon;
         public bool IsDay => true;
         public bool IsNight => false;
+        public float SunIntensity => 1f;
+        public float AmbientIntensity => 0.4f;
+        public float ShadowStrength => 0.85f;
+        public float VisibilityModifier => 1f;
+        public float TemperatureBias => 0.1f;
+        public float SunDirX => 0.2f;
+        public float SunDirY => 0.9f;
+        public float SunDirZ => -0.35f;
 
         public StaticTimeOfDaySystem(float dayLengthSeconds = 1200f)
         {
@@ -42,7 +49,6 @@ namespace Asterra.Core.World
 
         public void Tick(float deltaSeconds)
         {
-            // Frozen until Phase 7.
         }
     }
 }

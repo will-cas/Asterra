@@ -173,11 +173,43 @@ namespace Asterra.Core.World
     public interface ITimeOfDaySystem
     {
         float DayLengthSeconds { get; }
+        /// <summary>Normalized time in [0,1). 0 = start of dawn.</summary>
         float Time01 { get; }
         TimeOfDayPhase Phase { get; }
         bool IsDay { get; }
         bool IsNight { get; }
+        float SunIntensity { get; }
+        float AmbientIntensity { get; }
+        float ShadowStrength { get; }
+        float VisibilityModifier { get; }
+        float TemperatureBias { get; }
+        float SunDirX { get; }
+        float SunDirY { get; }
+        float SunDirZ { get; }
         void Tick(float deltaSeconds);
+    }
+
+    public enum TimeOfDayEventKind : byte
+    {
+        PhaseChanged = 1,
+        Dawn = 2,
+        Day = 3,
+        Dusk = 4,
+        Night = 5,
+    }
+
+    public readonly struct TimeOfDayEvent
+    {
+        public readonly TimeOfDayEventKind Kind;
+        public readonly TimeOfDayPhase Phase;
+        public readonly float Time01;
+
+        public TimeOfDayEvent(TimeOfDayEventKind kind, TimeOfDayPhase phase, float time01)
+        {
+            Kind = kind;
+            Phase = phase;
+            Time01 = time01;
+        }
     }
 
     /// <summary>

@@ -145,6 +145,14 @@ namespace Asterra.Gameplay.Sim
         public float AttackCooldownRemaining;
         public float SightRadius;
         public int GoldPerSecond;
+        public BuildingCategory Category;
+        public bool AllowsGarrison;
+        public int GarrisonCapacity;
+        public float CommandRadius;
+        public bool SnapToWallGrid;
+        public float WallSegmentLength;
+        /// <summary>Bit0=N,1=E,2=S,3=W — neighbour wall segments.</summary>
+        public byte WallLinks;
         public bool IsProducing => !string.IsNullOrEmpty(ProductionUnitDefId);
 
         private readonly bool _canProduce;
@@ -176,6 +184,16 @@ namespace Asterra.Gameplay.Sim
             QueueCapacity = def.QueueCapacity > 0 ? System.Math.Min(def.QueueCapacity, MaxQueue) : 3;
             BuildSecondsTotal = def.BuildSeconds;
             Kind = def.Kind;
+            Category = ResolveCategory(def);
+            AllowsGarrison = def.AllowsGarrison || def.Kind == BuildingKind.Keep || def.Kind == BuildingKind.Tower;
+            GarrisonCapacity = def.GarrisonCapacity > 0
+                ? def.GarrisonCapacity
+                : (def.Kind == BuildingKind.Keep ? 8 : def.Kind == BuildingKind.Tower ? 2 : 0);
+            CommandRadius = def.CommandRadius > 0f
+                ? def.CommandRadius
+                : (def.Kind == BuildingKind.Keep ? 120f : 0f);
+            SnapToWallGrid = def.SnapToWallGrid || def.Kind == BuildingKind.Wall || def.Kind == BuildingKind.Gate;
+            WallSegmentLength = def.WallSegmentLength > 1f ? def.WallSegmentLength : 14f;
             AttackDamage = def.AttackDamage;
             AttackRange = def.AttackRange;
             AttackCooldown = def.AttackCooldown > 0f ? def.AttackCooldown : 1.5f;
@@ -190,6 +208,28 @@ namespace Asterra.Gameplay.Sim
             {
                 State = BuildingState.Constructing;
                 BuildSecondsRemaining = def.BuildSeconds;
+            }
+        }
+
+        private static BuildingCategory ResolveCategory(BuildingDefData def)
+        {
+            switch (def.Kind)
+            {
+                case BuildingKind.Keep:
+                    return BuildingCategory.Castle;
+                case BuildingKind.Producer:
+                    return BuildingCategory.Troop;
+                case BuildingKind.Tower:
+                    return BuildingCategory.Tower;
+                case BuildingKind.Wall:
+                case BuildingKind.Gate:
+                    return BuildingCategory.Wall;
+                case BuildingKind.Outpost:
+                    return BuildingCategory.Resource;
+                case BuildingKind.Special:
+                    return BuildingCategory.Special;
+                default:
+                    return def.Category;
             }
         }
 

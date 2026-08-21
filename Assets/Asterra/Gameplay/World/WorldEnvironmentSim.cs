@@ -15,18 +15,23 @@ namespace Asterra.Gameplay.World
         public INoEntryMap NoEntry => Grid;
         public WeatherSystem WeatherSim { get; }
         public IWeatherSystem Weather => WeatherSim;
-        public ITimeOfDaySystem TimeOfDay { get; }
+        public TimeOfDaySystem TimeOfDaySim { get; }
+        public ITimeOfDaySystem TimeOfDay => TimeOfDaySim;
         public EnvironmentFeatureIndex Features { get; }
         public PathDirtyTracker PathDirty { get; }
 
         public DirectSteerPathfindingService Pathfinding { get; }
 
-        public WorldEnvironmentSim(WorldTerrainGrid grid = null, uint weatherSeed = 42u)
+        public WorldEnvironmentSim(
+            WorldTerrainGrid grid = null,
+            uint weatherSeed = 42u,
+            float dayLengthSeconds = 1200f,
+            float startTime01 = 0.32f)
         {
             Grid = grid ?? DefaultTerrainCatalog.CreatePlayableGrid(MapBounds.PlayableHalfExtent, cellSize: 10f);
             TraversalGraph = new TraversalGraph(Grid);
             WeatherSim = new WeatherSystem(weatherSeed, Grid);
-            TimeOfDay = new StaticTimeOfDaySystem();
+            TimeOfDaySim = new TimeOfDaySystem(dayLengthSeconds, startTime01);
             Pathfinding = new DirectSteerPathfindingService(Grid, TraversalGraph);
             Features = new EnvironmentFeatureIndex(Grid);
             Features.Rebuild();
@@ -37,9 +42,12 @@ namespace Asterra.Gameplay.World
 
         public void Tick(float deltaSeconds)
         {
+            TimeOfDaySim.Tick(deltaSeconds);
             WeatherSim.Tick(deltaSeconds);
-            TimeOfDay.Tick(deltaSeconds);
         }
+
+        public float CombinedVisibility() =>
+            WeatherSim.EffectiveVisibility() * TimeOfDaySim.VisibilityModifier;
 
         public bool CanUnitEnter(float x, float z, TraversalCapability capabilities) =>
             Grid.IsTraversable(x, z, capabilities);
@@ -49,7 +57,8 @@ namespace Asterra.Gameplay.World
             float terrain = Grid.GetMovementModifier(x, z, capabilities);
             if (terrain <= 0f)
                 return 0f;
-            return terrain * WeatherSim.EffectiveMovement();
+            float night = TimeOfDaySim.IsNight ? 0.94f : 1f;
+            return terrain * WeatherSim.EffectiveMovement() * night;
         }
 
         public bool CanPlaceBuilding(float x, float z) =>

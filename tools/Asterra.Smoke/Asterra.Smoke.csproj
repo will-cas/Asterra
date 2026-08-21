@@ -21,5 +21,6 @@
     <Compile Include="../../Assets/Asterra/Gameplay/Content/DefaultDestructibleCatalog.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/Content/FactionDefaultContent.cs" />
     <Compile Include="../../Assets/Asterra/Gameplay/MapBounds.cs" />
+    <Compile Include="../../Assets/Asterra/Gameplay/WallPlacement.cs" />
   </ItemGroup>
 </Project>

@@ -497,13 +497,19 @@ namespace Asterra.Gameplay
             if (!_defs.TryGetBuilding(place.BuildingDefId, out var def))
                 return;
 
-            if (!IsInsidePlayable(place.X, place.Z))
+            float x = place.X;
+            float z = place.Z;
+            bool snapWall = def.SnapToWallGrid || def.Kind == BuildingKind.Wall || def.Kind == BuildingKind.Gate;
+            if (snapWall)
+                WallPlacement.Snap(ref x, ref z, def.WallSegmentLength > 1f ? def.WallSegmentLength : WallPlacement.DefaultSegment);
+
+            if (!IsInsidePlayable(x, z))
                 return;
 
-            if (!_environment.CanPlaceBuilding(place.X, place.Z))
+            if (!_environment.CanPlaceBuilding(x, z))
                 return;
 
-            if (!HasNearbyBuilder(place.Issuer, place.X, place.Z, builderPlaceRadius: 55f))
+            if (!HasNearbyBuilder(place.Issuer, x, z, builderPlaceRadius: 55f))
                 return;
 
             if (!_wallet.TrySpend(place.Issuer, ResourceType.Gold, def.GoldCost))
@@ -515,8 +521,38 @@ namespace Asterra.Gameplay
             }
 
             var faction = ResolveFaction(place.Issuer);
-            SpawnBuilding(_ids.Next(), place.Issuer, faction, def.Id, place.X, place.Z, startActive: false);
+            var building = SpawnBuilding(_ids.Next(), place.Issuer, faction, def.Id, x, z, startActive: false);
+            if (snapWall)
+                RefreshWallConnectionsAround(building);
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        /// <summary>Recompute cardinal wall neighbour bits around a segment (placement / tests).</summary>
+        public void RefreshWallConnectionsAround(SimBuilding hub)
+        {
+            float seg = hub.WallSegmentLength > 1f ? hub.WallSegmentLength : WallPlacement.DefaultSegment;
+            float tol = seg * 0.35f;
+            hub.WallLinks = 0;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var other = _buildings[i];
+                if (other.Id.Value == hub.Id.Value || other.State == BuildingState.Destroyed)
+                    continue;
+                if (other.Kind != BuildingKind.Wall && other.Kind != BuildingKind.Gate)
+                    continue;
+                float dx = other.X - hub.X;
+                float dz = other.Z - hub.Z;
+                float dist = MathF.Sqrt(dx * dx + dz * dz);
+                if (dist < seg * 0.55f || dist > seg * 1.45f)
+                    continue;
+                if (MathF.Abs(dist - seg) > tol && MathF.Min(MathF.Abs(dx), MathF.Abs(dz)) > tol)
+                    continue;
+
+                int dir = WallPlacement.CardinalIndex(hub.X, hub.Z, other.X, other.Z);
+                hub.WallLinks |= (byte)(1 << dir);
+                int opp = (dir + 2) % 4;
+                other.WallLinks |= (byte)(1 << opp);
+            }
         }
 
         private void ApplyTrain(TrainUnitCommand train)
@@ -1178,6 +1214,10 @@ namespace Asterra.Gameplay
             for (int t = 0; t < _territories.Count; t++)
             {
                 var node = _territories[t];
+                var prevState = node.State;
+                var prevController = node.Controller;
+                float prevProgress = node.CaptureProgress;
+
                 int[] presence = new int[8];
                 for (int i = 0; i < _units.Count; i++)
                 {
@@ -1215,32 +1255,39 @@ namespace Asterra.Gameplay
                         if (node.CaptureProgress <= 0f && !node.Controller.HasValue)
                             node.State = TerritoryState.Neutral;
                     }
-
-                    continue;
                 }
-
-                if (second > 0)
+                else if (second > 0)
                 {
+                    if (node.State != TerritoryState.Contested)
+                        _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureContested, node.Id, node.X, node.Z, false));
                     node.State = TerritoryState.Contested;
-                    continue;
+                }
+                else
+                {
+                    var capturer = new PlayerId((byte)bestPlayer);
+                    if (node.Controller.HasValue && node.Controller.Value == capturer)
+                    {
+                        node.State = TerritoryState.Controlled;
+                        node.CaptureProgress = 1f;
+                    }
+                    else
+                    {
+                        node.State = TerritoryState.Contested;
+                        node.CaptureProgress = Math.Min(1f, node.CaptureProgress + dt * 0.25f);
+                        if (node.CaptureProgress >= 1f)
+                        {
+                            if (prevController.HasValue && prevController.Value.Value != capturer.Value)
+                                _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureLost, node.Id, node.X, node.Z, false));
+                            node.Controller = capturer;
+                            node.State = TerritoryState.Controlled;
+                            _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureCompleted, node.Id, node.X, node.Z, false));
+                            _mutationCounter ^= node.Id.Value * 101ul;
+                        }
+                    }
                 }
 
-                var capturer = new PlayerId((byte)bestPlayer);
-                if (node.Controller.HasValue && node.Controller.Value == capturer)
-                {
-                    node.State = TerritoryState.Controlled;
-                    node.CaptureProgress = 1f;
-                    continue;
-                }
-
-                node.State = TerritoryState.Contested;
-                node.CaptureProgress = Math.Min(1f, node.CaptureProgress + dt * 0.25f);
-                if (node.CaptureProgress >= 1f)
-                {
-                    node.Controller = capturer;
-                    node.State = TerritoryState.Controlled;
-                    _mutationCounter ^= node.Id.Value * 101ul;
-                }
+                if (prevState != TerritoryState.Contested && node.State == TerritoryState.Contested && node.CaptureProgress > prevProgress)
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureStarted, node.Id, node.X, node.Z, false));
             }
         }
 
