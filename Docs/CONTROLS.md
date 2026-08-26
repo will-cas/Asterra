@@ -33,9 +33,9 @@ Local offline / skirmish input (keyboard + mouse).
 | . | Place ferry dock (shore) — requires builder |
 | Y / K / L | Fill trench / raise berm / dig moat — click ground |
 | ; / ' / \ | Clear forest / burn brush / quarry rock — click ground |
-| [ / ] | Spike pits / clear debris — click ground |
+| [ / ] | While placing: rotate ghost 90°. Otherwise: spike pits / clear debris |
 | = | Repair nearest collapsed bridge |
-| Q / E / [ / ] / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
+| Q / E / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
 | Esc | Cancel armed order / place mode; otherwise open pause (Options / Main Menu). Profile is lobby-only. |
 | Shift while placing | Keep place mode after one building |
 | . or I | Select idle workers |

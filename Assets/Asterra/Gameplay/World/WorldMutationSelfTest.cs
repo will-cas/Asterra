@@ -21,6 +21,9 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "quarry rock drops gold", QuarryRock());
             Expect(ref fails, sb, "chop tree drops timber", ChopTreeDropsTimber());
             Expect(ref fails, sb, "faction bridge adds link", FactionBridgeAddsLink());
+            Expect(ref fails, sb, "bridge rejects dry land", BridgeRejectsDryLand());
+            Expect(ref fails, sb, "bridge accepts water span", BridgeAcceptsWaterSpan());
+            Expect(ref fails, sb, "trench rejects rock", TrenchRejectsRock());
             Expect(ref fails, sb, "demolish bridge disables link", DemolishBridgeDisablesLink());
             Expect(ref fails, sb, "repair collapsed bridge", RepairBridge());
             Expect(ref fails, sb, "raze wall refunds timber", RazeWall());
@@ -163,6 +166,38 @@ namespace Asterra.Gameplay
             }
 
             return hasBridge && hasLiveBridgeProp && sim.Environment.TraversalGraph.Links.Count > linksBefore;
+        }
+
+        private static bool BridgeRejectsDryLand()
+        {
+            Boot(out var sim, out _, out _, out _, out _);
+            return !sim.CanPreviewPlaceBuilding(FactionDefaultContent.BridgeId, 20f, 20f, 0f);
+        }
+
+        private static bool BridgeAcceptsWaterSpan()
+        {
+            Boot(out var sim, out _, out _, out _, out _);
+            sim.Environment.Grid.FillWorldRect(40f, -8f, 80f, 8f, DefaultTerrainCatalog.WaterDeep);
+            sim.Environment.Grid.FillWorldRect(28f, -8f, 38f, 8f, DefaultTerrainCatalog.GrassShort);
+            return sim.CanPreviewPlaceBuilding(FactionDefaultContent.BridgeId, 32f, 0f, 90f);
+        }
+
+        private static bool TrenchRejectsRock()
+        {
+            Boot(out var sim, out _, out var wallet, out var p, out var builder);
+            wallet.Seed(p, ResourceType.Gold, 200);
+            wallet.Seed(p, ResourceType.Timber, 100);
+            sim.Environment.Grid.FillWorldRect(-10f, -10f, 10f, 10f, DefaultTerrainCatalog.Rock);
+            builder.X = 0f;
+            builder.Z = 0f;
+            if (sim.CanDigTrenchAt(0f, 0f, 6f))
+                return false;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new DigTrenchCommand { Issuer = p, X = 0f, Z = 0f, HalfExtent = 6f },
+            });
+            return sim.Environment.Grid.TryGetCell(0f, 0f, out var cell)
+                   && cell.TerrainDefIndex == DefaultTerrainCatalog.Rock;
         }
 
         private static bool DemolishBridgeDisablesLink()

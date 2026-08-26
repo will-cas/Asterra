@@ -42,6 +42,8 @@ namespace Asterra.Core.World
         public const ushort Crater = 24;
         /// <summary>Burned brush / scorched earth.</summary>
         public const ushort Scorched = 25;
+        /// <summary>Map gap / chasm — bridge span target.</summary>
+        public const ushort Gap = 26;
 
         public static TerrainDefData[] CreateDefs()
         {
@@ -73,6 +75,7 @@ namespace Asterra.Core.World
                 Def("terrain_debris", "Debris", TerrainCategory.Rock, 0f, TerrainDefData.PathCostBlocked, TraversalCapability.Land, visibility: 0.9f, allowsBuild: false, allowsGather: false, los: 0.25f),
                 Def("terrain_crater", "Crater", TerrainCategory.Trench, 0.65f, 1.6f, TraversalCapability.Land, visibility: 0.8f, cover: 0.3f, los: 0.2f, combat: 1.05f, allowsBuild: false),
                 Def("terrain_scorched", "Scorched Earth", TerrainCategory.GrassBare, 1.02f, 1.05f, TraversalCapability.Land, visibility: 1.1f, cover: 0f, los: 0f, drainage: 1.3f),
+                Def("terrain_gap", "Gap", TerrainCategory.Gap, 0f, TerrainDefData.PathCostBlocked, TraversalCapability.None, allowsBuild: false, allowsGather: false, change: false),
             };
         }
 

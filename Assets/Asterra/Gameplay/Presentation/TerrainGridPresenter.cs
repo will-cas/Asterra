@@ -75,7 +75,10 @@ namespace Asterra.Gameplay.Presentation
         {
             unchecked
             {
+                // MutationVersion must dominate: sparse cell samples miss small digs/berms.
                 int hash = grid.Width * 73856093 ^ grid.Height * 19349663;
+                hash = (hash * 16777619) ^ (int)grid.MutationVersion;
+                hash = (hash * 16777619) ^ (int)(grid.MutationVersion >> 32);
                 int step = Mathf.Max(1, grid.Width / 12);
                 for (int cz = 0; cz < grid.Height; cz += step)
                 {
@@ -146,7 +149,7 @@ namespace Asterra.Gameplay.Presentation
                 else if (cat == TerrainCategory.Hill)
                     smoothHeight[i] = Mathf.Lerp(smoothHeight[i], Mathf.Max(smoothHeight[i], target), 0.45f);
                 else if (cat == TerrainCategory.Trench || cat == TerrainCategory.Gap)
-                    smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.5f);
+                    smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.05f);
             }
 
             BuildContinuousMesh(grid, smoothHeight, colors, categories);
@@ -949,7 +952,7 @@ namespace Asterra.Gameplay.Presentation
                 case TerrainCategory.WaterWaterfall: return -0.2f;
                 case TerrainCategory.Beach: return -0.15f;
                 case TerrainCategory.Swamp: return -0.35f;
-                case TerrainCategory.Trench: return -1.6f;
+                case TerrainCategory.Trench: return -2.6f;
                 case TerrainCategory.Gap: return -3.5f;
                 case TerrainCategory.Ice: return -0.55f;
                 case TerrainCategory.Hill: return 7.5f;

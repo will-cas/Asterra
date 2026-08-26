@@ -666,6 +666,11 @@ namespace Asterra.Gameplay
                 if (!CanPlaceFerryDock(x, z, NormalizeYaw90(place.YawDegrees)))
                     return;
             }
+            else if (place.BuildingDefId == FactionDefaultContent.TrenchWorksId)
+            {
+                if (!CanDigTrenchAt(x, z, MathF.Max(4f, MathF.Max(def.FootprintX, def.FootprintZ) * 0.5f)))
+                    return;
+            }
             else if (!_environment.CanPlaceBuilding(x, z))
                 return;
 
@@ -711,7 +716,13 @@ namespace Asterra.Gameplay
                 return;
             }
 
-            DigTrenchAt(dig.X, dig.Z, half);
+            if (!DigTrenchAt(dig.X, dig.Z, half))
+            {
+                _wallet.Add(dig.Issuer, ResourceType.Gold, 25);
+                _wallet.Add(dig.Issuer, ResourceType.Timber, 10);
+                return;
+            }
+
             _mutationCounter ^= 0x7E11CFul ^ (ulong)(dig.Issuer.Value + 1) * 41ul;
         }
 
@@ -816,8 +827,7 @@ namespace Asterra.Gameplay
             switch (work.Kind)
             {
                 case TerrainWorkKind.DigTrench:
-                    DigTrenchAt(work.X, work.Z, half);
-                    ok = true;
+                    ok = DigTrenchAt(work.X, work.Z, half);
                     break;
                 case TerrainWorkKind.FillTrench:
                     ok = ReplaceTerrainCategoryAt(work.X, work.Z, half, TerrainCategory.Trench, DefaultTerrainCatalog.GrassShort);
@@ -1185,12 +1195,49 @@ namespace Asterra.Gameplay
             _mutationCounter ^= building.Id.Value * 1613ul;
         }
 
-        private void DigTrenchAt(float x, float z, float halfExtent)
+        private bool DigTrenchAt(float x, float z, float halfExtent)
         {
             float half = MathF.Max(4f, halfExtent);
-            FillTerrainRect(x - half, z - half, x + half, z + half, DefaultTerrainCatalog.Trench);
+            int painted = FillTerrainRectWhere(
+                x - half, z - half, x + half, z + half,
+                DefaultTerrainCatalog.Trench,
+                IsDiggableDef);
+            if (painted <= 0)
+                return false;
+
             _environment.RebuildFeatureIndex();
             _environment.PathDirty.MarkRadius(x, z, half + 4f, PathDirtyReason.DestructibleCleared);
+            return true;
+        }
+
+        /// <summary>Client ghost / cursor: same placement rules the sim will enforce.</summary>
+        public bool CanPreviewPlaceBuilding(string buildingDefId, float x, float z, float yawDegrees)
+        {
+            if (string.IsNullOrEmpty(buildingDefId) || !IsInsidePlayable(x, z))
+                return false;
+
+            float yaw = NormalizeYaw90(yawDegrees);
+            if (buildingDefId == FactionDefaultContent.BridgeId)
+                return CanPlaceFactionBridge(x, z, yaw);
+            if (buildingDefId == FactionDefaultContent.FerryDockId)
+                return CanPlaceFerryDock(x, z, yaw);
+            if (buildingDefId == FactionDefaultContent.TrenchWorksId)
+            {
+                float half = 6f;
+                if (_defs.TryGetBuilding(buildingDefId, out var trenchDef))
+                    half = MathF.Max(4f, MathF.Max(trenchDef.FootprintX, trenchDef.FootprintZ) * 0.5f);
+                return CanDigTrenchAt(x, z, half);
+            }
+
+            return _environment.CanPlaceBuilding(x, z);
+        }
+
+        public bool CanDigTrenchAt(float x, float z, float halfExtent)
+        {
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float half = MathF.Max(4f, halfExtent);
+            return CountCellsWhere(x - half, z - half, x + half, z + half, IsDiggableDef) >= 2;
         }
 
         private void ActivateFactionBridge(SimBuilding building)
@@ -1261,16 +1308,17 @@ namespace Asterra.Gameplay
 
         private bool CanPlaceFactionBridge(float x, float z, float yawDegrees)
         {
-            // Foundation sits on buildable shore; span must cross water.
+            // Foundation sits on buildable shore; span must cross water or a gap.
             if (!_environment.CanPlaceBuilding(x, z))
                 return false;
             float rad = yawDegrees * (MathF.PI / 180f);
             float fx = MathF.Sin(rad);
             float fz = MathF.Cos(rad);
-            for (int i = 1; i <= 4; i++)
+            for (int i = 1; i <= 5; i++)
             {
                 float d = i * 6f;
-                if (IsWaterWorld(x + fx * d, z + fz * d) || IsWaterWorld(x - fx * d, z - fz * d))
+                if (IsBridgeSpanObstacle(x + fx * d, z + fz * d)
+                    || IsBridgeSpanObstacle(x - fx * d, z - fz * d))
                     return true;
             }
 
@@ -1294,20 +1342,73 @@ namespace Asterra.Gameplay
             var def = _environment.Grid.GetDef(cell.TerrainDefIndex);
             if (def == null)
                 return false;
-            return def.Category == TerrainCategory.WaterRiver
-                   || def.Category == TerrainCategory.WaterLake
-                   || def.Category == TerrainCategory.WaterOcean
-                   || def.Category == TerrainCategory.WaterWaterfall;
+            return IsWaterCategory(def.Category);
+        }
+
+        private bool IsBridgeSpanObstacle(float x, float z)
+        {
+            if (!_environment.Grid.TryGetCell(x, z, out var cell))
+                return true;
+            var def = _environment.Grid.GetDef(cell.TerrainDefIndex);
+            if (def == null)
+                return true;
+            if (IsWaterCategory(def.Category) || def.Category == TerrainCategory.Gap)
+                return true;
+            if (def.Category == TerrainCategory.NoEntry)
+                return true;
+            if (def.PathfindingCost >= TerrainDefData.PathCostBlocked
+                && (def.RequiredCapabilities & TraversalCapability.Land) == 0)
+                return true;
+            return false;
+        }
+
+        private static bool IsWaterCategory(TerrainCategory category)
+        {
+            return category == TerrainCategory.WaterRiver
+                   || category == TerrainCategory.WaterLake
+                   || category == TerrainCategory.WaterOcean
+                   || category == TerrainCategory.WaterWaterfall;
+        }
+
+        private static bool IsDiggableDef(TerrainDefData def)
+        {
+            if (def == null || !def.CanChangeAtRuntime)
+                return false;
+            switch (def.Category)
+            {
+                case TerrainCategory.GrassBare:
+                case TerrainCategory.GrassShort:
+                case TerrainCategory.GrassLong:
+                case TerrainCategory.Forest:
+                case TerrainCategory.Beach:
+                case TerrainCategory.Hill:
+                case TerrainCategory.Swamp:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private void FillTerrainRect(float minX, float minZ, float maxX, float maxZ, ushort defIndex)
+        {
+            FillTerrainRectWhere(minX, minZ, maxX, maxZ, defIndex, _ => true);
+        }
+
+        private int FillTerrainRectWhere(
+            float minX,
+            float minZ,
+            float maxX,
+            float maxZ,
+            ushort defIndex,
+            System.Func<TerrainDefData, bool> predicate)
         {
             var grid = _environment.Grid;
             if (!grid.TryWorldToCell(minX, minZ, out int minCx, out int minCz)
                 || !grid.TryWorldToCell(maxX, maxZ, out int maxCx, out int maxCz))
             {
+                // Fallback: paint whole rect without filter.
                 grid.FillWorldRect(minX, minZ, maxX, maxZ, defIndex);
-                return;
+                return 1;
             }
 
             if (minCx > maxCx)
@@ -1315,15 +1416,57 @@ namespace Asterra.Gameplay
             if (minCz > maxCz)
                 (minCz, maxCz) = (maxCz, minCz);
 
+            int painted = 0;
             for (int cz = minCz; cz <= maxCz; cz++)
             {
                 for (int cx = minCx; cx <= maxCx; cx++)
                 {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var cur = grid.GetDef(cell.TerrainDefIndex);
+                    if (predicate != null && !predicate(cur))
+                        continue;
                     grid.SetCellDef(cx, cz, defIndex);
                     long key = ((long)cx << 32) ^ (uint)cz;
                     _terrainMutations[key] = defIndex;
+                    painted++;
                 }
             }
+
+            return painted;
+        }
+
+        private int CountCellsWhere(
+            float minX,
+            float minZ,
+            float maxX,
+            float maxZ,
+            System.Func<TerrainDefData, bool> predicate)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(minX, minZ, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(maxX, maxZ, out int maxCx, out int maxCz))
+                return 0;
+
+            if (minCx > maxCx)
+                (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz)
+                (minCz, maxCz) = (maxCz, minCz);
+
+            int n = 0;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var cur = grid.GetDef(cell.TerrainDefIndex);
+                    if (predicate != null && predicate(cur))
+                        n++;
+                }
+            }
+
+            return n;
         }
 
         private static float NormalizeYaw90(float yaw)

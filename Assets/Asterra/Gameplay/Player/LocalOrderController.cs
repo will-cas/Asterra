@@ -1375,28 +1375,32 @@ namespace Asterra.Gameplay.Player
                 EnterPlaceMode(FactionDefaultContent.BridgeId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.J) && HasSelectedBuilder())
                 EnterPlaceMode(FactionDefaultContent.TrenchWorksId);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.V) && HasSelectedBuilder())
-                EnterPlaceMode(FactionDefaultContent.BridgeId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.Comma) && HasSelectedBuilder())
                 EnterPlaceMode(FactionDefaultContent.BarricadeId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.Period) && HasSelectedBuilder())
                 EnterPlaceMode(FactionDefaultContent.FerryDockId);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Y) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.FillTrench);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.K) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.RaiseBerm);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.L) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.DigMoat);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Semicolon) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.ClearForest);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Quote) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.BurnBrush);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Backslash) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.QuarryRock);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.LeftBracket) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.PlaceSpikes);
-            if (UnityEngine.Input.GetKeyDown(KeyCode.RightBracket) && HasSelectedBuilder())
-                EnterTerrainWorkMode(TerrainWorkKind.ClearDebris);
+
+            // Terrain-work arms cancel place mode — skip while placing so Q/E/[ /] rotate the ghost.
+            if (!_placeMode)
+            {
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Y) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.FillTrench);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.K) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.RaiseBerm);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.L) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.DigMoat);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Semicolon) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.ClearForest);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Quote) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.BurnBrush);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Backslash) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.QuarryRock);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.LeftBracket) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.PlaceSpikes);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.RightBracket) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.ClearDebris);
+            }
+
             if (UnityEngine.Input.GetKeyDown(KeyCode.Equals) && HasSelectedBuilder())
                 RepairBridgeAtCursor();
 
@@ -1799,16 +1803,23 @@ namespace Asterra.Gameplay.Player
             if (!HasSelectedBuilder())
                 return false;
 
-            if (match != null && match.World is SkirmishWorldSim sim
-                && sim.Environment != null
-                && !sim.Environment.CanPlaceBuilding(x, z))
-                return false;
+            string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                ? (_roster != null ? _roster.ProducerBuildingId : null)
+                : _placeBuildingDefId;
+
+            if (match != null && match.World is SkirmishWorldSim sim)
+            {
+                if (!string.IsNullOrEmpty(defId)
+                    && !sim.CanPreviewPlaceBuilding(defId, x, z, _placeYawDegrees))
+                    return false;
+                if (string.IsNullOrEmpty(defId)
+                    && sim.Environment != null
+                    && !sim.Environment.CanPlaceBuilding(x, z))
+                    return false;
+            }
 
             if (match != null && match.Definitions != null && match.Wallet != null)
             {
-                string defId = string.IsNullOrEmpty(_placeBuildingDefId)
-                    ? (_roster != null ? _roster.ProducerBuildingId : null)
-                    : _placeBuildingDefId;
                 if (!string.IsNullOrEmpty(defId) && match.Definitions.TryGetBuilding(defId, out var def))
                 {
                     if (!match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost))
@@ -1957,7 +1968,11 @@ namespace Asterra.Gameplay.Player
                         break;
                     case BuildingKind.Generic:
                     case BuildingKind.Special:
-                        scale = new Vector3(10f, 6f, 10f);
+                        // Use real footprint so bridge/trench/ferry yaw is visible.
+                        scale = new Vector3(
+                            Mathf.Max(def.FootprintX, 4f),
+                            defId == FactionDefaultContent.BridgeId ? 3.5f : 5f,
+                            Mathf.Max(def.FootprintZ, 4f));
                         break;
                     default:
                         throw new System.ArgumentOutOfRangeException(nameof(def.Kind), def.Kind, null);
@@ -1965,6 +1980,7 @@ namespace Asterra.Gameplay.Player
 
                 bool sideways = Mathf.Abs(Mathf.DeltaAngle(_placeYawDegrees, 90f)) < 1f
                                 || Mathf.Abs(Mathf.DeltaAngle(_placeYawDegrees, 270f)) < 1f;
+                // Walls use axis swap historically; bridges/ferry rely on transform yaw alone.
                 if (sideways && (def.Kind == BuildingKind.Wall || def.Kind == BuildingKind.Gate))
                     scale = new Vector3(scale.z, scale.y, scale.x);
             }
