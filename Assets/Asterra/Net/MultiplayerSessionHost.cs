@@ -3,27 +3,53 @@ using UnityEngine;
 
 namespace Asterra.Net
 {
-    /// <summary>Thin inspector-facing wrapper around <see cref="UnityGamingServicesSession"/>.</summary>
+    /// <summary>
+    /// Inspector-facing session host. Defaults to <see cref="LocalLoopbackSession"/> so Editor
+    /// soak works without UGS Lobby/Relay. Flip to UGS stub when packages are restored.
+    /// </summary>
     public sealed class MultiplayerSessionHost : MonoBehaviour
     {
-        [SerializeField] private UnityGamingServicesSession session;
+        public enum SessionBackend : byte
+        {
+            LocalLoopback = 0,
+            UnityGamingServicesStub = 1,
+        }
+
+        [SerializeField] private SessionBackend backend = SessionBackend.LocalLoopback;
+        [SerializeField] private LocalLoopbackSession loopbackSession;
+        [SerializeField] private UnityGamingServicesSession ugsSession;
         [SerializeField] private int maxPlayers = 8;
         [SerializeField] private uint matchSeed = 42;
         [SerializeField] private string defaultLobbyName = "Asterra Skirmish";
 
-        public IMultiplayerSession Session => session;
+        public IMultiplayerSession Session { get; private set; }
 
-        private void Awake()
+        private void Awake() => ResolveSession();
+
+        private void ResolveSession()
         {
-            if (session == null)
-                session = GetComponent<UnityGamingServicesSession>();
-            if (session == null)
-                session = gameObject.AddComponent<UnityGamingServicesSession>();
+            if (backend == SessionBackend.LocalLoopback)
+            {
+                if (loopbackSession == null)
+                    loopbackSession = GetComponent<LocalLoopbackSession>();
+                if (loopbackSession == null)
+                    loopbackSession = gameObject.AddComponent<LocalLoopbackSession>();
+                Session = loopbackSession;
+                return;
+            }
+
+            if (ugsSession == null)
+                ugsSession = GetComponent<UnityGamingServicesSession>();
+            if (ugsSession == null)
+                ugsSession = gameObject.AddComponent<UnityGamingServicesSession>();
+            Session = ugsSession;
         }
 
         public async void HostSkirmishAsync(string lobbyName = null)
         {
-            await session.HostAsync(
+            if (Session == null)
+                ResolveSession();
+            await Session.HostAsync(
                 string.IsNullOrWhiteSpace(lobbyName) ? defaultLobbyName : lobbyName,
                 maxPlayers,
                 matchSeed);
@@ -31,12 +57,25 @@ namespace Asterra.Net
 
         public async void JoinSkirmishAsync(string lobbyCode)
         {
-            await session.JoinAsync(lobbyCode);
+            if (Session == null)
+                ResolveSession();
+            await Session.JoinAsync(lobbyCode);
         }
 
         public async void LeaveAsync()
         {
-            await session.LeaveAsync();
+            if (Session == null)
+                ResolveSession();
+            await Session.LeaveAsync();
+        }
+
+        /// <summary>Editor soak helper: grow local peer count on the loopback host.</summary>
+        public void AddLocalPeer()
+        {
+            if (Session == null)
+                ResolveSession();
+            if (loopbackSession != null)
+                loopbackSession.AddLocalPeer();
         }
     }
 }

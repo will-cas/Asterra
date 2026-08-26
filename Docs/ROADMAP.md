@@ -38,7 +38,7 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 2. [x] NGO lockstep bridge + `LockstepMatchCoordinator` + frame gate
 3. [x] Faction pick / ready-up protocol (`MatchLobbyState` + `MatchLobbyController`)
 4. [x] Unified offline+online path through `MatchBootstrap` + coordinator
-5. [x] Headless lockstep soak (`LockstepSoakSelfTest` + `LocalLoopbackSession`); Editor 2→8 play tests still open
+5. [x] Headless lockstep soak 2→8 (`LockstepSoakSelfTest` + loopback session + **Asterra → Run Lockstep Soak**); live NGO Editor peers still open when UGS packages restore
 6. [x] Desync detection hooks (`DesyncDetector` + hash RPC)
 
 ## Phase 4 — AI & identity

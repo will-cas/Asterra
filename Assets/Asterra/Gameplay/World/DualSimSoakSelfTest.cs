@@ -49,7 +49,16 @@ namespace Asterra.Gameplay
             var replay = new ReplayBuffer();
             for (int i = 0; i < frames.Count; i++)
                 replay.Record(frames[i]);
-            return replay.Count == frames.Count && replay.GetFrame(0).Commands.Length > 0;
+            if (replay.Count != frames.Count)
+                return false;
+            for (int i = 0; i < frames.Count; i++)
+            {
+                var f = replay.GetFrame(i);
+                if (f?.Commands != null && f.Commands.Length > 0)
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool DivergedFails()

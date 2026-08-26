@@ -5,68 +5,66 @@ using UnityEngine;
 namespace Asterra.Net
 {
     /// <summary>
-    /// Editor/local lockstep host that marks the session connected without UGS.
+    /// MonoBehaviour wrapper around <see cref="LoopbackSession"/> for scene wiring.
     /// Use for dual-client soak and offline lobby drills until Lobby+Relay packages are restored.
     /// </summary>
     public sealed class LocalLoopbackSession : MonoBehaviour, IMultiplayerSession
     {
         [SerializeField] private int defaultMaxPlayers = 8;
 
-        public MatchLobbyInfo Info { get; private set; } = new MatchLobbyInfo
-        {
-            Role = SessionRole.Offline,
-            MaxPlayers = 8,
-        };
+        private LoopbackSession _inner;
 
-        public bool IsConnected { get; private set; }
+        private void Awake() => EnsureInner();
+
+        private void EnsureInner()
+        {
+            if (_inner == null)
+                _inner = new LoopbackSession(defaultMaxPlayers);
+        }
+
+        public MatchLobbyInfo Info
+        {
+            get
+            {
+                EnsureInner();
+                return _inner.Info;
+            }
+        }
+
+        public bool IsConnected
+        {
+            get
+            {
+                EnsureInner();
+                return _inner.IsConnected;
+            }
+        }
 
         public Task HostAsync(string lobbyName, int maxPlayers, uint matchSeed)
         {
-            maxPlayers = Mathf.Clamp(maxPlayers <= 0 ? defaultMaxPlayers : maxPlayers, 2, 8);
-            Info = new MatchLobbyInfo
-            {
-                Role = SessionRole.Host,
-                MaxPlayers = maxPlayers,
-                MatchSeed = matchSeed,
-                CurrentPlayers = 1,
-                LobbyCode = "LOOP",
-                RelayJoinCode = "LOOP",
-            };
-            IsConnected = true;
+            EnsureInner();
             Debug.Log($"[Asterra] Local loopback host ready ({lobbyName}, max {maxPlayers}, seed {matchSeed}).");
-            return Task.CompletedTask;
+            return _inner.HostAsync(lobbyName, maxPlayers, matchSeed);
         }
 
         public Task JoinAsync(string lobbyCode)
         {
-            Info = new MatchLobbyInfo
-            {
-                Role = SessionRole.Client,
-                MaxPlayers = defaultMaxPlayers,
-                LobbyCode = string.IsNullOrEmpty(lobbyCode) ? "LOOP" : lobbyCode,
-                RelayJoinCode = "LOOP",
-                CurrentPlayers = 2,
-            };
-            IsConnected = true;
-            Debug.Log($"[Asterra] Local loopback client joined ({Info.LobbyCode}).");
-            return Task.CompletedTask;
+            EnsureInner();
+            Debug.Log($"[Asterra] Local loopback client joined ({lobbyCode}).");
+            return _inner.JoinAsync(lobbyCode);
         }
 
         public Task LeaveAsync()
         {
-            IsConnected = false;
-            Info = new MatchLobbyInfo { Role = SessionRole.Offline, MaxPlayers = defaultMaxPlayers };
-            return Task.CompletedTask;
+            EnsureInner();
+            return _inner.LeaveAsync();
         }
 
         /// <summary>Simulate a second player arriving (for soak scripts).</summary>
         public void AddLocalPeer()
         {
-            if (!IsConnected)
-                return;
-            var info = Info;
-            info.CurrentPlayers = Mathf.Min(info.MaxPlayers, info.CurrentPlayers + 1);
-            Info = info;
+            EnsureInner();
+            _inner.AddLocalPeer();
         }
     }
 }

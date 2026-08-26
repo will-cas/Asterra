@@ -1,13 +1,15 @@
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Asterra.Core;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Sim;
+using Asterra.Net;
 
 namespace Asterra.Gameplay
 {
     /// <summary>
-    /// Lockstep hardening: delayed frames, multi-player gate, desync detection over a shared script.
+    /// Lockstep hardening: delayed frames, multi-player gate (2→8), desync detection, loopback session.
     /// Does not require NGO — exercises the same hash / gate / replay path online would use.
     /// </summary>
     public static class LockstepSoakSelfTest
@@ -19,9 +21,14 @@ namespace Asterra.Gameplay
 
             Expect(ref fails, sb, "gate opens when all submit", GateOpens());
             Expect(ref fails, sb, "gate blocks partial submit", GateBlocksPartial());
-            Expect(ref fails, sb, "delayed dual soak matches", DelayedDualSoak());
+            Expect(ref fails, sb, "gate scales to 4 players", GateScales(4));
+            Expect(ref fails, sb, "gate scales to 8 players", GateScales(8));
+            Expect(ref fails, sb, "delayed dual soak matches", DelayedDualSoak(120));
+            Expect(ref fails, sb, "long delayed dual soak matches", DelayedDualSoak(400));
             Expect(ref fails, sb, "desync detector catches drift", DesyncCatchesDrift());
-            Expect(ref fails, sb, "loopback lobby info", LoopbackLobbyInfo());
+            Expect(ref fails, sb, "loopback host connects", Await(LoopbackHostConnects()));
+            Expect(ref fails, sb, "loopback join + peer count", Await(LoopbackJoinPeers()));
+            Expect(ref fails, sb, "8-seat empty frames consume", EightSeatEmptyFrames());
 
             sb.Append(fails == 0 ? "LockstepSoakSelfTest: OK" : $"LockstepSoakSelfTest: FAIL ({fails})");
             return sb.ToString();
@@ -48,9 +55,29 @@ namespace Asterra.Gameplay
             return !gate.TryConsume(tick, buffer);
         }
 
-        private static bool DelayedDualSoak()
+        private static bool GateScales(int players)
         {
-            var frames = DualSimSoakSelfTest.BuildPublicScript(120);
+            var gate = new LockstepFrameGate();
+            var ids = new PlayerId[players];
+            for (int i = 0; i < players; i++)
+                ids[i] = new PlayerId((byte)i);
+            gate.SetExpectedPlayers(ids);
+            var tick = new Tick(20);
+            var buffer = new List<GameCommand>();
+            for (int i = 0; i < players - 1; i++)
+            {
+                gate.SubmitEmpty(tick, ids[i]);
+                if (gate.TryConsume(tick, buffer))
+                    return false;
+            }
+
+            gate.SubmitEmpty(tick, ids[players - 1]);
+            return gate.TryConsume(tick, buffer) && gate.ExpectedCount == players;
+        }
+
+        private static bool DelayedDualSoak(int ticks)
+        {
+            var frames = DualSimSoakSelfTest.BuildPublicScript(ticks);
             var a = Boot();
             var b = Boot();
             var delay = new Queue<GameCommand[]>(2);
@@ -87,21 +114,54 @@ namespace Asterra.Gameplay
             return detector.TryGetDesync(5, out _, out _);
         }
 
-        private static bool LoopbackLobbyInfo()
+        private static async Task<bool> LoopbackHostConnects()
         {
-            var info = new MatchLobbyInfo
-            {
-                Role = SessionRole.Host,
-                MaxPlayers = 8,
-                MatchSeed = 42,
-                CurrentPlayers = 1,
-                LobbyCode = "LOOP",
-                RelayJoinCode = "LOOP",
-            };
-            return info.Role == SessionRole.Host
-                   && info.LobbyCode == "LOOP"
-                   && info.MaxPlayers == 8;
+            var session = new LoopbackSession(8);
+            await session.HostAsync("soak", 8, 42);
+            return session.IsConnected
+                   && session.Info.Role == SessionRole.Host
+                   && session.Info.LobbyCode == "LOOP"
+                   && session.Info.CurrentPlayers == 1
+                   && session.Info.MaxPlayers == 8;
         }
+
+        private static async Task<bool> LoopbackJoinPeers()
+        {
+            var host = new LoopbackSession(8);
+            await host.HostAsync("soak", 4, 7);
+            host.AddLocalPeer();
+            host.AddLocalPeer();
+            host.AddLocalPeer(); // clamp at max 4
+            var client = new LoopbackSession(8);
+            await client.JoinAsync("LOOP");
+            return host.Info.CurrentPlayers == 4
+                   && client.IsConnected
+                   && client.Info.Role == SessionRole.Client
+                   && client.Info.CurrentPlayers == 2;
+        }
+
+        private static bool EightSeatEmptyFrames()
+        {
+            var gate = new LockstepFrameGate();
+            var players = new PlayerId[8];
+            for (int i = 0; i < 8; i++)
+                players[i] = new PlayerId((byte)i);
+            gate.SetExpectedPlayers(players);
+
+            // Prime delay window like LockstepMatchCoordinator (2 ticks)
+            for (uint t = 0; t < 2; t++)
+            {
+                for (int i = 0; i < 8; i++)
+                    gate.SubmitEmpty(new Tick(t), players[i]);
+            }
+
+            var buffer = new List<GameCommand>();
+            return gate.TryConsume(new Tick(0), buffer)
+                   && gate.TryConsume(new Tick(1), buffer)
+                   && !gate.TryConsume(new Tick(2), buffer);
+        }
+
+        private static bool Await(Task<bool> task) => task.GetAwaiter().GetResult();
 
         private static SkirmishWorldSim Boot()
         {
