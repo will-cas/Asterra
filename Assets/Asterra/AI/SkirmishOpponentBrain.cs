@@ -221,6 +221,9 @@ namespace Asterra.AI
         public AiDifficulty Difficulty { get; }
         public string CurrentPhase { get; private set; }
         public string LastDecision { get; private set; }
+        public float LastGuardUtility { get; private set; }
+        public float LastMainUtility { get; private set; }
+        public float LastHarassUtility { get; private set; }
 
         public IReadOnlyList<GameCommand> Think(in ArmyBrainContext context)
         {
@@ -1508,74 +1511,30 @@ namespace Asterra.AI
             out SimEntityId[] main,
             out SimEntityId[] harass)
         {
-            var combat = sense.Combat;
-            int guardNeed = Math.Min(_tuning.HomeGuardSize, Math.Max(0, combat.Count - 1));
-            int harassNeed = 0;
-            if (_tuning.HarassSize > 0
-                && combat.Count >= _tuning.AssaultArmySize + _tuning.HarassSize
-                && Difficulty >= AiDifficulty.Hard)
-            {
-                harassNeed = Math.Min(_tuning.HarassSize, combat.Count - guardNeed - 1);
-                if (harassNeed < 0)
-                    harassNeed = 0;
-            }
+            var utilSense = new ArmyGroupUtility.Sense(
+                combatCount: sense.Combat.Count,
+                enemyCombatNearby: sense.UnderAttack ? 4 : (sense.HasSightedEnemy ? 1 : 0),
+                underAttack: sense.UnderAttack,
+                hasKeepTarget: sense.HasLastSeenKeep || sense.CanAssaultKeep,
+                goldRatio: 1f,
+                homeGuardSize: _tuning.HomeGuardSize,
+                harassSize: _tuning.HarassSize,
+                assaultArmySize: _tuning.AssaultArmySize,
+                allowHarass: Difficulty >= AiDifficulty.Hard && _tuning.HarassSize > 0);
 
-            if (combat.Count <= guardNeed)
-            {
-                guard = combat.ToArray();
-                main = Array.Empty<SimEntityId>();
-                harass = Array.Empty<SimEntityId>();
-                return;
-            }
+            ArmyGroupUtility.Allocate(
+                sense.Combat,
+                sense.CombatDefIds,
+                _rangedDefId,
+                _cavalryDefId,
+                in utilSense,
+                out guard,
+                out main,
+                out harass);
 
-            // Prefer ranged/cavalry for harass from the end of the list.
-            var used = new bool[combat.Count];
-            guard = new SimEntityId[guardNeed];
-            for (int i = 0; i < guardNeed; i++)
-            {
-                guard[i] = combat[i];
-                used[i] = true;
-            }
-
-            harass = new SimEntityId[harassNeed];
-            int hFilled = 0;
-            for (int pass = 0; pass < 2 && hFilled < harassNeed; pass++)
-            {
-                for (int i = combat.Count - 1; i >= 0 && hFilled < harassNeed; i--)
-                {
-                    if (used[i])
-                        continue;
-                    string def = i < sense.CombatDefIds.Count ? sense.CombatDefIds[i] : string.Empty;
-                    bool preferred = def == _rangedDefId || def == _cavalryDefId;
-                    if (pass == 0 && !preferred)
-                        continue;
-                    harass[hFilled++] = combat[i];
-                    used[i] = true;
-                }
-            }
-
-            if (hFilled < harassNeed)
-            {
-                var trimmed = new SimEntityId[hFilled];
-                Array.Copy(harass, trimmed, hFilled);
-                harass = trimmed;
-            }
-
-            int mainCount = 0;
-            for (int i = 0; i < used.Length; i++)
-            {
-                if (!used[i])
-                    mainCount++;
-            }
-
-            main = new SimEntityId[mainCount];
-            int m = 0;
-            for (int i = 0; i < combat.Count; i++)
-            {
-                if (used[i])
-                    continue;
-                main[m++] = combat[i];
-            }
+            LastGuardUtility = ArmyGroupUtility.ScoreGuard(in utilSense);
+            LastMainUtility = ArmyGroupUtility.ScoreMain(in utilSense);
+            LastHarassUtility = ArmyGroupUtility.ScoreHarass(in utilSense);
         }
 
         private static SimEntityId[] ConcatIds(SimEntityId[] a, SimEntityId[] b)

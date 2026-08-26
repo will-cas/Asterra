@@ -12,5 +12,8 @@ namespace Asterra.Gameplay
         public UnitDefinition[] StartingUnits;
         public BuildingDefinition[] StartingBuildings;
         public CommanderDefinition DefaultCommander;
+        public PowerDefinition[] Powers;
+        [Tooltip("When empty, FactionDefaultContent supplies unit/building ids for this index.")]
+        public bool PreferCodeRosterFallback = true;
     }
 }

@@ -378,6 +378,11 @@ namespace Asterra.Gameplay
                     label = $"Unlock {powerDef.DisplayName} ({powerDef.UnlockGoldCost}g)";
                     clickUnlock = true;
                 }
+                else if (powerDef.IsPassive)
+                {
+                    label = $"{powerDef.DisplayName} (passive)";
+                    faded = true;
+                }
                 else if (buff > 0.05f)
                 {
                     label = $"{powerDef.DisplayName} ACTIVE {buff:0}s";
@@ -390,7 +395,8 @@ namespace Asterra.Gameplay
                 }
                 else
                 {
-                    label = i == 0 ? $"{powerDef.DisplayName} (Q)" : powerDef.DisplayName;
+                    bool isHotkey = IsPrimaryActivePower(roster.PowerIds, i, powerId);
+                    label = isHotkey ? $"{powerDef.DisplayName} (Q)" : powerDef.DisplayName;
                     clickUse = true;
                 }
 
@@ -1077,13 +1083,34 @@ namespace Asterra.Gameplay
             return x + w + 6f;
         }
 
+        private bool IsPrimaryActivePower(string[] powerIds, int index, string powerId)
+        {
+            if (match == null || match.Definitions == null || powerIds == null)
+                return index == 0;
+            for (int i = 0; i < powerIds.Length; i++)
+            {
+                if (!match.Definitions.TryGetPower(powerIds[i], out var def) || def.IsPassive)
+                    continue;
+                return powerIds[i] == powerId;
+            }
+
+            return false;
+        }
+
         private static string DescribePower(PowerDefData power, bool unlocked, float buff, float cd)
         {
             string effect = power.Effect == PowerEffectKind.ArmorAura
-                ? $"grants +{power.EffectMagnitude:0} armor"
+                ? $"grants +{power.EffectMagnitude:0.#} armor"
                 : power.Effect == PowerEffectKind.MoveSpeedAura
                     ? $"grants +{power.EffectMagnitude:0.#} move speed"
                     : $"grants +{power.EffectMagnitude:0} damage";
+            if (power.IsPassive)
+            {
+                if (!unlocked)
+                    return $"{power.DisplayName} (passive): unlock for {power.UnlockGoldCost}g — permanent {effect}";
+                return $"{power.DisplayName} (passive) active — permanent {effect}";
+            }
+
             if (!unlocked)
                 return $"{power.DisplayName}: unlock for {power.UnlockGoldCost}g — {effect} for {power.DurationSeconds:0}s";
             if (buff > 0.05f)

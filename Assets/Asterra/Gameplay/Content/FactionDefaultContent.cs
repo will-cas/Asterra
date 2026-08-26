@@ -62,6 +62,7 @@ namespace Asterra.Gameplay.Content
         public const string LucienIronWallAbilityId = "ability_lucien_iron_wall";
         public const string LucienChargeAbilityId = "ability_lucien_charge";
         public const string LucienAegisAbilityId = "ability_lucien_aegis";
+        public const string LucienDisciplinePassiveId = "passive_lucien_discipline";
         public const float LucienIronWallArmorBonus = 3f;
         public const float LucienIronWallBuildingMitigation = 4f;
         public const float LucienIronWallDurationSeconds = 12f;
@@ -94,6 +95,7 @@ namespace Asterra.Gameplay.Content
         public const string AllianceMarchAbilityId = "ability_alliance_march";
         public const string AllianceVolleyAbilityId = "ability_alliance_volley";
         public const string AllianceMusterAbilityId = "ability_alliance_muster";
+        public const string AllianceBondPassiveId = "passive_alliance_bond";
         public const float AllianceMarchMoveBonus = 2.2f;
         public const float AllianceMarchDurationSeconds = 10f;
         public const float AllianceMarchCooldownSeconds = 40f;
@@ -115,6 +117,7 @@ namespace Asterra.Gameplay.Content
         public const string SacredBurstAbilityId = "ability_sacred_burst";
         public const string EmberRushAbilityId = "ability_ember_rush";
         public const string CleansingFireAbilityId = "ability_cleansing_fire";
+        public const string EmberVowPassiveId = "passive_ember_vow";
         public const float SacredBurstDamageBonus = 8f;
         public const float SacredBurstDurationSeconds = 10f;
         public const float SacredBurstCooldownSeconds = 40f;
@@ -143,7 +146,13 @@ namespace Asterra.Gameplay.Content
             LeaderUnitId = LucienLeaderId,
             PowerId = LucienIronWallAbilityId,
             PowerDisplayName = "Iron Wall",
-            PowerIds = new[] { LucienIronWallAbilityId, LucienChargeAbilityId, LucienAegisAbilityId },
+            PowerIds = new[]
+            {
+                LucienDisciplinePassiveId,
+                LucienIronWallAbilityId,
+                LucienChargeAbilityId,
+                LucienAegisAbilityId,
+            },
             LoreBlurb = "Disciplined soldiers, engineering, and battlefield control.",
         };
 
@@ -168,7 +177,13 @@ namespace Asterra.Gameplay.Content
             LeaderUnitId = AllianceLeaderId,
             PowerId = AllianceMarchAbilityId,
             PowerDisplayName = "Alliance March",
-            PowerIds = new[] { AllianceMarchAbilityId, AllianceVolleyAbilityId, AllianceMusterAbilityId },
+            PowerIds = new[]
+            {
+                AllianceBondPassiveId,
+                AllianceMarchAbilityId,
+                AllianceVolleyAbilityId,
+                AllianceMusterAbilityId,
+            },
             LoreBlurb = "Alliance spearmen, free rangers, and flexible mercenary companies.",
         };
 
@@ -193,7 +208,13 @@ namespace Asterra.Gameplay.Content
             LeaderUnitId = FlameLeaderId,
             PowerId = SacredBurstAbilityId,
             PowerDisplayName = "Sacred Burst",
-            PowerIds = new[] { SacredBurstAbilityId, EmberRushAbilityId, CleansingFireAbilityId },
+            PowerIds = new[]
+            {
+                EmberVowPassiveId,
+                SacredBurstAbilityId,
+                EmberRushAbilityId,
+                CleansingFireAbilityId,
+            },
             LoreBlurb = "Sacred warriors and ritual fire dominating open battle.",
         };
 
@@ -393,6 +414,16 @@ namespace Asterra.Gameplay.Content
                 ResearchSeconds = 12f,
                 // Melee weapons — not for archers/siege.
                 CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
+            });
+            registry.Register(new PowerDefData
+            {
+                Id = LucienDisciplinePassiveId,
+                DisplayName = "Iron Discipline",
+                UnlockGoldCost = 80,
+                IsPassive = true,
+                Effect = PowerEffectKind.ArmorAura,
+                EffectMagnitude = 1.25f,
+                BuildingMitigation = 2f,
             });
             registry.Register(new PowerDefData
             {
@@ -609,6 +640,15 @@ namespace Asterra.Gameplay.Content
             });
             registry.Register(new PowerDefData
             {
+                Id = AllianceBondPassiveId,
+                DisplayName = "Realm Bond",
+                UnlockGoldCost = 80,
+                IsPassive = true,
+                Effect = PowerEffectKind.MoveSpeedAura,
+                EffectMagnitude = 0.6f,
+            });
+            registry.Register(new PowerDefData
+            {
                 Id = AllianceMarchAbilityId,
                 DisplayName = "Alliance March",
                 UnlockGoldCost = AllianceMarchUnlockGold,
@@ -808,6 +848,15 @@ namespace Asterra.Gameplay.Content
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 12f,
                 CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
+            });
+            registry.Register(new PowerDefData
+            {
+                Id = EmberVowPassiveId,
+                DisplayName = "Ember Vow",
+                UnlockGoldCost = 80,
+                IsPassive = true,
+                Effect = PowerEffectKind.DamageAura,
+                EffectMagnitude = 1.5f,
             });
             registry.Register(new PowerDefData
             {

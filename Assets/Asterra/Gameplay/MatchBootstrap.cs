@@ -130,6 +130,7 @@ namespace Asterra.Gameplay
 
             Lobby = new MatchLobbyState { MatchSeed = matchSeed, MaxPlayers = 8 };
             Definitions = SkirmishDefaultContent.CreateRegistry();
+            RegisterFactionScriptablePowers();
             Factions = new FactionCatalog(factions);
             Replay = new ReplayBuffer();
             _commandBus = new CommandBus();
@@ -262,8 +263,8 @@ namespace Asterra.Gameplay
             aiDifficulty = data.formatVersion >= 2
                 ? (AiDifficulty)Mathf.Clamp(data.aiDifficulty, 0, 3)
                 : AiDifficulty.Normal;
-            PlayerRoster = FactionDefaultContent.Get(new FactionId((byte)PlayerFactionIndex));
-            EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)EnemyFactionIndex));
+            PlayerRoster = ResolveRoster(PlayerFactionIndex);
+            EnemyRoster = ResolveRoster(EnemyFactionIndex);
 
             BeginMatchFromLobby(new PlayerId(0), includeAi: true, onlinePlayers: null, restore: data);
 
@@ -318,10 +319,10 @@ namespace Asterra.Gameplay
         public void StartOfflineVsAi()
         {
             playMode = MatchPlayMode.OfflineVsAi;
-            PlayerRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(playerFactionIndex, 0, 2)));
-            EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)Mathf.Clamp(enemyFactionIndex, 0, 2)));
+            PlayerRoster = ResolveRoster(playerFactionIndex);
+            EnemyRoster = ResolveRoster(enemyFactionIndex);
             if (EnemyRoster.Id == PlayerRoster.Id)
-                EnemyRoster = FactionDefaultContent.Get(new FactionId((byte)((PlayerRoster.Id.Value + 1) % 3)));
+                EnemyRoster = ResolveRoster((PlayerRoster.Id.Value + 1) % 3);
 
             var local = new PlayerId(0);
             var enemy = new PlayerId(1);
@@ -359,12 +360,28 @@ namespace Asterra.Gameplay
             if (localSlot == null)
                 throw new System.InvalidOperationException("Local player missing from MatchStartInfo.");
 
-            PlayerRoster = FactionDefaultContent.Get(new FactionId(localSlot.FactionIndex));
+            PlayerRoster = ResolveRoster(localSlot.FactionIndex);
             EnemyRoster = firstRemote != null
-                ? FactionDefaultContent.Get(new FactionId(firstRemote.FactionIndex))
-                : FactionDefaultContent.Get(new FactionId((byte)((localSlot.FactionIndex + 1) % 3)));
+                ? ResolveRoster(firstRemote.FactionIndex)
+                : ResolveRoster((localSlot.FactionIndex + 1) % 3);
 
             BeginMatchFromLobby(localPlayer, includeAi: false, startInfo.Players);
+        }
+
+        private FactionRoster ResolveRoster(int factionIndex)
+        {
+            factionIndex = Mathf.Clamp(factionIndex, 0, 2);
+            if (factions != null && factionIndex < factions.Length && factions[factionIndex] != null)
+                return factions[factionIndex].ToRoster();
+            return FactionDefaultContent.Get(new FactionId((byte)factionIndex));
+        }
+
+        private void RegisterFactionScriptablePowers()
+        {
+            if (factions == null || Definitions == null)
+                return;
+            for (int i = 0; i < factions.Length; i++)
+                factions[i]?.RegisterPowers(Definitions);
         }
 
         private void BeginMatchFromLobby(

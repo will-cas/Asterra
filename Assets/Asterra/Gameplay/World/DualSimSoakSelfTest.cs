@@ -84,7 +84,10 @@ namespace Asterra.Gameplay
             return a.ComputeWorldHash() != b.ComputeWorldHash();
         }
 
-        private static List<CommandFrame> BuildScript(int ticks)
+        private static List<CommandFrame> BuildScript(int ticks) => BuildPublicScript(ticks);
+
+        /// <summary>Shared command stream for dual-sim / lockstep soaks.</summary>
+        public static List<CommandFrame> BuildPublicScript(int ticks)
         {
             var list = new List<CommandFrame>(ticks);
             // Discover unit ids from a throwaway boot so both sims share the same script ids.

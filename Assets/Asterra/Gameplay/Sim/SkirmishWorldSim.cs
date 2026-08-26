@@ -974,7 +974,38 @@ namespace Asterra.Gameplay
                 return;
             if (!_powers.TryUnlock(cmd.Issuer, def.Id, def.UnlockGoldCost))
                 return;
+
+            // Passives apply permanently on unlock (commander kit).
+            if (def.IsPassive)
+                ApplyPermanentPassive(cmd.Issuer, def);
+
             _mutationCounter ^= (ulong)def.Id.GetHashCode() * 17ul;
+        }
+
+        private void ApplyPermanentPassive(PlayerId owner, PowerDefData power)
+        {
+            string key = AbilityKey(owner.Value, power.Id);
+            if (_commanderAbilities.TryGetValue(key, out var existing))
+            {
+                if (existing.BuffRemaining > 1e6f)
+                    return;
+                if (existing.BuffRemaining > 0f)
+                    ClearPowerBuff(owner, existing);
+            }
+
+            var state = new CommanderAbilityRuntime
+            {
+                PowerDefId = power.Id,
+                Effect = power.Effect,
+                ArmorBonus = power.Effect == PowerEffectKind.ArmorAura ? power.EffectMagnitude : 0f,
+                MoveBonus = power.Effect == PowerEffectKind.MoveSpeedAura ? power.EffectMagnitude : 0f,
+                DamageBonus = power.Effect == PowerEffectKind.DamageAura ? power.EffectMagnitude : 0f,
+                BuildingMitigation = power.BuildingMitigation,
+                BuffRemaining = 1e9f,
+                CooldownRemaining = 0f,
+            };
+            _commanderAbilities[key] = state;
+            ApplyPowerBuff(owner, state);
         }
 
         private static bool RosterContainsPower(FactionRoster roster, string powerId)
@@ -1049,6 +1080,8 @@ namespace Asterra.Gameplay
             if (!RosterContainsPower(roster, cmd.PowerDefId))
                 return;
             if (!_defs.TryGetPower(cmd.PowerDefId, out var power))
+                return;
+            if (power.IsPassive)
                 return;
             if (!_powers.Has(cmd.Issuer, power.Id))
                 return;
@@ -1130,7 +1163,7 @@ namespace Asterra.Gameplay
                     changed = true;
                 }
 
-                if (state.BuffRemaining > 0f)
+                if (state.BuffRemaining > 0f && state.BuffRemaining < 1e6f)
                 {
                     state.BuffRemaining -= dt;
                     if (state.BuffRemaining <= 0f)

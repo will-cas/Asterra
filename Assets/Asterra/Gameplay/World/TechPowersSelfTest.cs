@@ -19,6 +19,7 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "apply equipment boosts armor", ApplyEquipmentBoosts());
             Expect(ref fails, sb, "equip costs gold per unit", EquipCostsGold());
             Expect(ref fails, sb, "fire swords skip ranged", FireSwordsSkipRanged());
+            Expect(ref fails, sb, "passive unlock applies buff", PassiveUnlockApplies());
             Expect(ref fails, sb, "duplicate equipment rejected", DuplicateEquipmentRejected());
             Expect(ref fails, sb, "builder cannot equip", BuilderCannotEquip());
             Expect(ref fails, sb, "keep upgrade increases keep hp", KeepUpgradeBuffsKeep());
@@ -135,6 +136,25 @@ namespace Asterra.Gameplay
                 },
             });
             return archer.AppliedEquipmentCount == 0 && melee.AppliedEquipmentCount >= 1;
+        }
+
+        private static bool PassiveUnlockApplies()
+        {
+            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out var unit);
+            sim.SpawnBuilding(
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, -30f, 0f, startActive: true);
+            wallet.Seed(p, ResourceType.Gold, 500);
+            float armor0 = unit.Armor;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new UnlockPowerCommand
+                {
+                    Issuer = p,
+                    PowerDefId = FactionDefaultContent.LucienDisciplinePassiveId,
+                },
+            });
+            return sim.HasPower(p, FactionDefaultContent.LucienDisciplinePassiveId)
+                   && unit.Armor > armor0;
         }
 
         private static bool DuplicateEquipmentRejected()

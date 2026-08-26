@@ -5,7 +5,11 @@
     "Asterra.Core",
     "Asterra.AI",
     "Asterra.Net",
-    "Unity.Netcode.Runtime"
+    "Asterra.Simulation",
+    "Unity.Netcode.Runtime",
+    "Unity.Entities",
+    "Unity.Collections",
+    "Unity.Mathematics"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

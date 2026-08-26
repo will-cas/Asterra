@@ -110,6 +110,18 @@ namespace Asterra.Gameplay
             if (dualSimReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return dualSimReport + "\nDual-sim soak self-test failed — aborting further smoke.";
 
+            var lockstepSoakReport = LockstepSoakSelfTest.Run();
+            if (lockstepSoakReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return lockstepSoakReport + "\nLockstep soak self-test failed — aborting further smoke.";
+
+            var armyGroupReport = ArmyGroupSelfTest.Run();
+            if (armyGroupReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return armyGroupReport + "\nArmy group self-test failed — aborting further smoke.";
+
+            var dotsSimReport = DotsSimSelfTest.Run();
+            if (dotsSimReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return dotsSimReport + "\nDOTS sim self-test failed — aborting further smoke.";
+
             var savePipelineReport = SaveLoadPipelineSelfTest.Run();
             if (savePipelineReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return savePipelineReport + "\nSave/load pipeline self-test failed — aborting further smoke.";
@@ -304,6 +316,9 @@ namespace Asterra.Gameplay
             sb.AppendLine(commandApplyReport);
             sb.AppendLine(aiDecisionReport);
             sb.AppendLine(dualSimReport);
+            sb.AppendLine(lockstepSoakReport);
+            sb.AppendLine(armyGroupReport);
+            sb.AppendLine(dotsSimReport);
             sb.AppendLine(savePipelineReport);
             sb.AppendLine(ecoFortReport);
             sb.Append(codecReport);

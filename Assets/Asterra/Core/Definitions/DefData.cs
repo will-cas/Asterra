@@ -183,6 +183,11 @@ namespace Asterra.Core
         public PowerEffectKind Effect = PowerEffectKind.ArmorAura;
         public float EffectMagnitude = 3f;
         public float BuildingMitigation;
+        /// <summary>
+        /// When true, unlocking applies a permanent buff (no activate / cooldown).
+        /// Commander kit: one passive + one or more actives.
+        /// </summary>
+        public bool IsPassive;
     }
 
     /// <summary>Deterministic role vs role / building damage multipliers.</summary>

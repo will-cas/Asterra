@@ -235,13 +235,32 @@ namespace Asterra.Gameplay.Player
         {
             if (_roster?.PowerIds == null || _roster.PowerIds.Length == 0)
                 return;
-            ActivateCommanderAbility(_roster.PowerIds[0]);
+            for (int i = 0; i < _roster.PowerIds.Length; i++)
+            {
+                string id = _roster.PowerIds[i];
+                if (match != null
+                    && match.Definitions != null
+                    && match.Definitions.TryGetPower(id, out var def)
+                    && def.IsPassive)
+                    continue;
+                ActivateCommanderAbility(id);
+                return;
+            }
         }
 
         public void ActivateCommanderAbility(string powerDefId)
         {
             if (_commands == null || _roster == null || string.IsNullOrEmpty(powerDefId))
                 return;
+
+            if (match != null
+                && match.Definitions != null
+                && match.Definitions.TryGetPower(powerDefId, out var passiveCheck)
+                && passiveCheck.IsPassive)
+            {
+                MatchFeedback.Show($"{passiveCheck.DisplayName} is a passive — unlock only");
+                return;
+            }
 
             if (_world != null && !_world.HasPower(_local, powerDefId))
             {

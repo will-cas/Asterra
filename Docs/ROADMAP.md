@@ -27,10 +27,10 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 
 ## Phase 2 — Deterministic sim + 1k stress
 
-1. [x] DOTS unit components + `UnitMoveSystem` stub (`Asterra.Simulation`)
+1. [x] DOTS unit components + `UnitMoveSystem` / combat cooldown + strike + `DotsWorldHash` (`Asterra.Simulation`)
 2. Port remaining combat from `SkirmishWorldSim` into Entities jobs
 3. Spawn 1k units, measure frame time / Burst jobs
-4. World-hash for single-player “desync” tests (replay)
+4. [x] World-hash path for dual-sim / lockstep soak (`DotsWorldHash` + `LockstepSoakSelfTest`)
 
 ## Phase 3 — Multiplayer skirmish (2 → 8)
 
@@ -38,14 +38,14 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 2. [x] NGO lockstep bridge + `LockstepMatchCoordinator` + frame gate
 3. [x] Faction pick / ready-up protocol (`MatchLobbyState` + `MatchLobbyController`)
 4. [x] Unified offline+online path through `MatchBootstrap` + coordinator
-5. [ ] 2-player lockstep soak in Editor; then 4; then 8
+5. [x] Headless lockstep soak (`LockstepSoakSelfTest` + `LocalLoopbackSession`); Editor 2→8 play tests still open
 6. [x] Desync detection hooks (`DesyncDetector` + hash RPC)
 
 ## Phase 4 — AI & identity
 
-1. Army groups + simple strategy utility AI (`Asterra.AI`).
-2. Asymmetric faction data (units/buildings/passives) via ScriptableObjects.
-3. Commander kit (1 active + 1 passive) affecting army buffs.
+1. [x] Army groups + utility scoring (`ArmyGroup` / `ArmyGroupUtility` on `SkirmishOpponentBrain`)
+2. [x] Faction ScriptableObject wrappers (`FactionDefinition` + `PowerDefinition` + roster fallback)
+3. [x] Commander kit (passive unlock + actives) in defs/sim/HUD
 
 ## Phase 5 — Steam & live ops
 
