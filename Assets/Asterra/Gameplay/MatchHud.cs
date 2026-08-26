@@ -20,6 +20,14 @@ namespace Asterra.Gameplay
         private string _hoverTip = string.Empty;
         private AsterraMenuPanels.Overlay _overlay = AsterraMenuPanels.Overlay.None;
         private AsterraMenuPanels.Overlay _overlayReturn = AsterraMenuPanels.Overlay.None;
+        private enum CmdPage : byte { Main = 0, BuildMore = 1, Earthworks = 2, Gear = 3, Admin = 4 }
+        private CmdPage _cmdPage = CmdPage.Main;
+        private int _cmdCardIndex;
+        private float _cmdGridX;
+        private float _cmdGridY;
+        private float _cmdCardW;
+        private float _cmdCardH;
+        private float _cmdGap;
 
         private void Awake()
         {
@@ -94,15 +102,13 @@ namespace Asterra.Gameplay
             }
 
             DrawResources(player);
-            DrawSaveLoadChrome();
-            DrawSelectionStrip(player);
             DrawPowerButton();
             DrawFeedbackToast();
 
             if (showDebugHud)
                 DrawDebugStatus(player);
 
-            DrawCommandBar(player);
+            DrawCommandDock(player);
             DrawHoverTip();
 
             if (_overlay != AsterraMenuPanels.Overlay.None)
@@ -152,121 +158,216 @@ namespace Asterra.Gameplay
         {
             float hold = match.Victory != null ? match.Victory.GetHoldProgress(player) : 0f;
             bool showHold = hold > 0.001f;
-            float stripH = showDebugHud ? HudStyle.S(28f) : (showHold ? HudStyle.S(72f) : HudStyle.S(52f));
-            var strip = new Rect(HudStyle.S(8f), HudStyle.S(8f), HudStyle.S(420f), stripH);
+            float stripH = showHold ? HudStyle.S(56f) : HudStyle.S(40f);
+            var strip = new Rect(HudStyle.S(10f), HudStyle.S(10f), HudStyle.S(340f), stripH);
             HudClickBlocker.Block(strip);
-            HudStyle.DrawPanel(strip, new Color(0.05f, 0.07f, 0.08f, 0.82f));
+            HudStyle.DrawFrame(strip, HudStyle.PanelFillDeep, HudStyle.PanelBorder, 1f);
+            HudStyle.DrawAccentBar(
+                new Rect(strip.x + 1f, strip.y + 1f, strip.width - 2f, HudStyle.S(2f)),
+                HudStyle.AccentSoft);
 
-            string resources = string.Empty;
+            string gold = "0";
+            string timber = "0";
             if (match.Wallet != null)
             {
                 int income = EstimateGoldIncomePerSecond(player);
-                resources =
-                    $"Gold {match.Wallet.Get(player, ResourceType.Gold)}" +
-                    (income > 0 ? $" (+{income}/s)" : string.Empty) +
-                    $"    Timber {match.Wallet.Get(player, ResourceType.Timber)}";
+                gold = match.Wallet.Get(player, ResourceType.Gold).ToString();
+                if (income > 0)
+                    gold += $"  +{income}/s";
+                timber = match.Wallet.Get(player, ResourceType.Timber).ToString();
             }
 
-            GUI.Label(
-                new Rect(HudStyle.S(18f), HudStyle.S(12f), HudStyle.S(400f), HudStyle.S(22f)),
-                resources,
-                HudStyle.Label);
-            if (!showDebugHud)
+            float pillH = HudStyle.S(28f);
+            float pillY = strip.y + HudStyle.S(8f);
+            HudStyle.ResourcePill(
+                new Rect(strip.x + HudStyle.S(8f), pillY, HudStyle.S(150f), pillH),
+                "gold",
+                gold,
+                HudStyle.Gold);
+            HudStyle.ResourcePill(
+                new Rect(strip.x + HudStyle.S(166f), pillY, HudStyle.S(120f), pillH),
+                "timber",
+                timber,
+                HudStyle.Timber);
+
+            if (showHold)
             {
+                float barW = HudStyle.S(200f);
+                float barY = strip.yMax - HudStyle.S(14f);
+                HudStyle.DrawPanel(
+                    new Rect(strip.x + HudStyle.S(10f), barY, barW, HudStyle.S(6f)),
+                    new Color(0.12f, 0.12f, 0.14f, 0.95f));
+                HudStyle.DrawPanel(
+                    new Rect(strip.x + HudStyle.S(10f), barY, barW * Mathf.Clamp01(hold), HudStyle.S(6f)),
+                    HudStyle.Accent);
                 GUI.Label(
-                    new Rect(HudStyle.S(18f), HudStyle.S(32f), HudStyle.S(400f), HudStyle.S(18f)),
-                    BuildContextLine(),
-                    HudStyle.Label);
-                if (showHold)
-                {
-                    float barW = HudStyle.S(200f);
-                    HudStyle.DrawPanel(
-                        new Rect(HudStyle.S(18f), HudStyle.S(52f), barW, HudStyle.S(10f)),
-                        new Color(0.12f, 0.12f, 0.14f, 0.95f));
-                    HudStyle.DrawPanel(
-                        new Rect(HudStyle.S(18f), HudStyle.S(52f), barW * Mathf.Clamp01(hold), HudStyle.S(10f)),
-                        new Color(0.95f, 0.75f, 0.25f, 0.95f));
-                    GUI.Label(
-                        new Rect(HudStyle.S(18f) + barW + HudStyle.S(8f), HudStyle.S(48f), HudStyle.S(160f), HudStyle.S(18f)),
-                        $"Hold {(int)(hold * 100f)}%",
-                        HudStyle.Caption);
-                }
+                    new Rect(strip.x + HudStyle.S(10f) + barW + HudStyle.S(8f), barY - HudStyle.S(6f), HudStyle.S(100f), HudStyle.S(16f)),
+                    $"Hold {(int)(hold * 100f)}%",
+                    HudStyle.Caption);
             }
         }
 
         private void DrawSaveLoadChrome()
         {
-            if (match == null || !match.IsMatchRunning || match.Result.IsOver)
-                return;
-
-            // Sit under the resource strip (left) so commander powers own the top-right.
-            float hold = match.Victory != null ? match.Victory.GetHoldProgress(match.Session.LocalPlayer) : 0f;
-            bool showHold = hold > 0.001f;
-            float stripH = showDebugHud ? HudStyle.S(28f) : (showHold ? HudStyle.S(72f) : HudStyle.S(52f));
-            float x = HudStyle.S(8f);
-            float y = HudStyle.S(8f) + stripH + HudStyle.S(6f);
-            float bw = HudStyle.S(80f);
-            float bh = HudStyle.S(28f);
-            if (HudButton(new Rect(x, y, bw, bh), "Save", "Save skirmish (F5)"))
-                match.SaveOfflineQuick();
-            if (HudButton(new Rect(x + bw + HudStyle.S(8f), y, bw, bh), "Load", "Load quicksave (F9)"))
-                match.LoadOfflineQuick();
+            // Save/Load live in the pause menu (F5/F9 still work).
         }
 
         private void DrawSelectionStrip(PlayerId player)
         {
-            if (orders == null || orders.Selection == null || match.World == null)
+            // Selection portraits are drawn inside DrawCommandDock.
+        }
+
+        private void DrawPowerButton()
+        {
+            if (orders == null || match.PlayerRoster == null || match.World == null)
+                return;
+
+            var roster = match.PlayerRoster;
+            var powerIds = roster.PowerIds;
+            if (powerIds == null || powerIds.Length == 0)
+                return;
+
+            float size = HudStyle.S(44f);
+            float gap = HudStyle.S(6f);
+            float x = Screen.width - HudStyle.S(14f) - size;
+            float y = HudStyle.S(12f);
+            for (int i = 0; i < powerIds.Length; i++)
+            {
+                string powerId = powerIds[i];
+                if (match.Definitions == null || !match.Definitions.TryGetPower(powerId, out var powerDef))
+                    continue;
+
+                match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, powerId, out float cd, out float buff);
+                bool unlocked = match.World.HasPower(match.Session.LocalPlayer, powerId);
+                bool faded = unlocked && (powerDef.IsPassive || buff > 0.05f || cd > 0.05f);
+                bool canClick = !unlocked || (!powerDef.IsPassive && buff <= 0.05f && cd <= 0.05f);
+                string tip = DescribePower(powerDef, unlocked, buff, cd);
+                string label = !unlocked ? $"{powerDef.UnlockGoldCost}g"
+                    : powerDef.IsPassive ? "P"
+                    : buff > 0.05f ? $"{buff:0}s"
+                    : cd > 0.05f ? $"{cd:0}"
+                    : IsPrimaryActivePower(roster.PowerIds, i, powerId) ? "Q" : "Use";
+
+                var rect = new Rect(x, y, size, size);
+                if (HudStyle.CommandCard(rect, "power", label, HudStyle.Accent, out bool hovered, canClick && !faded, selected: buff > 0.05f))
+                {
+                    AsterraAudio.PlayUiClick();
+                    if (!unlocked)
+                        orders.UnlockPower(powerId);
+                    else if (canClick)
+                        orders.ActivateCommanderAbility(powerId);
+                }
+
+                if (hovered)
+                    _hoverTip = tip;
+                y += size + gap;
+            }
+        }
+
+        private void DrawCommandDock(PlayerId player)
+        {
+            if (orders == null)
+                return;
+
+            // Reset page when leaving builder / building contexts.
+            if (!orders.HasBuilderSelected && !orders.SelectedBuilding.HasValue
+                && (_cmdPage == CmdPage.BuildMore || _cmdPage == CmdPage.Earthworks || _cmdPage == CmdPage.Admin))
+                _cmdPage = CmdPage.Main;
+            if (!orders.HasCombatUnitSelected && _cmdPage == CmdPage.Gear)
+                _cmdPage = CmdPage.Main;
+
+            float dockH = HudStyle.CommandDockHeight;
+            float dockY = Screen.height - dockH - HudStyle.S(8f);
+            float dockX = HudStyle.S(10f);
+            float dockW = HudStyle.ContentRight - dockX - HudStyle.S(6f);
+            var dock = new Rect(dockX, dockY, dockW, dockH);
+            HudClickBlocker.Block(dock);
+            HudStyle.DrawFrame(dock, HudStyle.PanelFillDeep, HudStyle.PanelBorder, 1.5f);
+            HudStyle.DrawAccentBar(
+                new Rect(dock.x + 1f, dock.y + 1f, dock.width - 2f, HudStyle.S(3f)),
+                HudStyle.AccentSoft);
+
+            float selectW = HudStyle.S(250f);
+            DrawSelectionInto(player, new Rect(dock.x + HudStyle.S(8f), dock.y + HudStyle.S(10f), selectW, dock.height - HudStyle.S(18f)));
+
+            _cmdCardW = HudStyle.S(64f);
+            _cmdCardH = HudStyle.S(62f);
+            _cmdGap = HudStyle.S(5f);
+            _cmdGridX = dock.x + selectW + HudStyle.S(14f);
+            _cmdGridY = dock.y + HudStyle.S(12f);
+            _cmdCardIndex = 0;
+
+            if (orders.SelectedBuilding.HasValue && TryGetSelectedBuilding(out var building)
+                && building.State == BuildingState.Constructing)
+            {
+                DrawConstructionStatus(building, dock.y - HudStyle.S(78f));
+                PushCard("idle", $"Idle {orders.IdleWorkerCount}", "Select idle workers", HudStyle.Timber,
+                    () => orders.SelectIdleWorker());
+                return;
+            }
+
+            if (orders.SelectedBuilding.HasValue && TryGetSelectedBuilding(out var b))
+            {
+                DrawBuildingCommands(player, b);
+                return;
+            }
+
+            PushCard("idle", $"Idle {orders.IdleWorkerCount}", "Select idle workers (. / I)", HudStyle.Timber,
+                () => orders.SelectIdleWorker());
+
+            if (orders.IsPlaceMode)
+            {
+                PushCard("cancel", "Cancel", "Cancel place mode (Esc)", HudStyle.Danger,
+                    () => orders.CancelPlaceMode());
+                return;
+            }
+
+            if (orders.HasCombatUnitSelected)
+                DrawCombatCommands(player);
+
+            if (orders.HasBuilderSelected)
+                DrawBuilderCommands();
+        }
+
+        private void DrawSelectionInto(PlayerId player, Rect area)
+        {
+            if (orders.Selection == null || match.World == null)
                 return;
             var selected = orders.Selection.Selected;
             if (selected.Count == 0 && !orders.SelectedBuilding.HasValue)
+            {
+                GUI.Label(area, "No selection", HudStyle.Caption);
                 return;
+            }
 
-            float y = Screen.height - HudStyle.S(278f);
-            BuildingSnapshot selectedBuilding = default;
-            bool buildingSelected = orders.SelectedBuilding.HasValue
-                && TryGetSelectedBuilding(out selectedBuilding);
-            float panelW = HudStyle.S(56f) + selected.Count * HudStyle.S(48f) + (buildingSelected ? HudStyle.S(56f) : 0f);
-            if (buildingSelected && selectedBuilding.State == BuildingState.Constructing)
-                panelW = Mathf.Max(panelW, HudStyle.S(280f));
-            float maxW = Mathf.Min(HudStyle.S(520f), HudStyle.ContentRight - HudStyle.S(8f));
-            var panel = new Rect(HudStyle.S(8f), y, Mathf.Min(maxW, panelW), HudStyle.S(56f));
-            HudClickBlocker.Block(panel);
-            HudStyle.DrawPanel(panel, new Color(0.05f, 0.07f, 0.09f, 0.88f));
-
-            float x = 14f;
             byte faction = match.PlayerRoster != null ? match.PlayerRoster.Id.Value : (byte)0;
             Color fac = AsterraMeshLibrary.FactionColor(faction);
+            float x = area.x;
+            float y = area.y;
+            const float portrait = 44f;
 
-            if (buildingSelected)
+            if (orders.SelectedBuilding.HasValue && TryGetSelectedBuilding(out var selectedBuilding))
             {
                 var tex = HudStyle.Portrait(selectedBuilding.DefinitionId, fac);
-                GUI.DrawTexture(new Rect(x, y + 8f, 40f, 40f), tex);
+                GUI.DrawTexture(new Rect(x, y, portrait, portrait), tex);
                 float hpRatio = selectedBuilding.MaxHealth > 0.01f
                     ? Mathf.Clamp01(selectedBuilding.Health / selectedBuilding.MaxHealth)
                     : 1f;
-                HudStyle.DrawPanel(new Rect(x, y + 46f, 40f * hpRatio, 4f), new Color(0.25f, 0.85f, 0.35f, 0.95f));
-
-                if (selectedBuilding.State == BuildingState.Constructing)
-                {
-                    float pct = Mathf.Clamp01(selectedBuilding.BuildProgress);
-                    HudStyle.DrawPanel(new Rect(x + 48f, y + 14f, 160f, 10f), new Color(0.12f, 0.12f, 0.14f, 0.95f));
-                    HudStyle.DrawPanel(
-                        new Rect(x + 48f, y + 14f, 160f * pct, 10f),
-                        new Color(0.95f, 0.72f, 0.22f, 0.95f));
-                    GUI.Label(
-                        new Rect(x + 48f, y + 28f, 200f, 20f),
-                        $"Building  {(int)(pct * 100f)}%",
-                        HudStyle.Label);
-                    x += 220f;
-                }
-                else
-                {
-                    x += 48f;
-                }
+                HudStyle.DrawPanel(new Rect(x, y + portrait + 2f, portrait * hpRatio, 4f), HudStyle.Hp);
+                string name = ShortName(selectedBuilding.DefinitionId);
+                if (match.Definitions != null && match.Definitions.TryGetBuilding(selectedBuilding.DefinitionId, out var def)
+                    && !string.IsNullOrEmpty(def.DisplayName))
+                    name = def.DisplayName;
+                GUI.Label(new Rect(x + portrait + 8f, y + 4f, area.width - portrait - 8f, 20f), name, HudStyle.Label);
+                GUI.Label(
+                    new Rect(x + portrait + 8f, y + 24f, area.width - portrait - 8f, 18f),
+                    $"{selectedBuilding.Health:0}/{selectedBuilding.MaxHealth:0}",
+                    HudStyle.Caption);
+                return;
             }
 
             int shown = 0;
-            for (int i = 0; i < selected.Count && shown < 8; i++)
+            for (int i = 0; i < selected.Count && shown < 5; i++)
             {
                 string defId = null;
                 float hp = 1f, max = 1f;
@@ -282,31 +383,343 @@ namespace Asterra.Gameplay
                     stance = unit.Stance;
                     break;
                 }
+
                 if (defId == null)
                     continue;
+
+                float px = x + shown * (portrait + 6f);
                 var tex = HudStyle.Portrait(defId, fac);
-                GUI.DrawTexture(new Rect(x, y + 8f, 40f, 40f), tex);
+                GUI.DrawTexture(new Rect(px, y, portrait, portrait), tex);
                 float ratio = max > 0.01f ? Mathf.Clamp01(hp / max) : 1f;
-                HudStyle.DrawPanel(new Rect(x, y + 46f, 40f * ratio, 4f), new Color(0.25f, 0.85f, 0.35f, 0.95f));
+                HudStyle.DrawPanel(new Rect(px, y + portrait + 2f, portrait * ratio, 4f), HudStyle.Hp);
                 string stanceLetter = stance == UnitStance.Defensive ? "D"
                     : stance == UnitStance.Hold ? "H"
                     : stance == UnitStance.Passive ? "P"
                     : "A";
-                Color stanceColor = stance == UnitStance.Hold ? new Color(0.95f, 0.55f, 0.2f)
-                    : stance == UnitStance.Defensive ? new Color(0.35f, 0.65f, 1f)
-                    : new Color(0.9f, 0.35f, 0.3f);
-                HudStyle.DrawPanel(new Rect(x + 28f, y + 8f, 12f, 14f), new Color(0.05f, 0.06f, 0.07f, 0.9f));
-                var prev = GUI.color;
-                GUI.color = stanceColor;
-                GUI.Label(new Rect(x + 28f, y + 6f, 14f, 16f), stanceLetter, HudStyle.Caption);
-                GUI.color = prev;
-                x += 48f;
+                HudStyle.DrawPanel(new Rect(px + portrait - 14f, y, 14f, 14f), HudStyle.PanelFillDeep);
+                GUI.Label(new Rect(px + portrait - 14f, y - 2f, 16f, 16f), stanceLetter, HudStyle.Caption);
                 shown++;
             }
 
-            if (selected.Count > 8)
-                GUI.Label(new Rect(x, y + 18f, 80f, 20f), $"+{selected.Count - 8}", HudStyle.Label);
+            if (selected.Count > 5)
+                GUI.Label(new Rect(x, y + portrait + 10f, area.width, 18f), $"+{selected.Count - 5} more", HudStyle.Caption);
+            else if (selected.Count > 0)
+                GUI.Label(new Rect(x, y + portrait + 10f, area.width, 18f), $"{selected.Count} selected", HudStyle.Caption);
         }
+
+        private void DrawCombatCommands(PlayerId player)
+        {
+            if (_cmdPage == CmdPage.Gear)
+            {
+                PushCard("back", "Back", "Return", HudStyle.Accent, () => _cmdPage = CmdPage.Main);
+                var equip = match.PlayerRoster?.EquipmentUpgradeIds;
+                if (equip != null && match.World != null)
+                {
+                    for (int i = 0; i < equip.Length; i++)
+                    {
+                        string upId = equip[i];
+                        if (!match.World.HasUpgrade(player, upId))
+                            continue;
+                        if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
+                            continue;
+                        int equipCost = up.ResolvedEquipGoldCost;
+                        string tip = DescribeUpgrade(up);
+                        bool done = SelectionAllHaveEquipment(upId);
+                        PushCard(
+                            "gear",
+                            done ? "Done" : $"{equipCost}g",
+                            tip,
+                            HudStyle.Accent,
+                            done ? null : () => orders.ApplyUpgradeToSelected(upId),
+                            enabled: !done);
+                    }
+                }
+
+                return;
+            }
+
+            PushCard("stop", "Stop", "Stop (S)", HudStyle.Danger, () => orders.StopSelected());
+            PushCard("stance", "Aggro", "Aggressive stance (F)", HudStyle.Danger,
+                () => orders.SetSelectedStance(UnitStance.Aggressive));
+            PushCard("shield", "Defend", "Defensive stance (G)", new Color(0.35f, 0.65f, 1f),
+                () => orders.SetSelectedStance(UnitStance.Defensive));
+            PushCard("hold", "Hold", "Hold position (H)", HudStyle.Accent,
+                () => orders.SetSelectedStance(UnitStance.Hold));
+
+            bool hasGear = false;
+            var ids = match.PlayerRoster?.EquipmentUpgradeIds;
+            if (ids != null && match.World != null)
+            {
+                for (int i = 0; i < ids.Length; i++)
+                {
+                    if (match.World.HasUpgrade(player, ids[i]))
+                    {
+                        hasGear = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hasGear)
+                PushCard("gear", "Gear", "Equip researched weapons/armour (⇧U)", HudStyle.Accent,
+                    () => _cmdPage = CmdPage.Gear);
+        }
+
+        private void DrawBuilderCommands()
+        {
+            var roster = match.PlayerRoster;
+            if (roster == null)
+                return;
+
+            if (_cmdPage == CmdPage.BuildMore)
+            {
+                PushCard("back", "Back", "Return", HudStyle.Accent, () => _cmdPage = CmdPage.Main);
+                PushBuildCard("bridge", "Bridge", "V", FactionDefaultContent.BridgeId);
+                PushBuildCard("trench", "Trench", "J", FactionDefaultContent.TrenchWorksId);
+                PushBuildCard("barricade", "Barrier", ",", FactionDefaultContent.BarricadeId);
+                PushBuildCard("ferry", "Ferry", ".", FactionDefaultContent.FerryDockId);
+                return;
+            }
+
+            if (_cmdPage == CmdPage.Earthworks)
+            {
+                PushCard("back", "Back", "Return", HudStyle.Accent, () => _cmdPage = CmdPage.Main);
+                PushWorkCard("trench", "Fill", "Y", TerrainWorkKind.FillTrench);
+                PushWorkCard("earth", "Berm", "K", TerrainWorkKind.RaiseBerm);
+                PushWorkCard("ferry", "Moat", "L", TerrainWorkKind.DigMoat);
+                PushWorkCard("timber", "Clear", ";", TerrainWorkKind.ClearForest);
+                PushWorkCard("power", "Burn", "'", TerrainWorkKind.BurnBrush);
+                PushWorkCard("stone", "Quarry", "\\", TerrainWorkKind.QuarryRock);
+                PushWorkCard("sapper", "Spikes", "[", TerrainWorkKind.PlaceSpikes);
+                PushWorkCard("hammer", "Debris", "]", TerrainWorkKind.ClearDebris);
+                PushCard("repair", "Repair", "Repair bridge (=)", HudStyle.Timber,
+                    () => orders.RepairBridgeAtCursor());
+                return;
+            }
+
+            PushBuildCard("hammer", "Barracks", "B", roster.ProducerBuildingId);
+            PushBuildCard("tower", "Tower", "N", roster.TowerBuildingId);
+            PushBuildCard("wall", "Wall", "M", roster.WallBuildingId);
+            PushBuildCard("outpost", "Mine", "O", roster.OutpostBuildingId);
+            PushCard("more", "More", "Bridge, trench, barricade, ferry", HudStyle.Accent,
+                () => _cmdPage = CmdPage.BuildMore);
+            PushCard("earth", "Earth", "Terrain works", HudStyle.Timber,
+                () => _cmdPage = CmdPage.Earthworks);
+        }
+
+        private void DrawBuildingCommands(PlayerId player, BuildingSnapshot b)
+        {
+            bool producing = !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0;
+            if (producing)
+                DrawProductionQueue(b, _cmdGridY - HudStyle.S(58f));
+
+            var r = match.PlayerRoster;
+            if (r == null)
+                return;
+
+            if (_cmdPage == CmdPage.Admin)
+            {
+                PushCard("back", "Back", "Return", HudStyle.Accent, () => _cmdPage = CmdPage.Main);
+                if (b.AllowsGarrison && b.GarrisonCount > 0)
+                {
+                    PushCard("unload", "Unload", $"Unload garrison ({b.GarrisonCount})", HudStyle.Timber, () =>
+                    {
+                        if (match.Commands != null)
+                        {
+                            match.Commands.SubmitLocal(new ExitGarrisonCommand
+                            {
+                                Issuer = player,
+                                BuildingId = b.Id,
+                            });
+                        }
+                    });
+                }
+
+                if (b.Owner == player && !FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                    PushCard("demolish", "Raze", "Demolish (half refund)", HudStyle.Danger,
+                        () => orders.DemolishSelectedBuilding());
+
+                if (b.Owner == player && (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate))
+                    PushCard("timber", "Salvage", "Raze wall for timber", HudStyle.Timber,
+                        () => orders.RazeSelectedWall());
+
+                if (b.Owner == player
+                    && (b.DefinitionId == FactionDefaultContent.PalisadeId
+                        || b.DefinitionId == FactionDefaultContent.BarricadeId)
+                    && match.World != null
+                    && match.World.HasUpgrade(player, FactionDefaultContent.StoneWallsUpgradeId))
+                {
+                    PushCard("stone", "Stone", "Upgrade wall to stone", HudStyle.Accent,
+                        () => orders.UpgradeSelectedWallToStone());
+                }
+
+                if (FactionDefaultContent.IsKeepBuildingId(b.DefinitionId) && b.AttachmentSlotCount > 0)
+                {
+                    string attachDef = FactionDefaultContent.KeepTurretId;
+                    for (byte slot = 0; slot < b.AttachmentSlotCount; slot++)
+                    {
+                        bool occupied = (b.AttachmentOccupiedMask & (1 << slot)) != 0;
+                        string slotName = slot == 0 ? "N" : slot == 1 ? "E" : slot == 2 ? "S" : "W";
+                        byte captured = slot;
+                        PushCard(
+                            "turret",
+                            occupied ? $"{slotName}✓" : slotName,
+                            occupied ? "Turret pad occupied" : $"Mount keep turret ({slotName})",
+                            HudStyle.Accent,
+                            occupied ? null : () => orders.AttachToKeep(captured, attachDef),
+                            enabled: !occupied);
+                    }
+                }
+
+                return;
+            }
+
+            bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
+            if (isKeep)
+            {
+                PushTrainCard("worker", "Builder", r.BuilderUnitId);
+                PushTrainCard("leader", "Leader", r.LeaderUnitId);
+                DrawResearchCards(player, b, keepTechs: true);
+            }
+            else if (b.CanProduce || producing)
+            {
+                PushTrainCard("sword", "Infantry", r.BasicUnitId);
+                PushTrainCard("bow", "Ranged", r.RangedUnitId);
+                PushTrainCard("horse", "Cavalry", r.CavalryUnitId);
+                if (!string.IsNullOrEmpty(r.EliteUnitId))
+                    PushTrainCard("elite", "Elite", r.EliteUnitId);
+                PushTrainCard("siege", "Siege", r.SiegeUnitId);
+                PushTrainCard("scout", "Scout", r.ScoutUnitId);
+                PushTrainCard("sapper", "Sapper", r.SapperUnitId);
+                DrawResearchCards(player, b, keepTechs: false);
+            }
+
+            if (producing)
+                PushCard("cancel", "Cancel", "Cancel production (X)", HudStyle.Danger,
+                    () => orders.CancelProduction());
+
+            PushCard("admin", "More", "Unload, demolish, turrets…", HudStyle.Accent,
+                () => _cmdPage = CmdPage.Admin);
+        }
+
+        private void DrawResearchCards(PlayerId player, BuildingSnapshot b, bool keepTechs)
+        {
+            var r = match.PlayerRoster;
+            if (r == null)
+                return;
+
+            if (keepTechs)
+            {
+                var keepUps = r.KeepUpgradeIds != null && r.KeepUpgradeIds.Length > 0 ? r.KeepUpgradeIds : r.UpgradeIds;
+                if (keepUps != null)
+                {
+                    for (int i = 0; i < keepUps.Length; i++)
+                        PushResearchCard(player, b, keepUps[i]);
+                }
+            }
+
+            if (r.EquipmentUpgradeIds != null)
+            {
+                for (int i = 0; i < r.EquipmentUpgradeIds.Length; i++)
+                    PushResearchCard(player, b, r.EquipmentUpgradeIds[i]);
+            }
+        }
+
+        private void PushResearchCard(PlayerId player, BuildingSnapshot b, string upId)
+        {
+            if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
+                return;
+            if (up.Kind == UpgradeKind.Equipment && FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+            {
+                // Equipment research also offered at keep for convenience.
+            }
+
+            bool researched = match.World != null && match.World.HasUpgrade(player, upId);
+            bool researchingThis = b.ResearchUpgradeDefId == upId;
+            bool busy = !string.IsNullOrEmpty(b.ResearchUpgradeDefId);
+            string tip = DescribeUpgrade(up);
+            if (researched)
+            {
+                PushCard("research", "Done", tip + " — researched", HudStyle.Timber, null, enabled: false);
+                return;
+            }
+
+            if (researchingThis)
+            {
+                PushCard("research", $"{(int)(b.ResearchProgress * 100f)}%", tip, new Color(0.35f, 0.7f, 1f), null, enabled: false);
+                return;
+            }
+
+            PushCard(
+                "research",
+                $"{up.GoldCost}g",
+                tip,
+                new Color(0.35f, 0.7f, 1f),
+                busy ? null : () => orders.ResearchUpgrade(upId),
+                enabled: !busy);
+        }
+
+        private void PushBuildCard(string icon, string label, string hotkey, string buildingId)
+        {
+            string tip = label;
+            if (match.Definitions != null && match.Definitions.TryGetBuilding(buildingId, out var def))
+                tip = DescribeBuilding(def) + $" ({hotkey})";
+            PushCard(icon, label, tip, HudStyle.Accent, () => orders.EnterPlaceMode(buildingId));
+        }
+
+        private void PushWorkCard(string icon, string label, string hotkey, TerrainWorkKind kind)
+        {
+            PushCard(icon, label, $"{kind} ({hotkey}) — click ground", HudStyle.Timber,
+                () => orders.EnterTerrainWorkMode(kind));
+        }
+
+        private void PushTrainCard(string icon, string label, string unitId)
+        {
+            if (string.IsNullOrEmpty(unitId))
+                return;
+            string tip = label;
+            bool blocked = false;
+            if (match.Definitions != null && match.Definitions.TryGetUnit(unitId, out var def))
+            {
+                tip = DescribeUnit(def) + $" ({def.GoldCost}g)";
+                if (def.IsLeader && match.Session != null && PlayerOwnsLeader(match.Session.LocalPlayer))
+                {
+                    blocked = true;
+                    tip = "Only one leader may be fielded at a time";
+                }
+            }
+
+            PushCard(icon, label, tip, HudStyle.Accent, blocked ? null : () => orders.TrainUnit(unitId), enabled: !blocked);
+        }
+
+        private void PushCard(string icon, string label, string tip, Color accent, System.Action onClick, bool enabled = true)
+        {
+            const int cols = 6;
+            int col = _cmdCardIndex % cols;
+            int row = _cmdCardIndex / cols;
+            var rect = new Rect(
+                _cmdGridX + col * (_cmdCardW + _cmdGap),
+                _cmdGridY + row * (_cmdCardH + _cmdGap),
+                _cmdCardW,
+                _cmdCardH);
+            if (rect.xMax > HudStyle.ContentRight - HudStyle.S(4f))
+            {
+                _cmdCardIndex++;
+                return;
+            }
+
+            if (HudStyle.CommandCard(rect, icon, label, accent, out bool hovered, enabled))
+            {
+                AsterraAudio.PlayUiClick();
+                onClick?.Invoke();
+            }
+
+            if (hovered && !string.IsNullOrEmpty(tip))
+                _hoverTip = tip;
+            _cmdCardIndex++;
+        }
+
+        private void DrawCommandBar(PlayerId player) => DrawCommandDock(player);
 
         private void DrawDebugStatus(PlayerId player)
         {
@@ -336,446 +749,17 @@ namespace Asterra.Gameplay
         {
             if (MatchFeedback.Instance == null || !MatchFeedback.Instance.HasActiveMessage)
                 return;
-            float w = Mathf.Min(520f, Screen.width * 0.55f);
-            var rect = new Rect((Screen.width - w) * 0.5f, 64f, w, 34f);
+            float w = Mathf.Min(HudStyle.S(480f), Screen.width * 0.5f);
+            var rect = new Rect((Screen.width - w) * 0.5f, HudStyle.S(58f), w, HudStyle.S(36f));
             HudClickBlocker.Block(rect);
-            HudStyle.DrawPanel(rect, new Color(0.08f, 0.1f, 0.07f, 0.92f));
+            HudStyle.DrawFrame(rect, HudStyle.PanelFillDeep, HudStyle.AccentSoft, 1f);
             var style = new GUIStyle(HudStyle.Label)
             {
                 alignment = TextAnchor.MiddleCenter,
                 fontStyle = FontStyle.Bold,
-                fontSize = 15,
+                fontSize = Mathf.RoundToInt(14f * HudStyle.Scale),
             };
             GUI.Label(rect, MatchFeedback.Instance.CurrentMessage, style);
-        }
-
-        private void DrawPowerButton()
-        {
-            if (orders == null || match.PlayerRoster == null || match.World == null)
-                return;
-
-            var roster = match.PlayerRoster;
-            var powerIds = roster.PowerIds;
-            if (powerIds == null || powerIds.Length == 0)
-                return;
-
-            float y = HudStyle.S(10f);
-            for (int i = 0; i < powerIds.Length; i++)
-            {
-                string powerId = powerIds[i];
-                if (match.Definitions == null || !match.Definitions.TryGetPower(powerId, out var powerDef))
-                    continue;
-
-                match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, powerId, out float cd, out float buff);
-                bool unlocked = match.World.HasPower(match.Session.LocalPlayer, powerId);
-
-                string label;
-                bool clickUnlock = false;
-                bool clickUse = false;
-                bool faded = false;
-                if (!unlocked)
-                {
-                    label = $"Unlock {powerDef.DisplayName} ({powerDef.UnlockGoldCost}g)";
-                    clickUnlock = true;
-                }
-                else if (powerDef.IsPassive)
-                {
-                    label = $"{powerDef.DisplayName} (passive)";
-                    faded = true;
-                }
-                else if (buff > 0.05f)
-                {
-                    label = $"{powerDef.DisplayName} ACTIVE {buff:0}s";
-                    faded = true;
-                }
-                else if (cd > 0.05f)
-                {
-                    label = $"{powerDef.DisplayName} {cd:0}s";
-                    faded = true;
-                }
-                else
-                {
-                    bool isHotkey = IsPrimaryActivePower(roster.PowerIds, i, powerId);
-                    label = isHotkey ? $"{powerDef.DisplayName} (Q)" : powerDef.DisplayName;
-                    clickUse = true;
-                }
-
-                var rect = new Rect(Screen.width - HudStyle.S(240f), y, HudStyle.S(228f), HudStyle.S(30f));
-                string tip = DescribePower(powerDef, unlocked, buff, cd);
-                if (faded)
-                {
-                    HudFadedLabel(rect, label, tip);
-                }
-                else if (HudButton(rect, label, tip))
-                {
-                    if (clickUnlock)
-                        orders.UnlockPower(powerId);
-                    else if (clickUse)
-                        orders.ActivateCommanderAbility(powerId);
-                }
-
-                y += HudStyle.S(34f);
-            }
-        }
-
-        private void DrawCommandBar(PlayerId player)
-        {
-            float panelY = Screen.height - HudStyle.S(210f);
-            float x = HudStyle.S(12f);
-            float btnW = HudStyle.S(118f);
-            float btnH = HudStyle.S(30f);
-            float gap = HudStyle.S(6f);
-            float maxX = HudStyle.ContentRight - HudStyle.S(4f);
-
-            // Only block real controls — do not blanket the bottom third of the screen
-            // (that swallowed world selection).
-            if (orders != null)
-            {
-                float idleW = HudStyle.S(100f);
-                if (HudButton(new Rect(x, panelY, idleW, btnH), $"Idle ({orders.IdleWorkerCount})"))
-                    orders.SelectIdleWorker();
-                x += idleW + gap;
-            }
-
-            bool hasCombat = orders != null && orders.HasCombatUnitSelected;
-            if (hasCombat)
-            {
-                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Stop", () => orders.StopSelected());
-                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Aggro",
-                    () => orders.SetSelectedStance(UnitStance.Aggressive));
-                x = DrawCmdChip(x, panelY, HudStyle.S(72f), btnH, gap, maxX, "Defend",
-                    () => orders.SetSelectedStance(UnitStance.Defensive));
-                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Hold",
-                    () => orders.SetSelectedStance(UnitStance.Hold));
-
-                if (match.World != null && match.PlayerRoster != null)
-                {
-                    var equip = match.PlayerRoster.EquipmentUpgradeIds;
-                    if (equip != null)
-                    {
-                        for (int i = 0; i < equip.Length; i++)
-                        {
-                            string upId = equip[i];
-                            if (!match.World.HasUpgrade(player, upId))
-                                continue;
-                            if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
-                                continue;
-                            int equipCost = up.ResolvedEquipGoldCost;
-                            string tip = DescribeUpgrade(up)
-                                + $" — equip selected units for {equipCost}g each (research unlocks only)";
-                            float ew = HudStyle.S(160f);
-                            if (x + ew > maxX)
-                            {
-                                panelY += btnH + gap;
-                                x = HudStyle.S(12f);
-                            }
-
-                            if (SelectionAllHaveEquipment(upId))
-                            {
-                                HudFadedLabel(new Rect(x, panelY, ew, btnH),
-                                    $"Equip {ShortName(up.DisplayName)} ✓",
-                                    tip + " — already equipped");
-                            }
-                            else if (HudButton(new Rect(x, panelY, ew, btnH),
-                                         $"Equip {ShortName(up.DisplayName)} ({equipCost}g)", tip))
-                            {
-                                orders.ApplyUpgradeToSelected(upId);
-                            }
-
-                            x += ew + gap;
-                        }
-                    }
-                }
-            }
-
-            float buildY = panelY + HudStyle.S(36f);
-            float bx = HudStyle.S(12f);
-            if (orders != null && orders.IsPlaceMode)
-            {
-                if (HudButton(new Rect(bx, buildY, HudStyle.S(160f), btnH), "Cancel Build (Esc)"))
-                    orders.CancelPlaceMode();
-            }
-            else if (orders != null && orders.HasBuilderSelected && match.PlayerRoster != null)
-            {
-                var roster = match.PlayerRoster;
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Barracks (B)", roster.ProducerBuildingId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Tower (N)", roster.TowerBuildingId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Wall (M)", roster.WallBuildingId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Gold Mine (O)", roster.OutpostBuildingId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Bridge (V)", FactionDefaultContent.BridgeId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Trench (J)", FactionDefaultContent.TrenchWorksId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Barricade (,)", FactionDefaultContent.BarricadeId);
-                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Ferry (.)", FactionDefaultContent.FerryDockId);
-            }
-
-            // Terrain work row
-            if (orders != null && orders.HasBuilderSelected && !orders.IsPlaceMode)
-            {
-                float workY = buildY + HudStyle.S(36f);
-                float wx = HudStyle.S(12f);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Fill (Y)", TerrainWorkKind.FillTrench);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Berm (K)", TerrainWorkKind.RaiseBerm);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Moat (L)", TerrainWorkKind.DigMoat);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Clear (;)", TerrainWorkKind.ClearForest);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Burn (')", TerrainWorkKind.BurnBrush);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Quarry", TerrainWorkKind.QuarryRock);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Spikes ([)", TerrainWorkKind.PlaceSpikes);
-                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "ClearDebris (])", TerrainWorkKind.ClearDebris);
-                if (HudButton(new Rect(wx, workY, HudStyle.S(110f), btnH), "Repair (=)"))
-                    orders.RepairBridgeAtCursor();
-            }
-
-            if (orders == null || !orders.SelectedBuilding.HasValue || match.World == null || match.PlayerRoster == null)
-                return;
-
-            if (!TryGetSelectedBuilding(out var b))
-                return;
-
-            if (b.State == BuildingState.Constructing)
-            {
-                DrawConstructionStatus(b, panelY - HudStyle.S(88f));
-                return;
-            }
-
-            bool producing = !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0;
-            if (producing)
-                DrawProductionQueue(b, panelY - HudStyle.S(72f));
-
-            if (b.AllowsGarrison && b.GarrisonCount > 0
-                && HudButton(new Rect(HudStyle.S(12f), panelY - HudStyle.S(104f), HudStyle.S(160f), HudStyle.S(28f)),
-                    $"Unload ({b.GarrisonCount})"))
-            {
-                if (match.Commands != null)
-                {
-                    match.Commands.SubmitLocal(new ExitGarrisonCommand
-                    {
-                        Issuer = player,
-                        BuildingId = b.Id,
-                    });
-                }
-            }
-
-            if (b.Owner == player
-                && b.State != BuildingState.Destroyed
-                && !FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
-                && HudButton(new Rect(HudStyle.S(180f), panelY - HudStyle.S(104f), HudStyle.S(120f), HudStyle.S(28f)),
-                    "Demolish",
-                    "Tear down this building (half refund if complete). Bridges also collapse their crossing."))
-            {
-                orders.DemolishSelectedBuilding();
-            }
-
-            if (b.Owner == player
-                && (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate)
-                && HudButton(new Rect(HudStyle.S(308f), panelY - HudStyle.S(104f), HudStyle.S(100f), HudStyle.S(28f)),
-                    "Raze",
-                    "Raze wall for full timber refund."))
-            {
-                orders.RazeSelectedWall();
-            }
-
-            if (b.Owner == player
-                && (b.DefinitionId == FactionDefaultContent.PalisadeId
-                    || b.DefinitionId == FactionDefaultContent.BarricadeId)
-                && match.World != null
-                && match.World.HasUpgrade(player, FactionDefaultContent.StoneWallsUpgradeId)
-                && HudButton(new Rect(HudStyle.S(416f), panelY - HudStyle.S(104f), HudStyle.S(130f), HudStyle.S(28f)),
-                    "→ Stone",
-                    "Upgrade this wall to stone (requires Stone Masonry)."))
-            {
-                orders.UpgradeSelectedWallToStone();
-            }
-
-            float trainX = HudStyle.S(12f);
-            float trainY = buildY;
-            bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
-            bool canTrain = isKeep || b.CanProduce
-                            || !string.IsNullOrEmpty(b.ProductionUnitDefId)
-                            || b.QueueCount > 0;
-            var r = match.PlayerRoster;
-
-            if (!canTrain)
-                return;
-
-            if (isKeep)
-            {
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Builder", r.BuilderUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW + HudStyle.S(20f), btnH, gap, "Leader", r.LeaderUnitId);
-
-                // Keep research (keep techs + equipment unlocks)
-                float researchY = trainY + btnH + HudStyle.S(6f);
-                float rx = HudStyle.S(12f);
-                var keepUps = r.KeepUpgradeIds != null && r.KeepUpgradeIds.Length > 0
-                    ? r.KeepUpgradeIds
-                    : r.UpgradeIds;
-                if (keepUps != null)
-                {
-                    for (int i = 0; i < keepUps.Length; i++)
-                    {
-                        string upId = keepUps[i];
-                        if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
-                            continue;
-                        if (up.Kind == UpgradeKind.Equipment)
-                            continue;
-                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
-                    }
-                }
-
-                if (r.EquipmentUpgradeIds != null)
-                {
-                    for (int i = 0; i < r.EquipmentUpgradeIds.Length; i++)
-                    {
-                        string upId = r.EquipmentUpgradeIds[i];
-                        if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
-                            continue;
-                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
-                    }
-                }
-
-                // Attachment slots
-                if (b.AttachmentSlotCount > 0 && match.Definitions != null)
-                {
-                    float attachY = researchY + btnH + HudStyle.S(6f);
-                    float ax = HudStyle.S(12f);
-                    string attachDef = FactionDefaultContent.KeepTurretId;
-                    if (!match.Definitions.TryGetBuilding(attachDef, out _)
-                        && match.Definitions.TryGetBuilding(r.TowerBuildingId, out _))
-                        attachDef = r.TowerBuildingId;
-
-                    for (byte slot = 0; slot < b.AttachmentSlotCount; slot++)
-                    {
-                        bool occupied = (b.AttachmentOccupiedMask & (1 << slot)) != 0;
-                        string slotName = slot == 0 ? "N" : slot == 1 ? "E" : slot == 2 ? "S" : "W";
-                        if (occupied)
-                        {
-                            HudFadedLabel(new Rect(ax, attachY, HudStyle.S(100f), btnH), $"Turret {slotName} ✓",
-                                "Attachment slot occupied");
-                            ax += HudStyle.S(106f);
-                            continue;
-                        }
-
-                        string cost = string.Empty;
-                        if (match.Definitions.TryGetBuilding(attachDef, out var aDef))
-                            cost = $" {aDef.GoldCost}g/{aDef.TimberCost}t";
-                        if (HudButton(new Rect(ax, attachY, HudStyle.S(130f), btnH), $"Turret {slotName}{cost}",
-                                "Mount a keep turret on this pad (attach-only)"))
-                            orders.AttachToKeep(slot, attachDef);
-                        ax += HudStyle.S(136f);
-                    }
-                }
-            }
-            else if (b.CanProduce || producing)
-            {
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Infantry", r.BasicUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Ranged", r.RangedUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Cavalry", r.CavalryUnitId);
-                if (!string.IsNullOrEmpty(r.EliteUnitId))
-                    trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Elite", r.EliteUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Siege", r.SiegeUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Scout", r.ScoutUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Sapper", r.SapperUnitId);
-
-                // Equipment research at barracks / unit building
-                if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
-                    && r.EquipmentUpgradeIds != null
-                    && r.EquipmentUpgradeIds.Length > 0)
-                {
-                    float researchY = trainY + btnH + HudStyle.S(6f);
-                    float rx = HudStyle.S(12f);
-                    for (int i = 0; i < r.EquipmentUpgradeIds.Length; i++)
-                    {
-                        string upId = r.EquipmentUpgradeIds[i];
-                        if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
-                            continue;
-                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
-                    }
-                }
-            }
-
-            if (producing && HudButton(new Rect(trainX, trainY, HudStyle.S(110f), btnH), "Cancel (X)"))
-                orders.CancelProduction();
-        }
-
-        private float DrawCmdChip(
-            float x,
-            float y,
-            float w,
-            float h,
-            float gap,
-            float maxX,
-            string label,
-            System.Action onClick)
-        {
-            if (x + w > maxX)
-            {
-                // Caller keeps y; wrapping handled by returning reset x via sentinel is awkward —
-                // combat chips are short enough for typical widths; clamp instead.
-                w = Mathf.Max(HudStyle.S(48f), maxX - x);
-                if (w < HudStyle.S(40f))
-                    return x;
-            }
-
-            if (HudButton(new Rect(x, y, w, h), label))
-                onClick?.Invoke();
-            return x + w + gap;
-        }
-
-        private float DrawPricedTrainButton(float x, float y, float w, float h, float gap, string title, string unitId)
-        {
-            if (string.IsNullOrEmpty(unitId))
-                return x;
-
-            string label = title;
-            string tip = title;
-            bool leaderBlocked = false;
-            if (match.Definitions != null && match.Definitions.TryGetUnit(unitId, out var def))
-            {
-                label = $"{title} ({def.GoldCost}g)";
-                tip = DescribeUnit(def);
-                if (def.IsLeader && match.World != null && match.Session != null
-                    && PlayerOwnsLeader(match.Session.LocalPlayer))
-                {
-                    leaderBlocked = true;
-                    label = $"{title} (fielded)";
-                    tip = "Only one leader may be fielded at a time";
-                }
-            }
-
-            var rect = new Rect(x, y, w, h);
-            if (leaderBlocked)
-                HudFadedLabel(rect, label, tip);
-            else if (HudButton(rect, label, tip))
-                orders.TrainUnit(unitId);
-            return x + w + gap;
-        }
-
-        private float DrawPricedBuildingButton(float x, float y, float h, float gap, string title, string buildingId)
-        {
-            string label = title;
-            float w = HudStyle.S(128f);
-            string tip = title;
-            if (match.Definitions != null && match.Definitions.TryGetBuilding(buildingId, out var def))
-            {
-                label = $"{title} {def.GoldCost}g/{def.TimberCost}t";
-                w = HudStyle.S(150f);
-                tip = DescribeBuilding(def);
-            }
-
-            float maxX = HudStyle.ContentRight - HudStyle.S(4f);
-            if (x + w > maxX)
-                w = Mathf.Max(HudStyle.S(80f), maxX - x);
-
-            if (HudButton(new Rect(x, y, w, h), label, tip))
-                orders.EnterPlaceMode(buildingId);
-            return x + w + gap;
-        }
-
-        private float DrawTerrainWorkChip(float x, float y, float h, float gap, string title, TerrainWorkKind kind)
-        {
-            float w = HudStyle.S(108f);
-            if (HudButton(new Rect(x, y, w, h), title, kind + " — click ground with builder nearby"))
-                orders.EnterTerrainWorkMode(kind);
-            return x + w + gap;
         }
 
         private bool PlayerOwnsLeader(PlayerId player)
@@ -840,17 +824,19 @@ namespace Asterra.Gameplay
             if (string.IsNullOrEmpty(_hoverTip))
                 return;
 
+            // Floating tip above the command dock — not a permanent chrome strip.
+            float w = Mathf.Min(HudStyle.S(420f), HudStyle.ContentRight - HudStyle.S(24f));
             var tipRect = new Rect(
                 HudStyle.S(12f),
-                Screen.height - HudStyle.S(248f),
-                Mathf.Min(HudStyle.S(520f), HudStyle.ContentRight - HudStyle.S(16f)),
-                HudStyle.S(34f));
+                Screen.height - HudStyle.CommandDockHeight - HudStyle.S(36f),
+                w,
+                HudStyle.S(24f));
             HudClickBlocker.Block(tipRect);
-            HudStyle.DrawPanel(tipRect, new Color(0.04f, 0.05f, 0.07f, 0.92f));
+            HudStyle.DrawFrame(tipRect, HudStyle.PanelFillDeep, HudStyle.PanelBorder, 1f);
             GUI.Label(
-                new Rect(tipRect.x + HudStyle.S(10f), tipRect.y + HudStyle.S(6f), tipRect.width - HudStyle.S(20f), HudStyle.S(22f)),
+                new Rect(tipRect.x + HudStyle.S(8f), tipRect.y + HudStyle.S(2f), tipRect.width - HudStyle.S(16f), HudStyle.S(20f)),
                 _hoverTip,
-                HudStyle.Label);
+                HudStyle.Caption);
         }
 
         private void DrawEndScreen(PlayerId player)

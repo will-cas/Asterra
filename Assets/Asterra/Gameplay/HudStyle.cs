@@ -3,9 +3,21 @@ using UnityEngine;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Shared OnGUI chrome: panels, icon buttons, selection portraits, layout scale.</summary>
+    /// <summary>Shared OnGUI chrome: panels, icon command cards, selection portraits, layout scale.</summary>
     public static class HudStyle
     {
+        public static readonly Color PanelFill = new Color(0.06f, 0.075f, 0.09f, 0.94f);
+        public static readonly Color PanelFillDeep = new Color(0.035f, 0.045f, 0.055f, 0.96f);
+        public static readonly Color PanelBorder = new Color(0.42f, 0.38f, 0.28f, 0.55f);
+        public static readonly Color Accent = new Color(0.86f, 0.72f, 0.38f, 1f);
+        public static readonly Color AccentSoft = new Color(0.86f, 0.72f, 0.38f, 0.35f);
+        public static readonly Color Gold = new Color(0.95f, 0.82f, 0.35f, 1f);
+        public static readonly Color Timber = new Color(0.55f, 0.78f, 0.42f, 1f);
+        public static readonly Color Hp = new Color(0.32f, 0.82f, 0.42f, 0.95f);
+        public static readonly Color Danger = new Color(0.85f, 0.32f, 0.28f, 0.95f);
+        public static readonly Color Text = new Color(0.9f, 0.91f, 0.88f, 1f);
+        public static readonly Color TextDim = new Color(0.7f, 0.72f, 0.68f, 0.85f);
+
         private static GUIStyle _panel;
         private static GUIStyle _title;
         private static GUIStyle _label;
@@ -15,19 +27,17 @@ namespace Asterra.Gameplay
         private static GUIStyle _subtitle;
         private static GUIStyle _caption;
         private static GUIStyle _body;
+        private static GUIStyle _cardLabel;
+        private static GUIStyle _resourceLabel;
         private static Texture2D _white;
         private static readonly Dictionary<string, Texture2D> Icons = new();
         private static float _appliedScale = -1f;
 
-        /// <summary>Current UI scale from settings.</summary>
         public static float Scale => AsterraSettings.UiScale;
-
         public static float S(float pixels) => pixels * Scale;
+        public static float MinimapSize => S(196f);
+        public static float MinimapMargin => S(14f);
 
-        public static float MinimapSize => S(180f);
-        public static float MinimapMargin => S(12f);
-
-        /// <summary>Bottom-right minimap rect (shared with <see cref="Presentation.MinimapPresenter"/>).</summary>
         public static Rect MinimapRect =>
             new Rect(
                 Screen.width - MinimapSize - MinimapMargin,
@@ -35,8 +45,8 @@ namespace Asterra.Gameplay
                 MinimapSize,
                 MinimapSize);
 
-        /// <summary>Right edge for bottom HUD chrome (clears the minimap).</summary>
         public static float ContentRight => Screen.width - MinimapSize - MinimapMargin * 2f;
+        public static float CommandDockHeight => S(168f);
 
         public static void InvalidateScale() => _appliedScale = -1f;
 
@@ -56,10 +66,12 @@ namespace Asterra.Gameplay
 
             _appliedScale = scale;
             int fs = Mathf.RoundToInt(13f * scale);
-            int fsTitle = Mathf.RoundToInt(22f * scale);
+            int fsTitle = Mathf.RoundToInt(24f * scale);
             int fsCaption = Mathf.RoundToInt(11f * scale);
             int fsButton = Mathf.RoundToInt(12f * scale);
             int fsToast = Mathf.RoundToInt(14f * scale);
+            int fsCard = Mathf.RoundToInt(11f * scale);
+            int fsRes = Mathf.RoundToInt(15f * scale);
 
             _panel = new GUIStyle(GUI.skin.box)
             {
@@ -74,8 +86,10 @@ namespace Asterra.Gameplay
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
             };
+            _title.normal.textColor = Accent;
 
             _label = new GUIStyle(GUI.skin.label) { fontSize = fs };
+            _label.normal.textColor = Text;
 
             _subtitle = new GUIStyle(GUI.skin.label)
             {
@@ -83,6 +97,7 @@ namespace Asterra.Gameplay
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
             };
+            _subtitle.normal.textColor = Text;
 
             _caption = new GUIStyle(GUI.skin.label)
             {
@@ -90,6 +105,7 @@ namespace Asterra.Gameplay
                 alignment = TextAnchor.MiddleLeft,
                 wordWrap = true,
             };
+            _caption.normal.textColor = TextDim;
 
             _body = new GUIStyle(GUI.skin.label)
             {
@@ -97,6 +113,7 @@ namespace Asterra.Gameplay
                 alignment = TextAnchor.UpperLeft,
                 wordWrap = true,
             };
+            _body.normal.textColor = Text;
 
             _button = new GUIStyle(GUI.skin.button)
             {
@@ -106,7 +123,6 @@ namespace Asterra.Gameplay
                 padding = new RectOffset(6, 6, 4, 4),
             };
 
-            // Hit-tested over custom DrawPanel/DrawFrame so skin chrome doesn't shift the face.
             _flatButton = new GUIStyle(GUIStyle.none)
             {
                 fontSize = fsButton,
@@ -115,10 +131,30 @@ namespace Asterra.Gameplay
                 padding = new RectOffset(6, 6, 4, 4),
                 clipping = TextClipping.Clip,
             };
-            _flatButton.normal.textColor = new Color(0.92f, 0.94f, 0.9f, 1f);
+            _flatButton.normal.textColor = Text;
             _flatButton.hover.textColor = Color.white;
-            _flatButton.active.textColor = new Color(1f, 0.95f, 0.75f, 1f);
-            _flatButton.focused.textColor = _flatButton.normal.textColor;
+            _flatButton.active.textColor = Accent;
+            _flatButton.focused.textColor = Text;
+
+            _cardLabel = new GUIStyle(GUIStyle.none)
+            {
+                fontSize = fsCard,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                clipping = TextClipping.Clip,
+                wordWrap = true,
+            };
+            _cardLabel.normal.textColor = Text;
+            _cardLabel.hover.textColor = Color.white;
+            _cardLabel.active.textColor = Accent;
+
+            _resourceLabel = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fsRes,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+            };
+            _resourceLabel.normal.textColor = Text;
 
             _toast = new GUIStyle(GUI.skin.box)
             {
@@ -128,14 +164,7 @@ namespace Asterra.Gameplay
             };
         }
 
-        public static GUIStyle Panel
-        {
-            get
-            {
-                Ensure();
-                return _panel;
-            }
-        }
+        public static GUIStyle Panel { get { Ensure(); return _panel; } }
         public static GUIStyle Title { get { Ensure(); return _title; } }
         public static GUIStyle Label { get { Ensure(); return _label; } }
         public static GUIStyle Subtitle { get { Ensure(); return _subtitle; } }
@@ -143,11 +172,10 @@ namespace Asterra.Gameplay
         public static GUIStyle Body { get { Ensure(); return _body; } }
         public static GUIStyle Button { get { Ensure(); return _button; } }
         public static GUIStyle FlatButton { get { Ensure(); return _flatButton; } }
+        public static GUIStyle CardLabel { get { Ensure(); return _cardLabel; } }
+        public static GUIStyle ResourceLabel { get { Ensure(); return _resourceLabel; } }
         public static GUIStyle Toast { get { Ensure(); return _toast; } }
 
-        /// <summary>
-        /// Draw chrome + a full-rect clickable that matches the visual (no skin button inset).
-        /// </summary>
         public static bool PanelButton(Rect rect, string label, Color fill)
         {
             Ensure();
@@ -170,14 +198,70 @@ namespace Asterra.Gameplay
             return GUI.Button(rect, label, FlatButton);
         }
 
+        public static bool CommandCard(
+            Rect rect,
+            string iconKey,
+            string label,
+            Color accent,
+            out bool hovered,
+            bool enabled = true,
+            bool selected = false)
+        {
+            Ensure();
+            HudClickBlocker.Block(rect);
+            hovered = Event.current != null && rect.Contains(Event.current.mousePosition);
+            Color fill = selected
+                ? Color.Lerp(PanelFill, accent, 0.28f)
+                : hovered && enabled
+                    ? Color.Lerp(PanelFill, Color.white, 0.1f)
+                    : PanelFill;
+            Color border = selected || (hovered && enabled)
+                ? Color.Lerp(accent, Color.white, 0.25f)
+                : PanelBorder;
+            DrawFrame(rect, fill, border, selected ? 2f : 1f);
+            DrawAccentBar(new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, S(2f)), AccentSoft);
+
+            float iconSize = Mathf.Min(S(28f), rect.height * 0.42f);
+            float iconX = rect.x + (rect.width - iconSize) * 0.5f;
+            float iconY = rect.y + S(8f);
+            Color iconColor = enabled ? accent : Color.Lerp(accent, Color.black, 0.55f);
+            GUI.DrawTexture(new Rect(iconX, iconY, iconSize, iconSize), GetIcon(iconKey, iconColor));
+
+            var prev = GUI.color;
+            GUI.color = enabled ? Text : TextDim;
+            GUI.Label(
+                new Rect(rect.x + S(3f), rect.yMax - S(28f), rect.width - S(6f), S(26f)),
+                label,
+                CardLabel);
+            GUI.color = prev;
+
+            return enabled && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+        }
+
+        public static void ResourcePill(Rect rect, string iconKey, string value, Color accent)
+        {
+            Ensure();
+            DrawFrame(rect, PanelFillDeep, PanelBorder, 1f);
+            float icon = Mathf.Min(S(18f), rect.height - S(8f));
+            GUI.DrawTexture(
+                new Rect(rect.x + S(8f), rect.y + (rect.height - icon) * 0.5f, icon, icon),
+                GetIcon(iconKey, accent));
+            GUI.Label(
+                new Rect(rect.x + S(32f), rect.y, rect.width - S(36f), rect.height),
+                value,
+                ResourceLabel);
+        }
+
         public static void DrawPanel(Rect rect, Color fill)
         {
             Ensure();
             var old = GUI.color;
             GUI.color = fill;
             GUI.DrawTexture(rect, _white);
-            GUI.color = new Color(1f, 1f, 1f, 0.18f);
+            GUI.color = new Color(1f, 1f, 1f, 0.12f);
             GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 1f), _white);
+            GUI.color = new Color(0f, 0f, 0f, 0.25f);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), _white);
             GUI.color = old;
         }
 
@@ -217,8 +301,7 @@ namespace Asterra.Gameplay
             float iconSize = Mathf.Min(22f, rect.height - 8f);
             GUI.DrawTexture(new Rect(rect.x + 6f, rect.y + (rect.height - iconSize) * 0.5f, iconSize, iconSize), icon);
             var old = GUI.color;
-            GUI.color = new Color(0.92f, 0.94f, 0.9f, 1f);
-            // Full-rect hit target (icon + label) so clickable matches the chrome.
+            GUI.color = Text;
             bool clicked = GUI.Button(rect, "    " + label, FlatButton);
             GUI.color = old;
             return clicked;
@@ -227,10 +310,11 @@ namespace Asterra.Gameplay
         public static Texture2D GetIcon(string key, Color accent)
         {
             Ensure();
-            if (Icons.TryGetValue(key, out var tex) && tex != null)
+            string cacheKey = key + "#" + ColorUtility.ToHtmlStringRGBA(accent);
+            if (Icons.TryGetValue(cacheKey, out var tex) && tex != null)
                 return tex;
             tex = BuildIcon(key, accent);
-            Icons[key] = tex;
+            Icons[cacheKey] = tex;
             return tex;
         }
 
@@ -276,6 +360,36 @@ namespace Asterra.Gameplay
                     Fill(12, 10, 20, 12, ink);
                     Fill(14, 24, 18, 28, Color.Lerp(accent, Color.black, 0.3f));
                     break;
+                case "bow":
+                    Fill(8, 6, 12, 26, ink);
+                    Fill(12, 8, 24, 10, ink);
+                    Fill(12, 22, 24, 24, ink);
+                    Fill(22, 10, 24, 22, ink);
+                    break;
+                case "horse":
+                    Fill(6, 16, 26, 24, ink);
+                    Fill(18, 8, 26, 16, ink);
+                    Fill(22, 4, 26, 8, ink);
+                    break;
+                case "elite":
+                    Fill(12, 8, 20, 26, ink);
+                    Fill(10, 4, 22, 10, Color.Lerp(accent, Color.yellow, 0.45f));
+                    break;
+                case "siege":
+                    Fill(6, 18, 26, 26, ink);
+                    Fill(10, 8, 22, 18, ink);
+                    Fill(20, 4, 28, 10, Color.Lerp(accent, Color.black, 0.2f));
+                    break;
+                case "scout":
+                    Fill(14, 6, 18, 26, ink);
+                    Fill(8, 12, 24, 16, ink);
+                    Fill(20, 6, 26, 12, Color.Lerp(accent, Color.cyan, 0.35f));
+                    break;
+                case "sapper":
+                    Fill(10, 8, 22, 14, ink);
+                    Fill(14, 14, 18, 28, ink);
+                    Fill(8, 20, 24, 24, Color.Lerp(accent, Color.yellow, 0.25f));
+                    break;
                 case "shield":
                     Fill(8, 6, 24, 22, ink);
                     Fill(10, 8, 22, 20, Color.Lerp(accent, Color.black, 0.35f));
@@ -299,7 +413,56 @@ namespace Asterra.Gameplay
                     Fill(15, 4, 17, 10, ink);
                     Fill(17, 4, 26, 8, Color.Lerp(accent, Color.yellow, 0.4f));
                     break;
+                case "bridge":
+                    Fill(4, 14, 28, 18, ink);
+                    Fill(6, 10, 10, 22, ink);
+                    Fill(22, 10, 26, 22, ink);
+                    break;
+                case "trench":
+                    Fill(4, 18, 28, 26, Color.Lerp(accent, Color.black, 0.35f));
+                    Fill(8, 12, 24, 18, ink);
+                    break;
+                case "barricade":
+                    Fill(6, 10, 26, 24, ink);
+                    Fill(10, 6, 14, 10, ink);
+                    Fill(18, 6, 22, 10, ink);
+                    break;
+                case "ferry":
+                    Fill(6, 16, 26, 24, ink);
+                    Fill(10, 10, 22, 16, Color.Lerp(accent, Color.cyan, 0.3f));
+                    break;
+                case "earth":
+                    Fill(6, 18, 26, 26, ink);
+                    Fill(10, 10, 22, 18, Color.Lerp(accent, Color.green, 0.2f));
+                    break;
+                case "more":
+                    Fill(8, 14, 12, 18, ink);
+                    Fill(14, 14, 18, 18, ink);
+                    Fill(20, 14, 24, 18, ink);
+                    break;
+                case "back":
+                    Fill(8, 14, 20, 18, ink);
+                    Fill(8, 10, 14, 22, ink);
+                    break;
+                case "gear":
+                    Fill(12, 8, 20, 24, ink);
+                    Fill(8, 12, 24, 20, ink);
+                    break;
+                case "admin":
+                    Fill(10, 6, 22, 26, ink);
+                    Fill(14, 10, 18, 22, Color.Lerp(accent, Color.black, 0.4f));
+                    break;
+                case "gold":
+                    Fill(8, 8, 24, 24, Color.Lerp(accent, Color.yellow, 0.35f));
+                    Fill(12, 12, 20, 20, Color.Lerp(accent, Color.black, 0.25f));
+                    break;
+                case "timber":
+                    Fill(10, 6, 22, 26, ink);
+                    Fill(8, 10, 24, 14, Color.Lerp(accent, Color.black, 0.2f));
+                    Fill(8, 18, 24, 22, Color.Lerp(accent, Color.black, 0.2f));
+                    break;
                 case "worker":
+                case "idle":
                     Fill(12, 6, 20, 14, ink);
                     Fill(10, 14, 22, 26, ink);
                     break;
@@ -321,6 +484,37 @@ namespace Asterra.Gameplay
                 case "stance":
                     Fill(8, 16, 24, 24, ink);
                     Fill(14, 6, 18, 16, ink);
+                    break;
+                case "hold":
+                    Fill(10, 8, 22, 24, ink);
+                    Fill(14, 12, 18, 20, Color.Lerp(accent, Color.black, 0.35f));
+                    break;
+                case "cancel":
+                    Fill(8, 8, 12, 12, ink);
+                    Fill(20, 8, 24, 12, ink);
+                    Fill(8, 20, 12, 24, ink);
+                    Fill(20, 20, 24, 24, ink);
+                    Fill(12, 12, 20, 20, ink);
+                    break;
+                case "unload":
+                    Fill(8, 8, 24, 14, ink);
+                    Fill(12, 14, 20, 26, ink);
+                    break;
+                case "demolish":
+                    Fill(8, 10, 24, 22, ink);
+                    Fill(14, 4, 18, 10, Danger);
+                    break;
+                case "stone":
+                    Fill(8, 12, 24, 24, ink);
+                    Fill(10, 8, 22, 12, Color.Lerp(accent, Color.white, 0.2f));
+                    break;
+                case "turret":
+                    Fill(12, 10, 20, 26, ink);
+                    Fill(8, 6, 24, 12, ink);
+                    break;
+                case "repair":
+                    Fill(8, 14, 24, 18, ink);
+                    Fill(14, 8, 18, 24, ink);
                     break;
                 default:
                     Fill(10, 10, 22, 22, ink);
@@ -350,7 +544,6 @@ namespace Asterra.Gameplay
                     tex.SetPixel(x, y, rim);
                 else
                 {
-                    // Subtle vertical vignette so portraits read less flat.
                     float t = y / (float)(s - 1);
                     tex.SetPixel(x, y, Color.Lerp(bg, deep, t * 0.35f));
                 }
@@ -368,12 +561,12 @@ namespace Asterra.Gameplay
                 FillRect(tex, 8, 22, 40, 34, body);
                 FillRect(tex, 16, 10, 30, 24, Color.Lerp(body, Color.white, 0.2f));
             }
-            else if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista"))
+            else if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista") || id.Contains("guardian"))
             {
                 FillRect(tex, 6, 20, 42, 34, body);
                 FillRect(tex, 20, 8, 36, 22, Color.Lerp(body, Color.black, 0.2f));
             }
-            else if (id.Contains("builder"))
+            else if (id.Contains("builder") || id.Contains("sapper") || id.Contains("pathfinder"))
             {
                 FillRect(tex, 14, 12, 34, 36, body);
                 FillRect(tex, 30, 16, 40, 24, Color.Lerp(body, Color.yellow, 0.3f));

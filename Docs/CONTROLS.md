@@ -62,16 +62,15 @@ Local offline / skirmish input (keyboard + mouse).
 
 ## Contextual HUD
 
-The bottom panel only shows actions valid for the current selection:
+Bottom command dock (classic RTS):
 
 | Context | What appears |
 | --- | --- |
-| Always | Idle workers button |
-| Builder(s) selected (or place mode) | Barracks / Tower / Wall / Gold Mine (or Cancel Build) |
-| Combat unit(s) selected | Stop, Aggro / Defend / Hold |
-| Producer selected | Infantry / Ranged / Cavalry / Elite (Dominion & Flame) / Siege / Scout / Sapper |
-| Keep selected | Builder train |
-| Building producing / queued | Production queue + Cancel |
+| Always | Idle workers |
+| Combat selected | Stop / stances; Gear submenu for equipment |
+| Builder selected | Barracks / Tower / Wall / Mine; **More** (bridge/trench/…) · **Earth** (terrain works) |
+| Producer / keep | Train cards + research; **More** for demolish / turrets |
+| Esc pause | Resume · Save/Load · Options · Main Menu |
 
-Context line (top-left) summarizes selection, e.g. “Builder selected — B/N/M/O build”, “Keep selected — train”, “N combat units selected”.
-Hotkey hints on the next line also switch with context.
+Resources top-left; commander powers as compact icons top-right; minimap bottom-right.
+Hotkeys still work for builds and terrain (see table above). F5/F9 save/load.

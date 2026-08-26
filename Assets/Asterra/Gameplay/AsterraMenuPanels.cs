@@ -44,7 +44,7 @@ namespace Asterra.Gameplay
             else if (overlay == Overlay.Profile)
                 h = HudStyle.S(360f);
             else if (overlay == Overlay.Pause)
-                h = HudStyle.S(260f);
+                h = HudStyle.S(320f);
 
             var box = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
             HudClickBlocker.Block(box);
@@ -234,20 +234,35 @@ namespace Asterra.Gameplay
             navigateTo = Overlay.Pause;
             GUI.Label(new Rect(box.x, box.y + HudStyle.S(18f), box.width, HudStyle.S(28f)), "PAUSED", HudStyle.Title);
             GUI.Label(
-                new Rect(box.x + HudStyle.S(24f), box.y + HudStyle.S(56f), box.width - HudStyle.S(48f), HudStyle.S(48f)),
-                "Esc resumes. Soft pause: the sim keeps ticking (lockstep-safe); your orders stay blocked.",
+                new Rect(box.x + HudStyle.S(24f), box.y + HudStyle.S(52f), box.width - HudStyle.S(48f), HudStyle.S(36f)),
+                "Esc resumes. Soft pause keeps the sim ticking (lockstep-safe).",
                 HudStyle.Caption);
 
-            float y = box.y + HudStyle.S(118f);
+            float y = box.y + HudStyle.S(100f);
             float bw = box.width - HudStyle.S(80f);
             float bx = box.x + HudStyle.S(40f);
-            float bh = HudStyle.S(36f);
-            float gap = HudStyle.S(44f);
+            float bh = HudStyle.S(34f);
+            float gap = HudStyle.S(40f);
             if (ChipButton(new Rect(bx, y, bw, bh), "Resume"))
             {
                 AsterraAudio.PlayUiClick();
                 navigateTo = Overlay.None;
                 return true;
+            }
+
+            y += gap;
+            if (ChipButton(new Rect(bx, y, bw * 0.48f, bh), "Save (F5)"))
+            {
+                AsterraAudio.PlayUiClick();
+                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
+                match?.SaveOfflineQuick();
+            }
+
+            if (ChipButton(new Rect(bx + bw * 0.52f, y, bw * 0.48f, bh), "Load (F9)"))
+            {
+                AsterraAudio.PlayUiClick();
+                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
+                match?.LoadOfflineQuick();
             }
 
             y += gap;
