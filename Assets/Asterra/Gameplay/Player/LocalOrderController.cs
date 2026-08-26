@@ -859,6 +859,23 @@ namespace Asterra.Gameplay.Player
                     }
                 }
 
+                if (TryPickDestructible(out var propView))
+                {
+                    _commands.SubmitLocal(new AttackCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetId = propView.Id,
+                    });
+                    string chop = propView.DefinitionId == DefaultDestructibleCatalog.TreeId
+                        ? "Chopping tree..."
+                        : propView.DefinitionId == DefaultDestructibleCatalog.BridgeId
+                            ? "Attacking bridge..."
+                            : "Attacking...";
+                    MatchFeedback.Show(chop, AsterraSfx.OrderAttack);
+                    return;
+                }
+
                 if (TryPickHostileEntity(out var hostile))
                 {
                     _commands.SubmitLocal(new AttackCommand
@@ -1076,6 +1093,70 @@ namespace Asterra.Gameplay.Player
             return TryScreenPickOwnedUnit(out unit, maxPixels: 48f);
         }
 
+        public void DemolishSelectedBuilding()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new DemolishBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+            });
+            MatchFeedback.Show("Demolish ordered", AsterraSfx.OrderBuild);
+            _selectedBuilding = null;
+        }
+
+        private bool TryPickDestructible(out DestructibleView view)
+        {
+            view = null;
+            if (rigCamera == null)
+                return false;
+
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var hits = Physics.RaycastAll(ray, 5000f, clickMask);
+            float best = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i].collider != null
+                    ? hits[i].collider.GetComponentInParent<DestructibleView>()
+                    : null;
+                if (candidate == null)
+                    continue;
+                float d = hits[i].distance;
+                if (d < best)
+                {
+                    best = d;
+                    view = candidate;
+                }
+            }
+
+            if (view != null)
+                return true;
+
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float bestPx2 = 56f * 56f;
+            var views = FindObjectsByType<DestructibleView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null)
+                    continue;
+                Vector3 sp = rigCamera.WorldToScreenPoint(candidate.transform.position + Vector3.up * 4f);
+                if (sp.z <= 0f)
+                    continue;
+                float dx = sp.x - mouse.x;
+                float dy = sp.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < bestPx2)
+                {
+                    bestPx2 = d2;
+                    view = candidate;
+                }
+            }
+
+            return view != null;
+        }
+
         private bool TryPickHostileEntity(out EntityView view)
         {
             view = null;
@@ -1195,6 +1276,10 @@ namespace Asterra.Gameplay.Player
                 EnterPlaceMode(_roster.WallBuildingId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.O) && HasSelectedBuilder())
                 EnterPlaceMode(_roster.OutpostBuildingId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.V) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.BridgeId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.J) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.TrenchWorksId);
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.T))
             {

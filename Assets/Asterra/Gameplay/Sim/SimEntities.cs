@@ -275,6 +275,10 @@ namespace Asterra.Gameplay.Sim
         public byte WallLinks;
         /// <summary>Placement yaw snapped to 0/90/180/270. Swaps wall footprint axes at 90/270.</summary>
         public float YawDegrees;
+        /// <summary>Faction-built bridge prop id (0 = none).</summary>
+        public uint LinkedDestructibleId;
+        /// <summary>Faction-built bridge traversal link (-1 = none).</summary>
+        public int LinkedTraversalLinkId = -1;
         public const int MaxGarrison = 16;
         public readonly uint[] GarrisonUnitIds = new uint[MaxGarrison];
         public int GarrisonCount;

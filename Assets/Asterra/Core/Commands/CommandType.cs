@@ -21,5 +21,7 @@ namespace Asterra.Core
         ApplyUnitUpgrade = 17,
         UnlockPower = 18,
         AttachBuilding = 19,
+        DigTrench = 20,
+        DemolishBuilding = 21,
     }
 }

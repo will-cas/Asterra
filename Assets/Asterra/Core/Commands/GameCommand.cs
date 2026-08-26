@@ -133,6 +133,20 @@ namespace Asterra.Core
         public SimEntityId BuildingId;
     }
 
+    /// <summary>Builder earthwork: dig a trench rectangle centered at X/Z.</summary>
+    public sealed class DigTrenchCommand : GameCommand
+    {
+        public float X;
+        public float Z;
+        public float HalfExtent = 8f;
+    }
+
+    /// <summary>Owner-ordered teardown of a friendly building (including faction bridges).</summary>
+    public sealed class DemolishBuildingCommand : GameCommand
+    {
+        public SimEntityId BuildingId;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {

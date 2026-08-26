@@ -181,6 +181,16 @@ namespace Asterra.Core
                     writer.Write((byte)CommandType.ExitGarrison);
                     writer.Write(exit.BuildingId.Value);
                     break;
+                case DigTrenchCommand dig:
+                    writer.Write((byte)CommandType.DigTrench);
+                    WriteQuantized(writer, dig.X);
+                    WriteQuantized(writer, dig.Z);
+                    WriteQuantized(writer, dig.HalfExtent);
+                    break;
+                case DemolishBuildingCommand demolish:
+                    writer.Write((byte)CommandType.DemolishBuilding);
+                    writer.Write(demolish.BuildingId.Value);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -326,6 +336,20 @@ namespace Asterra.Core
                     break;
                 case CommandType.ExitGarrison:
                     command = new ExitGarrisonCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.DigTrench:
+                    command = new DigTrenchCommand
+                    {
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                        HalfExtent = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.DemolishBuilding:
+                    command = new DemolishBuildingCommand
                     {
                         BuildingId = new SimEntityId(reader.ReadUInt32()),
                     };

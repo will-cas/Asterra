@@ -34,6 +34,7 @@ namespace Asterra.Gameplay
         private readonly List<ProjectileSnapshot> _projectileSnapshots = new();
         private readonly List<DestructibleSnapshot> _destructibleSnapshots = new();
         private readonly List<SimProjectile> _projectiles = new();
+        private readonly Dictionary<long, ushort> _terrainMutations = new();
 
         private readonly Dictionary<uint, SimUnit> _unitsById = new();
         private readonly Dictionary<uint, SimBuilding> _buildingsById = new();
@@ -287,6 +288,12 @@ namespace Asterra.Gameplay
                         break;
                     case ExitGarrisonCommand exit:
                         ApplyExitGarrison(exit);
+                        break;
+                    case DigTrenchCommand dig:
+                        ApplyDigTrench(dig);
+                        break;
+                    case DemolishBuildingCommand demolish:
+                        ApplyDemolishBuilding(demolish);
                         break;
                     default:
                         break;
@@ -639,7 +646,12 @@ namespace Asterra.Gameplay
             if (!IsInsidePlayable(x, z))
                 return;
 
-            if (!_environment.CanPlaceBuilding(x, z))
+            if (place.BuildingDefId == FactionDefaultContent.BridgeId)
+            {
+                if (!CanPlaceFactionBridge(x, z, NormalizeYaw90(place.YawDegrees)))
+                    return;
+            }
+            else if (!_environment.CanPlaceBuilding(x, z))
                 return;
 
             if (OverlapsAnyBuilding(x, z, MathF.Max(def.FootprintX, def.FootprintZ) * 0.5f))
@@ -663,6 +675,207 @@ namespace Asterra.Gameplay
                 RefreshWallConnectionsAround(building);
             AttractBuildersToSite(place.Issuer, x, z, BuilderAttractSearchRadius);
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        private void ApplyDigTrench(DigTrenchCommand dig)
+        {
+            float half = dig.HalfExtent > 1f ? dig.HalfExtent : 8f;
+            if (!IsInsidePlayable(dig.X, dig.Z))
+                return;
+            if (!HasNearbyBuilder(dig.Issuer, dig.X, dig.Z, ConstructionWorkRadius))
+            {
+                AttractBuildersToSite(dig.Issuer, dig.X, dig.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            if (!_wallet.TrySpend(dig.Issuer, ResourceType.Gold, 25))
+                return;
+            if (!_wallet.TrySpend(dig.Issuer, ResourceType.Timber, 10))
+            {
+                _wallet.Add(dig.Issuer, ResourceType.Gold, 25);
+                return;
+            }
+
+            DigTrenchAt(dig.X, dig.Z, half);
+            _mutationCounter ^= 0x7E11CFul ^ (ulong)(dig.Issuer.Value + 1) * 41ul;
+        }
+
+        private void ApplyDemolishBuilding(DemolishBuildingCommand cmd)
+        {
+            if (!_buildingsById.TryGetValue(cmd.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != cmd.Issuer || building.State == BuildingState.Destroyed)
+                return;
+            if (building.Kind == BuildingKind.Keep)
+                return;
+
+            // Partial refund for completed works.
+            if (_defs.TryGetBuilding(building.DefinitionId, out var def) && building.State == BuildingState.Active)
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost / 2);
+                _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost / 2);
+            }
+
+            TearDownFactionBridgeLinks(building);
+            building.Health = 0f;
+            building.State = BuildingState.Destroyed;
+            _combatEvents.Add(new CombatEvent(CombatEventKind.Death, building.Id, building.X, building.Z, true));
+            OnBuildingDestroyed(building);
+            _mutationCounter ^= building.Id.Value * 1607ul;
+        }
+
+        private void OnConstructionComplete(SimBuilding building)
+        {
+            if (building.DefinitionId == FactionDefaultContent.TrenchWorksId)
+            {
+                float half = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+                DigTrenchAt(building.X, building.Z, half);
+                // Earthworks leave no lasting structure — remove the scaffold.
+                TearDownCompletedEarthwork(building);
+                return;
+            }
+
+            if (building.DefinitionId == FactionDefaultContent.BridgeId)
+                ActivateFactionBridge(building);
+        }
+
+        private void TearDownCompletedEarthwork(SimBuilding building)
+        {
+            SetBuildingBlocked(building, blocked: false);
+            building.State = BuildingState.Destroyed;
+            building.Health = 0f;
+            _mutationCounter ^= building.Id.Value * 1613ul;
+        }
+
+        private void DigTrenchAt(float x, float z, float halfExtent)
+        {
+            float half = MathF.Max(4f, halfExtent);
+            FillTerrainRect(x - half, z - half, x + half, z + half, DefaultTerrainCatalog.Trench);
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(x, z, half + 4f, PathDirtyReason.DestructibleCleared);
+        }
+
+        private void ActivateFactionBridge(SimBuilding building)
+        {
+            float yaw = building.YawDegrees;
+            float rad = yaw * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            float halfSpan = 18f;
+            float startX = building.X - fx * halfSpan;
+            float startZ = building.Z - fz * halfSpan;
+            float endX = building.X + fx * halfSpan;
+            float endZ = building.Z + fz * halfSpan;
+
+            // Deck planks along the span.
+            float deckHalf = 5f;
+            FillTerrainRect(
+                MathF.Min(startX, endX) - deckHalf,
+                MathF.Min(startZ, endZ) - deckHalf,
+                MathF.Max(startX, endX) + deckHalf,
+                MathF.Max(startZ, endZ) + deckHalf,
+                DefaultTerrainCatalog.Beach);
+
+            int linkId = _environment.TraversalGraph.AddLink(
+                startX,
+                startZ,
+                endX,
+                endZ,
+                TraversalLinkType.Bridge,
+                TraversalCapability.Land,
+                durationSeconds: 1.1f,
+                allowsCombat: true,
+                enabled: true,
+                isDestructible: true);
+
+            var prop = SpawnDestructible(
+                _ids.Next(),
+                DefaultDestructibleCatalog.Bridge(),
+                building.X,
+                building.Z,
+                linkId);
+            building.LinkedDestructibleId = prop.Id.Value;
+            building.LinkedTraversalLinkId = linkId;
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(building.X, building.Z, halfSpan + 8f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= prop.Id.Value * 1621ul;
+        }
+
+        private void TearDownFactionBridgeLinks(SimBuilding building)
+        {
+            if (building.LinkedDestructibleId != 0
+                && _destructiblesById.TryGetValue(building.LinkedDestructibleId, out var prop)
+                && prop.IsAlive)
+            {
+                prop.Health = 0f;
+                prop.State = DestructibleState.Destroyed;
+                FinalizeDestructible(prop);
+            }
+            else if (building.LinkedTraversalLinkId >= 0)
+            {
+                _environment.TraversalGraph.SetLinkEnabled(building.LinkedTraversalLinkId, false);
+                _environment.PathDirty.MarkRadius(building.X, building.Z, 24f, PathDirtyReason.BridgeDisabled);
+            }
+
+            building.LinkedDestructibleId = 0;
+            building.LinkedTraversalLinkId = -1;
+        }
+
+        private bool CanPlaceFactionBridge(float x, float z, float yawDegrees)
+        {
+            // Foundation sits on buildable shore; span must cross water.
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float rad = yawDegrees * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            for (int i = 1; i <= 4; i++)
+            {
+                float d = i * 6f;
+                if (IsWaterWorld(x + fx * d, z + fz * d) || IsWaterWorld(x - fx * d, z - fz * d))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool IsWaterWorld(float x, float z)
+        {
+            if (!_environment.Grid.TryGetCell(x, z, out var cell))
+                return false;
+            var def = _environment.Grid.GetDef(cell.TerrainDefIndex);
+            if (def == null)
+                return false;
+            return def.Category == TerrainCategory.WaterRiver
+                   || def.Category == TerrainCategory.WaterLake
+                   || def.Category == TerrainCategory.WaterOcean
+                   || def.Category == TerrainCategory.WaterWaterfall;
+        }
+
+        private void FillTerrainRect(float minX, float minZ, float maxX, float maxZ, ushort defIndex)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(minX, minZ, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(maxX, maxZ, out int maxCx, out int maxCz))
+            {
+                grid.FillWorldRect(minX, minZ, maxX, maxZ, defIndex);
+                return;
+            }
+
+            if (minCx > maxCx)
+                (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz)
+                (minCz, maxCz) = (maxCz, minCz);
+
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    grid.SetCellDef(cx, cz, defIndex);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = defIndex;
+                }
+            }
         }
 
         private static float NormalizeYaw90(float yaw)
@@ -1348,6 +1561,7 @@ namespace Asterra.Gameplay
                     b.State = BuildingState.Active;
                     SetBuildingBlocked(b, true);
                     _combatEvents.Add(new CombatEvent(CombatEventKind.BuildComplete, b.Id, b.X, b.Z, true));
+                    OnConstructionComplete(b);
                     AutoGatherNearbyBuilders(b.Owner, b.X, b.Z);
                 }
             }
@@ -2312,6 +2526,7 @@ namespace Asterra.Gameplay
 
         private void OnBuildingDestroyed(SimBuilding building)
         {
+            TearDownFactionBridgeLinks(building);
             SetBuildingBlocked(building, blocked: false);
             if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Tower || building.Kind == BuildingKind.Keep)
             {
@@ -3313,6 +3528,8 @@ namespace Asterra.Gameplay
                     rallyZ = b.RallyZ ?? b.Z,
                     attackCooldownRemaining = b.AttackCooldownRemaining,
                     wallLinks = b.WallLinks,
+                    linkedDestructibleId = b.LinkedDestructibleId,
+                    linkedTraversalLinkId = b.LinkedTraversalLinkId,
                     hasParent = b.ParentBuildingId.HasValue,
                     parentBuildingId = b.ParentBuildingId.HasValue ? b.ParentBuildingId.Value.Value : 0u,
                     attachmentSlotIndex = b.AttachmentSlotIndex,
@@ -3387,6 +3604,29 @@ namespace Asterra.Gameplay
             }
 
             data.destructibles = destructibles.ToArray();
+
+            if (_terrainMutations.Count > 0)
+            {
+                var cells = new Asterra.Gameplay.Save.TerrainCellSave[_terrainMutations.Count];
+                int n = 0;
+                foreach (var pair in _terrainMutations)
+                {
+                    int cx = (int)(pair.Key >> 32);
+                    int cz = (int)(pair.Key & 0xffffffff);
+                    cells[n++] = new Asterra.Gameplay.Save.TerrainCellSave
+                    {
+                        cellX = cx,
+                        cellZ = cz,
+                        defIndex = pair.Value,
+                    };
+                }
+
+                data.terrainCells = cells;
+            }
+            else
+            {
+                data.terrainCells = System.Array.Empty<Asterra.Gameplay.Save.TerrainCellSave>();
+            }
         }
 
         public void RestoreFrom(Asterra.Gameplay.Save.MatchSaveData data)
@@ -3395,6 +3635,20 @@ namespace Asterra.Gameplay
                 return;
 
             ClearEntitiesForRestore();
+
+            if (data.terrainCells != null)
+            {
+                for (int i = 0; i < data.terrainCells.Length; i++)
+                {
+                    var cell = data.terrainCells[i];
+                    _environment.Grid.SetCellDef(cell.cellX, cell.cellZ, cell.defIndex);
+                    long key = ((long)cell.cellX << 32) ^ (uint)cell.cellZ;
+                    _terrainMutations[key] = cell.defIndex;
+                }
+
+                if (data.terrainCells.Length > 0)
+                    _environment.RebuildFeatureIndex();
+            }
 
             if (data.unlockedUpgrades != null)
             {
@@ -3482,6 +3736,8 @@ namespace Asterra.Gameplay
                     building.Health = b.health;
                     building.MaxHealth = b.maxHealth > 0.1f ? b.maxHealth : building.MaxHealth;
                     building.YawDegrees = b.yawDegrees;
+                    building.LinkedDestructibleId = b.linkedDestructibleId;
+                    building.LinkedTraversalLinkId = b.linkedTraversalLinkId;
                     building.BuildSecondsRemaining = b.buildSecondsRemaining;
                     building.BuildSecondsTotal = b.buildSecondsTotal > 0.1f ? b.buildSecondsTotal : building.BuildSecondsTotal;
                     building.ProductionUnitDefId = b.productionUnitDefId;
@@ -3632,7 +3888,30 @@ namespace Asterra.Gameplay
             if (data.weatherKind >= 0)
                 _environment.WeatherSim.ForceTransitionTo((WeatherKind)data.weatherKind);
 
+            RebuildFactionBridgesAfterRestore();
             RebuildSnapshots();
+        }
+
+        private void RebuildFactionBridgesAfterRestore()
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.DefinitionId != FactionDefaultContent.BridgeId || b.State != BuildingState.Active)
+                    continue;
+
+                // Drop stale prop (link ids from prior graph are invalid after map reload).
+                if (b.LinkedDestructibleId != 0
+                    && _destructiblesById.TryGetValue(b.LinkedDestructibleId, out var prop))
+                {
+                    _destructibles.Remove(prop);
+                    _destructiblesById.Remove(prop.Id.Value);
+                }
+
+                b.LinkedDestructibleId = 0;
+                b.LinkedTraversalLinkId = -1;
+                ActivateFactionBridge(b);
+            }
         }
 
         private void ClearEntitiesForRestore()
@@ -3653,6 +3932,7 @@ namespace Asterra.Gameplay
             _projectiles.Clear();
             _combatEvents.Clear();
             _commanderAbilities.Clear();
+            _terrainMutations.Clear();
             RebuildSnapshots();
         }
 

@@ -78,6 +78,8 @@ namespace Asterra.Gameplay.Content
         // Shared fortifications
         public const string WatchtowerId = "building_watchtower";
         public const string PalisadeId = "building_palisade";
+        public const string BridgeId = "building_bridge";
+        public const string TrenchWorksId = "building_trench_works";
         public const string OutpostId = "building_outpost";
 
         // Concord of the Free Realms
@@ -999,6 +1001,34 @@ namespace Asterra.Gameplay.Content
                 Category = BuildingCategory.Resource,
                 SightRadius = 130f,
                 GoldPerSecond = 8,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = BridgeId,
+                DisplayName = "Timber Bridge",
+                MaxHealth = 380f,
+                GoldCost = 80,
+                TimberCost = 140,
+                BuildSeconds = 8f,
+                FootprintX = 10f,
+                FootprintZ = 6f,
+                Kind = BuildingKind.Special,
+                Category = BuildingCategory.Wall,
+                SightRadius = 50f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = TrenchWorksId,
+                DisplayName = "Trench Works",
+                MaxHealth = 80f,
+                GoldCost = 25,
+                TimberCost = 10,
+                BuildSeconds = 3.5f,
+                FootprintX = 12f,
+                FootprintZ = 12f,
+                Kind = BuildingKind.Special,
+                Category = BuildingCategory.Wall,
+                SightRadius = 20f,
             });
         }
     }

@@ -50,6 +50,10 @@ namespace Asterra.Gameplay
             if (constructionReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return constructionReport + "\nConstruction self-test failed — aborting further smoke.";
 
+            var worldMutationReport = WorldMutationSelfTest.Run();
+            if (worldMutationReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return worldMutationReport + "\nWorld mutation self-test failed — aborting further smoke.";
+
             var aiMacroReport = AiMacroSelfTest.Run();
             if (aiMacroReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return aiMacroReport + "\nAI macro self-test failed — aborting further smoke.";
@@ -301,6 +305,7 @@ namespace Asterra.Gameplay
             sb.AppendLine(timeReport);
             sb.AppendLine(buildingReport);
             sb.AppendLine(constructionReport);
+            sb.AppendLine(worldMutationReport);
             sb.AppendLine(aiMacroReport);
             sb.AppendLine(aiMacroExtReport);
             sb.AppendLine(contentEcoReport);

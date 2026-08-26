@@ -7,7 +7,7 @@ namespace Asterra.Gameplay.Save
     [Serializable]
     public class MatchSaveData
     {
-        public int formatVersion = 2;
+        public int formatVersion = 3;
         public string savedAtUtc;
         public uint matchSeed;
         public string mapKey;
@@ -32,6 +32,16 @@ namespace Asterra.Gameplay.Save
         public TerritorySave[] territories = Array.Empty<TerritorySave>();
         public ResourceSave[] resources = Array.Empty<ResourceSave>();
         public DestructibleSave[] destructibles = Array.Empty<DestructibleSave>();
+        /// <summary>Player-dug trenches / bridge decks etc. Present from formatVersion 3.</summary>
+        public TerrainCellSave[] terrainCells = Array.Empty<TerrainCellSave>();
+    }
+
+    [Serializable]
+    public class TerrainCellSave
+    {
+        public int cellX;
+        public int cellZ;
+        public ushort defIndex;
     }
 
     [Serializable]
@@ -132,6 +142,8 @@ namespace Asterra.Gameplay.Save
         public bool hasRally;
         public float attackCooldownRemaining;
         public byte wallLinks;
+        public uint linkedDestructibleId;
+        public int linkedTraversalLinkId = -1;
         public uint parentBuildingId;
         public bool hasParent;
         public byte attachmentSlotIndex;

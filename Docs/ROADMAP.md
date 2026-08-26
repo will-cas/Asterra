@@ -25,6 +25,8 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 
 **Exit criteria:** 5-minute loop: build → train → fight → capture → gather → upgrade.
 
+Builder world mutations (persistent in-match + save format v3 terrain cells): dig trenches (`J` / DigTrench), chop trees (RMB on props), faction timber bridges (`V`) with demolish.
+
 ## Phase 2 — Deterministic sim + 1k stress
 
 1. [x] DOTS unit components + `UnitMoveSystem` / combat cooldown + strike + `DotsWorldHash` (`Asterra.Simulation`)

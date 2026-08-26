@@ -7,7 +7,7 @@ Local offline / skirmish input (keyboard + mouse).
 ## Selection & camera
 
 - LMB click / drag: select units (Shift/Cmd additive)
-- RMB: move / attack / gather / set rally (context)
+- RMB: move / attack / gather / chop trees & break props / set rally (context)
 - Middle-mouse / edge pan via camera rig
 - WASD + arrow keys also pan (A/S suppressed while attack-move / place / patrol armed)
 - Minimap click: pan camera
@@ -27,6 +27,8 @@ Local offline / skirmish input (keyboard + mouse).
 | N | Place watchtower — requires builder selected |
 | M | Place palisade wall — requires builder selected |
 | O | Place gold mine (passive gold income + vision) — requires builder selected |
+| V | Place timber bridge (shore, yaw across water) — requires builder selected |
+| J | Dig trench works — requires builder selected |
 | Q / E / [ / ] / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
 | Esc | Cancel armed order / place mode; otherwise open pause (Options / Main Menu). Profile is lobby-only. |
 | Shift while placing | Keep place mode after one building |

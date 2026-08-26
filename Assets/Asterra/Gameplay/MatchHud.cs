@@ -501,7 +501,9 @@ namespace Asterra.Gameplay
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Barracks (B)", roster.ProducerBuildingId);
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Tower (N)", roster.TowerBuildingId);
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Wall (M)", roster.WallBuildingId);
-                DrawPricedBuildingButton(bx, buildY, btnH, gap, "Gold Mine (O)", roster.OutpostBuildingId);
+                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Gold Mine (O)", roster.OutpostBuildingId);
+                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Bridge (V)", FactionDefaultContent.BridgeId);
+                DrawPricedBuildingButton(bx, buildY, btnH, gap, "Trench (J)", FactionDefaultContent.TrenchWorksId);
             }
 
             if (orders == null || !orders.SelectedBuilding.HasValue || match.World == null || match.PlayerRoster == null)
@@ -532,6 +534,16 @@ namespace Asterra.Gameplay
                         BuildingId = b.Id,
                     });
                 }
+            }
+
+            if (b.Owner == player
+                && b.State != BuildingState.Destroyed
+                && !FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
+                && HudButton(new Rect(HudStyle.S(180f), panelY - HudStyle.S(104f), HudStyle.S(120f), HudStyle.S(28f)),
+                    "Demolish",
+                    "Tear down this building (half refund if complete). Bridges also collapse their crossing."))
+            {
+                orders.DemolishSelectedBuilding();
             }
 
             float trainX = HudStyle.S(12f);

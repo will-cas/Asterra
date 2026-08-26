@@ -34,10 +34,13 @@ namespace Asterra.Editor
         {
             string dual = DualSimSoakSelfTest.Run();
             string lockstep = LockstepSoakSelfTest.Run();
+            string mutations = WorldMutationSelfTest.Run();
             Debug.Log(dual);
             Debug.Log(lockstep);
+            Debug.Log(mutations);
             bool ok = dual.IndexOf("FAIL", System.StringComparison.Ordinal) < 0
-                      && lockstep.IndexOf("FAIL", System.StringComparison.Ordinal) < 0;
+                      && lockstep.IndexOf("FAIL", System.StringComparison.Ordinal) < 0
+                      && mutations.IndexOf("FAIL", System.StringComparison.Ordinal) < 0;
             EditorApplication.Exit(ok ? 0 : 1);
         }
     }

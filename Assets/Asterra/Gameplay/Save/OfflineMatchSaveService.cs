@@ -10,7 +10,7 @@ namespace Asterra.Gameplay.Save
     public static class OfflineMatchSaveService
     {
         public const string DefaultSlotFile = "skirmish_quicksave.json";
-        public const int CurrentFormatVersion = 2;
+        public const int CurrentFormatVersion = 3;
 
         public static string SavesDirectory =>
             Path.Combine(Application.persistentDataPath, "Asterra", "Saves");
