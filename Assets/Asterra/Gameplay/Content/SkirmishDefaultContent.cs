@@ -119,6 +119,19 @@ namespace Asterra.Gameplay.Content
             }
 
             SkirmishMapDestructibles.Apply(world, ids, map);
+            EnsureBuiltinArmies(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
+        }
+
+        private static void EnsureBuiltinArmies(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerId westPlayer,
+            FactionRoster westFaction,
+            PlayerId eastPlayer,
+            FactionRoster eastFaction)
+        {
+            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, westPlayer, westFaction);
+            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, eastPlayer, eastFaction);
         }
 
         private static void PopulateTwinKeeps(
@@ -134,13 +147,8 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 350f, 0f, startActive: true);
 
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, -20f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 0f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 20f);
+            // Workers only — train combat after the match starts.
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 0f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, -15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, 15f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
@@ -176,13 +184,7 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 300f, 220f, startActive: true);
 
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -270f, -200f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -280f, -230f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -250f, -210f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -260f, -190f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 270f, 200f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 280f, 230f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 260f, 190f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
@@ -228,18 +230,8 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 360f, 0f, startActive: true);
 
-            // Starting garrisons
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, -18f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 0f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 18f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.RangedUnitId, -310f, -30f);
+            // Workers only — train combat after the match starts.
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 8f);
-            world.SpawnUnit(
-                ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.PathfinderId, -305f, -20f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, -15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, 15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.RangedUnitId, 310f, 28f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, -8f);
 
             // West pass mouth fortifications

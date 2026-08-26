@@ -23,6 +23,9 @@ namespace Asterra.Gameplay.Presentation
         private Transform _selectionRingInner;
         private Transform _selectionRingCore;
         private Renderer _renderer;
+        private Renderer[] _troopRenderers;
+        private Transform[] _troopHosts;
+        private int _squadSize = 1;
         private Renderer _teamBandRenderer;
         private Collider _pickCollider;
         private Color _baseColor = Color.gray;
@@ -48,6 +51,17 @@ namespace Asterra.Gameplay.Presentation
 
         public void Initialize(SimEntityId id, bool isUnit, PlayerId owner, string definitionId, byte factionIndex)
         {
+            Initialize(id, isUnit, owner, definitionId, factionIndex, squadSize: 0);
+        }
+
+        public void Initialize(
+            SimEntityId id,
+            bool isUnit,
+            PlayerId owner,
+            string definitionId,
+            byte factionIndex,
+            int squadSize)
+        {
             Id = id;
             IsUnit = isUnit;
             Owner = owner;
@@ -59,11 +73,15 @@ namespace Asterra.Gameplay.Presentation
             {
                 var role = AsterraMeshLibrary.InferRole(definitionId);
                 visualScale *= AsterraMeshLibrary.RoleScaleMultiplier(role);
+                _squadSize = squadSize > 0
+                    ? Mathf.Clamp(squadSize, 1, UnitSquadVisual.MaxSquadSize)
+                    : UnitSquadVisual.ResolveSquadSize(definitionId);
             }
-            else if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
+            else
             {
-                // Keep pads need a readable silhouette vs the fortress mesh.
-                visualScale *= 1.65f;
+                _squadSize = 1;
+                if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
+                    visualScale *= 1.65f;
             }
 
             transform.localScale = Vector3.one * visualScale;
@@ -73,16 +91,14 @@ namespace Asterra.Gameplay.Presentation
             body.transform.SetParent(transform, false);
             _bodyRoot = body.transform;
 
-            var filter = body.AddComponent<MeshFilter>();
-            filter.sharedMesh = isUnit
+            Mesh mesh = isUnit
                 ? AsterraMeshLibrary.GetUnitMesh(definitionId)
                 : AsterraMeshLibrary.GetBuildingMesh(definitionId);
 
-            _renderer = body.AddComponent<MeshRenderer>();
             _baseColor = AsterraMeshLibrary.FactionBodyColor(factionIndex, isUnit, definitionId);
-            _renderer.sharedMaterial = CreateColorMaterial(_baseColor);
+            BuildTroopMeshes(mesh, isUnit);
 
-            EnsurePickCollider(isUnit, filter.sharedMesh);
+            EnsurePickCollider(isUnit, mesh);
             EnsureSelectionRing(isUnit);
             if (isUnit)
                 EnsureTeamBand();
@@ -93,6 +109,38 @@ namespace Asterra.Gameplay.Presentation
             _animPhase = (id.Value % 97) * 0.173f;
             if (!isUnit)
                 EnsureScaffold();
+        }
+
+        private void BuildTroopMeshes(Mesh mesh, bool isUnit)
+        {
+            int count = isUnit ? Mathf.Max(1, _squadSize) : 1;
+            _troopRenderers = new Renderer[count];
+            _troopHosts = new Transform[count];
+            float troopScale = UnitSquadVisual.TroopLocalScale(count);
+
+            for (int i = 0; i < count; i++)
+            {
+                Transform host = _bodyRoot;
+                if (count > 1)
+                {
+                    var troop = new GameObject("Troop_" + i);
+                    troop.transform.SetParent(_bodyRoot, false);
+                    troop.transform.localPosition = UnitSquadVisual.TroopOffset(i, count);
+                    troop.transform.localRotation = Quaternion.Euler(0f, (Id.Value * 17 + i * 41) % 50 - 25f, 0f);
+                    troop.transform.localScale = Vector3.one * troopScale;
+                    host = troop.transform;
+                }
+
+                _troopHosts[i] = host;
+                var filter = host.gameObject.AddComponent<MeshFilter>();
+                filter.sharedMesh = mesh;
+                var rend = host.gameObject.AddComponent<MeshRenderer>();
+                // Unique material instance per troop so hit-flash does not tint siblings wrong.
+                rend.material = CreateColorMaterial(_baseColor);
+                _troopRenderers[i] = rend;
+            }
+
+            _renderer = _troopRenderers[0];
         }
 
         /// <summary>Drive construction rise / complete pop from sim BuildProgress + State.</summary>
@@ -227,7 +275,7 @@ namespace Asterra.Gameplay.Presentation
 
         private float _powerAuraUntil;
         private byte _equipmentFlags;
-        private Transform _flameRoot;
+        private Transform[] _flameRoots;
         private Renderer[] _flameRenderers;
         private Color _equippedBodyTint = Color.clear;
 
@@ -269,41 +317,74 @@ namespace Asterra.Gameplay.Presentation
 
         private void EnsureFlameFx(bool enabled)
         {
+            int troopCount = _troopHosts != null && _troopHosts.Length > 0
+                ? _troopHosts.Length
+                : 1;
+
             if (!enabled)
             {
-                if (_flameRoot != null)
-                    _flameRoot.gameObject.SetActive(false);
+                if (_flameRoots != null)
+                {
+                    for (int i = 0; i < _flameRoots.Length; i++)
+                    {
+                        if (_flameRoots[i] != null)
+                            _flameRoots[i].gameObject.SetActive(false);
+                    }
+                }
+
                 return;
             }
 
-            if (_flameRoot == null)
+            if (_flameRoots == null || _flameRoots.Length != troopCount)
             {
-                var root = new GameObject("FlameWeapon");
-                root.transform.SetParent(_bodyRoot != null ? _bodyRoot : transform, false);
-                // Weapon side of low-poly infantry / cavalry meshes.
-                root.transform.localPosition = new Vector3(0.55f, 0.85f, 0.15f);
-                _flameRoot = root.transform;
-
-                _flameRenderers = new Renderer[3];
-                for (int i = 0; i < 3; i++)
+                if (_flameRoots != null)
                 {
-                    var ember = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    Object.Destroy(ember.GetComponent<Collider>());
-                    ember.name = "Ember" + i;
-                    ember.transform.SetParent(_flameRoot, false);
-                    ember.transform.localPosition = new Vector3(
-                        0.05f * i,
-                        0.15f + i * 0.22f,
-                        -0.05f * i);
-                    ember.transform.localScale = Vector3.one * (0.18f - i * 0.03f);
-                    var rend = ember.GetComponent<Renderer>();
-                    rend.sharedMaterial = CreateColorMaterial(new Color(1f, 0.45f, 0.08f, 0.95f));
-                    rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    _flameRenderers[i] = rend;
+                    for (int i = 0; i < _flameRoots.Length; i++)
+                    {
+                        if (_flameRoots[i] != null)
+                            Destroy(_flameRoots[i].gameObject);
+                    }
                 }
+
+                _flameRoots = new Transform[troopCount];
+                var flameRends = new System.Collections.Generic.List<Renderer>(troopCount * 3);
+                for (int t = 0; t < troopCount; t++)
+                {
+                    Transform parent = _troopHosts != null && t < _troopHosts.Length && _troopHosts[t] != null
+                        ? _troopHosts[t]
+                        : (_bodyRoot != null ? _bodyRoot : transform);
+                    var root = new GameObject("FlameWeapon");
+                    root.transform.SetParent(parent, false);
+                    // Weapon side of low-poly infantry / cavalry meshes (local to each troop).
+                    root.transform.localPosition = new Vector3(0.55f, 0.9f, 0.15f);
+                    _flameRoots[t] = root.transform;
+
+                    for (int i = 0; i < 3; i++)
+                    {
+                        var ember = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                        Object.Destroy(ember.GetComponent<Collider>());
+                        ember.name = "Ember" + i;
+                        ember.transform.SetParent(_flameRoots[t], false);
+                        ember.transform.localPosition = new Vector3(
+                            0.05f * i,
+                            0.15f + i * 0.22f,
+                            -0.05f * i);
+                        ember.transform.localScale = Vector3.one * (0.18f - i * 0.03f);
+                        var rend = ember.GetComponent<Renderer>();
+                        rend.sharedMaterial = CreateColorMaterial(new Color(1f, 0.45f, 0.08f, 0.95f));
+                        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        flameRends.Add(rend);
+                    }
+                }
+
+                _flameRenderers = flameRends.ToArray();
             }
 
-            _flameRoot.gameObject.SetActive(true);
+            for (int i = 0; i < _flameRoots.Length; i++)
+            {
+                if (_flameRoots[i] != null)
+                    _flameRoots[i].gameObject.SetActive(true);
+            }
         }
 
         public void SetHitFlash()
@@ -374,12 +455,30 @@ namespace Asterra.Gameplay.Presentation
 
         private void AnimateFlameFx()
         {
-            if (_flameRoot == null || !_flameRoot.gameObject.activeSelf || _flameRenderers == null)
+            if (_flameRoots == null || _flameRenderers == null)
+                return;
+
+            bool anyActive = false;
+            for (int r = 0; r < _flameRoots.Length; r++)
+            {
+                if (_flameRoots[r] != null && _flameRoots[r].gameObject.activeSelf)
+                {
+                    anyActive = true;
+                    break;
+                }
+            }
+
+            if (!anyActive)
                 return;
 
             float t = Time.time + _animPhase;
             float pulse = 0.85f + Mathf.Sin(t * 14f) * 0.15f;
-            _flameRoot.localScale = Vector3.one * pulse;
+            for (int r = 0; r < _flameRoots.Length; r++)
+            {
+                if (_flameRoots[r] != null && _flameRoots[r].gameObject.activeSelf)
+                    _flameRoots[r].localScale = Vector3.one * pulse;
+            }
+
             for (int i = 0; i < _flameRenderers.Length; i++)
             {
                 var rend = _flameRenderers[i];
@@ -391,7 +490,7 @@ namespace Asterra.Gameplay.Presentation
                     new Color(1f, 0.9f, 0.25f, 0.95f),
                     u);
                 SetMatColor(rend.sharedMaterial, c);
-                float s = (0.16f - i * 0.028f) * (0.75f + u * 0.55f);
+                float s = (0.16f - (i % 3) * 0.028f) * (0.75f + u * 0.55f);
                 rend.transform.localScale = Vector3.one * s;
             }
         }
@@ -530,6 +629,14 @@ namespace Asterra.Gameplay.Presentation
             IsRevealed = revealed;
             if (_renderer != null)
                 _renderer.enabled = revealed;
+            if (_troopRenderers != null)
+            {
+                for (int i = 0; i < _troopRenderers.Length; i++)
+                {
+                    if (_troopRenderers[i] != null)
+                        _troopRenderers[i].enabled = revealed;
+                }
+            }
             if (_teamBandRenderer != null)
                 _teamBandRenderer.enabled = revealed;
             // Keep pick volumes enabled for owned-side queries; FOW only hides mesh.
@@ -566,17 +673,18 @@ namespace Asterra.Gameplay.Presentation
             if (isUnit)
             {
                 sphere.center = new Vector3(0f, 0.8f, 0f);
-                sphere.radius = 1.85f;
+                // Keep unit pick tight so large squads don't swallow building clicks.
+                float squadBoost = _squadSize > 1 ? 1f + Mathf.Sqrt(_squadSize) * 0.08f : 1f;
+                sphere.radius = 1.35f * Mathf.Min(squadBoost, 1.55f);
             }
             else
             {
-                float height = mesh != null ? mesh.bounds.size.y : 6f;
-                float radius = mesh != null
-                    ? Mathf.Max(mesh.bounds.extents.x, mesh.bounds.extents.z, 2.2f)
-                    : 3f;
-                // Cap so keeps don't swallow nearby unit clicks.
-                radius = Mathf.Min(radius * 0.85f, 4.2f);
-                sphere.center = new Vector3(0f, height * 0.35f, 0f);
+                float height = mesh != null ? Mathf.Max(mesh.bounds.size.y, 4f) : 6f;
+                float extentX = mesh != null ? Mathf.Max(mesh.bounds.extents.x, 2.8f) : 3.5f;
+                float extentZ = mesh != null ? Mathf.Max(mesh.bounds.extents.z, 2.8f) : 3.5f;
+                float radius = Mathf.Max(extentX, extentZ) * 1.15f;
+                radius = Mathf.Clamp(radius, 3.5f, 7.5f);
+                sphere.center = new Vector3(0f, height * 0.4f, 0f);
                 sphere.radius = radius;
             }
 
@@ -597,35 +705,43 @@ namespace Asterra.Gameplay.Presentation
             if (_selectionRing != null)
                 return;
 
-            float outer = isUnit ? 2.6f : 5.8f;
-            float mid = isUnit ? 2.25f : 5.2f;
-            float inner = isUnit ? 1.95f : 4.7f;
+            float outer = isUnit ? (_squadSize > 1 ? 1.35f + _squadSize * 0.12f : 2.6f) : 5.8f;
+            if (isUnit && _squadSize > 1)
+                outer = Mathf.Clamp(outer, 4.0f, 7.5f);
+            float mid = outer * 0.86f;
+            float inner = outer * 0.74f;
 
             var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             StripColliderImmediate(ring);
             ring.name = "SelectionRing";
             ring.transform.SetParent(transform, false);
-            ring.transform.localPosition = new Vector3(0f, 0.04f, 0f);
-            ring.transform.localScale = new Vector3(outer, 0.035f, outer);
-            ring.GetComponent<Renderer>().sharedMaterial = CreateColorMaterial(new Color(1f, 0.92f, 0.25f, 0.95f));
+            ring.transform.localPosition = new Vector3(0f, 0.12f, 0f);
+            ring.transform.localScale = new Vector3(outer, 0.045f, outer);
+            var ringRend = ring.GetComponent<Renderer>();
+            ringRend.sharedMaterial = CreateColorMaterial(new Color(1f, 0.92f, 0.25f, 0.95f));
+            ringRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _selectionRing = ring.transform;
 
             var hole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             StripColliderImmediate(hole);
             hole.name = "SelectionRingInner";
             hole.transform.SetParent(transform, false);
-            hole.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-            hole.transform.localScale = new Vector3(mid, 0.03f, mid);
-            hole.GetComponent<Renderer>().sharedMaterial = CreateColorMaterial(new Color(0.04f, 0.06f, 0.05f, 0.7f));
+            hole.transform.localPosition = new Vector3(0f, 0.13f, 0f);
+            hole.transform.localScale = new Vector3(mid, 0.04f, mid);
+            var holeRend = hole.GetComponent<Renderer>();
+            holeRend.sharedMaterial = CreateColorMaterial(new Color(0.04f, 0.06f, 0.05f, 0.7f));
+            holeRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _selectionRingInner = hole.transform;
 
             var core = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             StripColliderImmediate(core);
             core.name = "SelectionRingCore";
             core.transform.SetParent(transform, false);
-            core.transform.localPosition = new Vector3(0f, 0.045f, 0f);
-            core.transform.localScale = new Vector3(inner, 0.02f, inner);
-            core.GetComponent<Renderer>().sharedMaterial = CreateColorMaterial(new Color(0.12f, 0.14f, 0.1f, 0.35f));
+            core.transform.localPosition = new Vector3(0f, 0.125f, 0f);
+            core.transform.localScale = new Vector3(inner, 0.03f, inner);
+            var coreRend = core.GetComponent<Renderer>();
+            coreRend.sharedMaterial = CreateColorMaterial(new Color(0.12f, 0.14f, 0.1f, 0.35f));
+            coreRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _selectionRingCore = core.transform;
         }
 
@@ -681,6 +797,21 @@ namespace Asterra.Gameplay.Presentation
 
         private void ApplyBodyColor(Color color)
         {
+            if (_troopRenderers != null && _troopRenderers.Length > 0)
+            {
+                for (int i = 0; i < _troopRenderers.Length; i++)
+                {
+                    var rend = _troopRenderers[i];
+                    if (rend == null)
+                        continue;
+                    var mat = rend.material;
+                    if (mat != null)
+                        SetMatColor(mat, color);
+                }
+
+                return;
+            }
+
             if (_renderer == null || _renderer.sharedMaterial == null)
                 return;
             SetMatColor(_renderer.sharedMaterial, color);

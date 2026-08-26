@@ -28,8 +28,9 @@ namespace Asterra.Gameplay.Presentation
             if (_fog == null)
                 _fog = FindFirstObjectByType<FogOfWarPresenter>();
 
-            float size = mapSize;
-            Rect mapRect = new Rect(Screen.width - size - margin, Screen.height - size - margin, size, size);
+            float size = mapSize * HudStyle.Scale;
+            float m = margin * HudStyle.Scale;
+            Rect mapRect = new Rect(Screen.width - size - m, Screen.height - size - m, size, size);
             HudClickBlocker.Block(mapRect);
 
             // Soft terrain tint under fog

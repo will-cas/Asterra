@@ -46,9 +46,77 @@ namespace Asterra.Gameplay
             if (buildingReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return buildingReport + "\nBuilding systems self-test failed — aborting further smoke.";
 
+            var constructionReport = ConstructionSelfTest.Run();
+            if (constructionReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return constructionReport + "\nConstruction self-test failed — aborting further smoke.";
+
+            var aiMacroReport = AiMacroSelfTest.Run();
+            if (aiMacroReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return aiMacroReport + "\nAI macro self-test failed — aborting further smoke.";
+
+            var aiMacroExtReport = AiMacroExtendedSelfTest.Run();
+            if (aiMacroExtReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return aiMacroExtReport + "\nAI macro extended self-test failed — aborting further smoke.";
+
+            var contentEcoReport = ContentAndEconomySelfTest.Run();
+            if (contentEcoReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return contentEcoReport + "\nContent/economy self-test failed — aborting further smoke.";
+
+            var ordersReport = OrdersSelfTest.Run();
+            if (ordersReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return ordersReport + "\nOrders self-test failed — aborting further smoke.";
+
+            var gatherReport = GatherSelfTest.Run();
+            if (gatherReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return gatherReport + "\nGather self-test failed — aborting further smoke.";
+
+            var techPowersReport = TechPowersSelfTest.Run();
+            if (techPowersReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return techPowersReport + "\nTech/powers self-test failed — aborting further smoke.";
+
+            var visionReport = VisionSelfTest.Run();
+            if (visionReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return visionReport + "\nVision self-test failed — aborting further smoke.";
+
+            var saveReport = SaveRoundTripSelfTest.Run();
+            if (saveReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return saveReport + "\nSave round-trip self-test failed — aborting further smoke.";
+
+            var menuUiReport = MenuUiSelfTest.Run();
+            if (menuUiReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return menuUiReport + "\nMenu UI self-test failed — aborting further smoke.";
+
             var pathReport = PathfindingSelfTest.Run();
             if (pathReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
                 return pathReport + "\nPathfinding self-test failed — aborting further smoke.";
+
+            var mapPathReport = MapPathingSelfTest.Run();
+            if (mapPathReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return mapPathReport + "\nMap pathing self-test failed — aborting further smoke.";
+
+            var worldHashReport = WorldHashSelfTest.Run();
+            if (worldHashReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return worldHashReport + "\nWorld hash self-test failed — aborting further smoke.";
+
+            var commandApplyReport = CommandApplySelfTest.Run();
+            if (commandApplyReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return commandApplyReport + "\nCommand apply self-test failed — aborting further smoke.";
+
+            var aiDecisionReport = AiDecisionTableSelfTest.Run();
+            if (aiDecisionReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return aiDecisionReport + "\nAI decision table self-test failed — aborting further smoke.";
+
+            var dualSimReport = DualSimSoakSelfTest.Run();
+            if (dualSimReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return dualSimReport + "\nDual-sim soak self-test failed — aborting further smoke.";
+
+            var savePipelineReport = SaveLoadPipelineSelfTest.Run();
+            if (savePipelineReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return savePipelineReport + "\nSave/load pipeline self-test failed — aborting further smoke.";
+
+            var ecoFortReport = EcoFortLeaderSelfTest.Run();
+            if (ecoFortReport.IndexOf("FAIL", System.StringComparison.Ordinal) >= 0)
+                return ecoFortReport + "\nEco/fort/leader self-test failed — aborting further smoke.";
 
             var codecReport = CommandCodecSelfTest.Run();
 
@@ -220,7 +288,24 @@ namespace Asterra.Gameplay
             sb.AppendLine(weatherReport);
             sb.AppendLine(timeReport);
             sb.AppendLine(buildingReport);
+            sb.AppendLine(constructionReport);
+            sb.AppendLine(aiMacroReport);
+            sb.AppendLine(aiMacroExtReport);
+            sb.AppendLine(contentEcoReport);
+            sb.AppendLine(ordersReport);
+            sb.AppendLine(gatherReport);
+            sb.AppendLine(techPowersReport);
+            sb.AppendLine(visionReport);
+            sb.AppendLine(saveReport);
+            sb.AppendLine(menuUiReport);
             sb.AppendLine(pathReport);
+            sb.AppendLine(mapPathReport);
+            sb.AppendLine(worldHashReport);
+            sb.AppendLine(commandApplyReport);
+            sb.AppendLine(aiDecisionReport);
+            sb.AppendLine(dualSimReport);
+            sb.AppendLine(savePipelineReport);
+            sb.AppendLine(ecoFortReport);
             sb.Append(codecReport);
             sb.Append(LockstepFrameGateSelfTest.Run());
             sb.Append(MatchLobbyStateSelfTest.Run());

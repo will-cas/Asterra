@@ -845,10 +845,8 @@ namespace Asterra.Gameplay
             bool atProducer = building.Kind == BuildingKind.Producer;
             if (keepTech && !atKeep)
                 return;
+            // Equipment: barracks preferred; keep allowed so research is never soft-locked.
             if (!keepTech && !atProducer && !atKeep)
-                return;
-            // Equipment researched at producer (or keep as fallback if no producer UI).
-            if (!keepTech && !atProducer)
                 return;
 
             if (!_wallet.TrySpend(upgrade.Issuer, ResourceType.Gold, def.GoldCost))
@@ -870,6 +868,8 @@ namespace Asterra.Gameplay
                 ApplyKeepHealthBonus(building.Owner, def.KeepHealthBonus);
             if (def.KeepSightBonus > 0f)
                 ApplyKeepSightBonus(building.Owner, def.KeepSightBonus);
+
+            // Equipment research only unlocks the upgrade — units must Equip for gold.
 
             _combatEvents.Add(new CombatEvent(CombatEventKind.ResearchComplete, building.Id, building.X, building.Z, true));
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
@@ -909,14 +909,27 @@ namespace Asterra.Gameplay
             if (!_upgrades.Has(cmd.Issuer, def.Id))
                 return;
 
+            int equipCost = def.ResolvedEquipGoldCost;
             for (int i = 0; i < cmd.UnitIds.Length; i++)
             {
                 if (!_unitsById.TryGetValue(cmd.UnitIds[i].Value, out var unit))
                     continue;
                 if (unit.Owner != cmd.Issuer || !unit.IsAlive)
                     continue;
-                if (!ApplyEquipmentToUnit(unit, def))
+                if (!def.FitsUnitRole(unit.Role))
                     continue;
+                if (unit.HasAppliedEquipment(def.Id))
+                    continue;
+                if (equipCost > 0 && !_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, equipCost))
+                    break;
+                if (!ApplyEquipmentToUnit(unit, def))
+                {
+                    // Refund if record/apply failed after spend.
+                    if (equipCost > 0)
+                        _wallet.Add(cmd.Issuer, ResourceType.Gold, equipCost);
+                    continue;
+                }
+
                 _combatEvents.Add(new CombatEvent(CombatEventKind.UpgradeApplied, unit.Id, unit.X, unit.Z, false));
             }
         }
@@ -924,6 +937,8 @@ namespace Asterra.Gameplay
         private bool ApplyEquipmentToUnit(SimUnit unit, UpgradeDefData def)
         {
             if (unit.Role == UnitRole.Builder)
+                return false;
+            if (!def.FitsUnitRole(unit.Role))
                 return false;
             if (!unit.TryRecordEquipment(def.Id))
                 return false;
@@ -946,20 +961,7 @@ namespace Asterra.Gameplay
 
         private void ApplyResearchedEquipmentToNewUnit(SimUnit unit)
         {
-            if (unit.Role == UnitRole.Builder)
-                return;
-            var roster = FactionDefaultContent.Get(unit.Faction);
-            var ids = roster.EquipmentUpgradeIds;
-            if (ids == null)
-                return;
-            for (int i = 0; i < ids.Length; i++)
-            {
-                if (!_upgrades.Has(unit.Owner, ids[i]))
-                    continue;
-                if (!_defs.TryGetUpgrade(ids[i], out var def) || def.Kind != UpgradeKind.Equipment)
-                    continue;
-                ApplyEquipmentToUnit(unit, def);
-            }
+            // Intentionally empty: researched equipment must be equipped for gold per unit.
         }
 
         private void ApplyUnlockPower(UnlockPowerCommand cmd)
@@ -1021,6 +1023,7 @@ namespace Asterra.Gameplay
             child.ParentBuildingId = parent.Id;
             child.AttachmentSlotIndex = cmd.SlotIndex;
             parent.AttachmentOccupantIds[cmd.SlotIndex] = child.Id.Value;
+            AttractBuildersToSite(cmd.Issuer, x, z, BuilderAttractSearchRadius);
             _mutationCounter ^= child.Id.Value * 1601ul;
         }
 
@@ -1567,7 +1570,33 @@ namespace Asterra.Gameplay
                     wz = unit.PathPointsZ[unit.PathIndex];
                 }
 
+                // Skip waypoints that land inside blocked footprints (stale path after builds).
+                if (!CanUnitOccupy(unit, wx, wz)
+                    || OverlapsBuildingFootprint(wx, wz, unit.CollisionRadius * 0.4f,
+                        unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u))
+                {
+                    unit.PathIndex++;
+                    if (unit.PathIndex >= unit.PathCount)
+                    {
+                        unit.ClearPath();
+                        StepTowardAvoiding(unit, fallbackX, fallbackZ, dt);
+                    }
+
+                    return;
+                }
+
+                float ox = unit.X;
+                float oz = unit.Z;
                 StepTowardAvoiding(unit, wx, wz, dt);
+                float moved2 = (unit.X - ox) * (unit.X - ox) + (unit.Z - oz) * (unit.Z - oz);
+                // Frozen against an obstacle — abandon this waypoint so the unit can recover.
+                if (moved2 < 0.00035f && Distance(unit.X, unit.Z, wx, wz) > 1.1f)
+                {
+                    unit.PathIndex++;
+                    if (unit.PathIndex >= unit.PathCount)
+                        unit.ClearPath();
+                }
+
                 return;
             }
 
@@ -2819,39 +2848,48 @@ namespace Asterra.Gameplay
         private void TryUnstickFromBlocked(SimUnit unit)
         {
             if (CanUnitOccupy(unit, unit.X, unit.Z)
-                && !OverlapsBuildingFootprint(unit.X, unit.Z, unit.CollisionRadius,
+                && !OverlapsBuildingFootprint(unit.X, unit.Z, unit.CollisionRadius * 0.45f,
                     unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u))
                 return;
 
             float bestX = unit.X;
             float bestZ = unit.Z;
             float bestScore = float.MaxValue;
-            const float ring = 3.5f;
-            for (int i = 0; i < 12; i++)
+            uint ignoreBuilding = unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u;
+            float[] rings = { 2.2f, 3.5f, 5.5f, 8f, 12f };
+            for (int r = 0; r < rings.Length; r++)
             {
-                float a = i * (MathF.PI * 2f / 12f);
-                float px = unit.X + MathF.Cos(a) * ring;
-                float pz = unit.Z + MathF.Sin(a) * ring;
-                if (!CanUnitOccupy(unit, px, pz))
-                    continue;
-                if (OverlapsBuildingFootprint(px, pz, unit.CollisionRadius,
-                        unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u))
-                    continue;
-                float dx = px - unit.X;
-                float dz = pz - unit.Z;
-                float score = dx * dx + dz * dz;
-                if (score < bestScore)
+                float ring = rings[r];
+                int samples = 12 + r * 4;
+                for (int i = 0; i < samples; i++)
                 {
-                    bestScore = score;
-                    bestX = px;
-                    bestZ = pz;
+                    float a = i * (MathF.PI * 2f / samples);
+                    float px = unit.X + MathF.Cos(a) * ring;
+                    float pz = unit.Z + MathF.Sin(a) * ring;
+                    if (!CanUnitOccupy(unit, px, pz))
+                        continue;
+                    if (OverlapsBuildingFootprint(px, pz, unit.CollisionRadius * 0.45f, ignoreBuilding))
+                        continue;
+                    float dx = px - unit.X;
+                    float dz = pz - unit.Z;
+                    float score = dx * dx + dz * dz;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestX = px;
+                        bestZ = pz;
+                    }
                 }
+
+                if (bestScore < float.MaxValue)
+                    break;
             }
 
             if (bestScore < float.MaxValue)
             {
                 unit.X = bestX;
                 unit.Z = bestZ;
+                unit.ClearPath();
             }
         }
 
@@ -2868,7 +2906,7 @@ namespace Asterra.Gameplay
             uint ignoreBuilding = 0;
             if (unit.AttackTargetId.HasValue)
                 ignoreBuilding = unit.AttackTargetId.Value.Value;
-            if (OverlapsBuildingFootprint(x, z, unit.CollisionRadius, ignoreBuilding))
+            if (OverlapsBuildingFootprint(x, z, unit.CollisionRadius * 0.5f, ignoreBuilding))
                 return false;
 
             float oldX = unit.X;
@@ -2895,8 +2933,8 @@ namespace Asterra.Gameplay
             if (!_environment.CanUnitEnter(x, z, caps))
                 return false;
 
-            float r = unit.CollisionRadius * 0.55f;
-            if (r < 0.35f)
+            float r = unit.CollisionRadius * 0.4f;
+            if (r < 0.45f)
                 return true;
 
             // Four diagonal probes catch cell-corner traps the center sample misses.

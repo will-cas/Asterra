@@ -245,6 +245,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 50,
                 TrainSeconds = 4f,
                 Role = UnitRole.Infantry,
+                SquadSize = 16,
                 Armor = 1f,
             });
             registry.Register(new UnitDefData
@@ -263,6 +264,7 @@ namespace Asterra.Gameplay.Content
                 CarryCapacity = 15,
                 GatherRate = 6f,
                 Role = UnitRole.Builder,
+                SquadSize = 1,
             });
             registry.Register(new UnitDefData
             {
@@ -276,6 +278,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
                 Role = UnitRole.Ranged,
+                SquadSize = 12,
                 ProjectileSpeed = 48f,
             });
             registry.Register(new UnitDefData
@@ -290,6 +293,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 120,
                 TrainSeconds = 7f,
                 Role = UnitRole.Infantry,
+                SquadSize = 16,
                 Armor = 4f,
             });
             registry.Register(new UnitDefData
@@ -304,6 +308,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 140,
                 TrainSeconds = 9.5f,
                 Role = UnitRole.Siege,
+                SquadSize = 1,
                 BuildingDamageMultiplier = 3.5f,
                 Armor = 1f,
                 ProjectileSpeed = 32f,
@@ -352,6 +357,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 250,
                 TrainSeconds = 14f,
                 Role = UnitRole.Infantry,
+                SquadSize = 1,
                 Armor = 4f,
                 IsLeader = true,
                 SightRadius = 140f,
@@ -370,6 +376,7 @@ namespace Asterra.Gameplay.Content
                 Id = HeavyArmourId,
                 DisplayName = "Heavy Armour",
                 GoldCost = 160,
+                EquipGoldCost = 40,
                 ArmorBonus = 3.5f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 10f,
@@ -379,10 +386,13 @@ namespace Asterra.Gameplay.Content
                 Id = FireSwordsId,
                 DisplayName = "Fire Swords",
                 GoldCost = 180,
+                EquipGoldCost = 45,
                 AttackDamageBonus = 5f,
                 UnitDamageMultiplier = 1.1f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 12f,
+                // Melee weapons — not for archers/siege.
+                CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
             });
             registry.Register(new PowerDefData
             {
@@ -449,6 +459,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 55,
                 TrainSeconds = 3.5f,
                 Role = UnitRole.Infantry,
+                SquadSize = 16,
                 Armor = 1f,
             });
             registry.Register(new UnitDefData
@@ -467,6 +478,7 @@ namespace Asterra.Gameplay.Content
                 CarryCapacity = 15,
                 GatherRate = 6f,
                 Role = UnitRole.Builder,
+                SquadSize = 1,
             });
             registry.Register(new UnitDefData
             {
@@ -480,6 +492,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 55,
                 TrainSeconds = 4f,
                 Role = UnitRole.Ranged,
+                SquadSize = 12,
                 ProjectileSpeed = 52f,
             });
             registry.Register(new UnitDefData
@@ -494,6 +507,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 100,
                 TrainSeconds = 5.5f,
                 Role = UnitRole.Cavalry,
+                SquadSize = 6,
                 Armor = 2f,
             });
             registry.Register(new UnitDefData
@@ -508,6 +522,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 130,
                 TrainSeconds = 9f,
                 Role = UnitRole.Siege,
+                SquadSize = 1,
                 BuildingDamageMultiplier = 3.2f,
                 Armor = 1f,
                 ProjectileSpeed = 30f,
@@ -556,6 +571,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 240,
                 TrainSeconds = 13f,
                 Role = UnitRole.Infantry,
+                SquadSize = 1,
                 Armor = 2f,
                 IsLeader = true,
                 SightRadius = 140f,
@@ -574,6 +590,7 @@ namespace Asterra.Gameplay.Content
                 Id = BarkskinArmourId,
                 DisplayName = "Barkskin Armour",
                 GoldCost = 150,
+                EquipGoldCost = 40,
                 ArmorBonus = 3f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 10f,
@@ -583,10 +600,12 @@ namespace Asterra.Gameplay.Content
                 Id = ThornBladesId,
                 DisplayName = "Thorn Blades",
                 GoldCost = 170,
+                EquipGoldCost = 45,
                 AttackDamageBonus = 4.5f,
                 UnitDamageMultiplier = 1.12f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 11f,
+                CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
             });
             registry.Register(new PowerDefData
             {
@@ -641,6 +660,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 60,
                 TrainSeconds = 4.5f,
                 Role = UnitRole.Infantry,
+                SquadSize = 16,
                 Armor = 1f,
             });
             registry.Register(new UnitDefData
@@ -659,6 +679,7 @@ namespace Asterra.Gameplay.Content
                 CarryCapacity = 15,
                 GatherRate = 6f,
                 Role = UnitRole.Builder,
+                SquadSize = 1,
             });
             registry.Register(new UnitDefData
             {
@@ -672,6 +693,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 65,
                 TrainSeconds = 4.8f,
                 Role = UnitRole.Ranged,
+                SquadSize = 12,
                 ProjectileSpeed = 50f,
             });
             registry.Register(new UnitDefData
@@ -686,6 +708,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 110,
                 TrainSeconds = 6.2f,
                 Role = UnitRole.Ranged,
+                SquadSize = 12,
                 Armor = 1f,
                 ProjectileSpeed = 40f,
             });
@@ -701,6 +724,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 160,
                 TrainSeconds = 11f,
                 Role = UnitRole.Siege,
+                SquadSize = 1,
                 BuildingDamageMultiplier = 3.8f,
                 Armor = 3f,
                 ProjectileSpeed = 28f,
@@ -749,6 +773,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 260,
                 TrainSeconds = 14f,
                 Role = UnitRole.Infantry,
+                SquadSize = 1,
                 Armor = 3f,
                 IsLeader = true,
                 SightRadius = 140f,
@@ -767,6 +792,7 @@ namespace Asterra.Gameplay.Content
                 Id = EmberPlateId,
                 DisplayName = "Ember Plate",
                 GoldCost = 165,
+                EquipGoldCost = 40,
                 ArmorBonus = 3.2f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 10f,
@@ -776,10 +802,12 @@ namespace Asterra.Gameplay.Content
                 Id = SacredBladesId,
                 DisplayName = "Sacred Blades",
                 GoldCost = 185,
+                EquipGoldCost = 45,
                 AttackDamageBonus = 5.5f,
                 UnitDamageMultiplier = 1.12f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 12f,
+                CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
             });
             registry.Register(new PowerDefData
             {
@@ -852,6 +880,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 120,
                 TrainSeconds = 8f,
                 Role = UnitRole.Siege,
+                SquadSize = 1,
                 Armor = 2f,
                 ProjectileSpeed = 28f,
                 TraversalCapabilities = Asterra.Core.World.TraversalCapability.Water,
@@ -868,6 +897,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 70,
                 TrainSeconds = 5f,
                 Role = UnitRole.Infantry,
+                SquadSize = 4, // scout party, not a full company
                 TraversalCapabilities = Asterra.Core.World.TraversalCapability.Land
                     | Asterra.Core.World.TraversalCapability.Jump,
             });

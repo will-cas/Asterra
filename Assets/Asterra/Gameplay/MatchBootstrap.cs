@@ -35,6 +35,7 @@ namespace Asterra.Gameplay
         [SerializeField] private int startingTimber = 300;
         [SerializeField] private int enemyStartingGold = 500;
         [SerializeField] private AiDifficulty aiDifficulty = AiDifficulty.Normal;
+        [SerializeField] [Range(0, 1)] private int localSpawnSeat;
         [SerializeField] private bool attachLocalOrders = true;
         [SerializeField] private bool runSmokeOnAwake;
         [SerializeField] private bool reportHashEveryTick;
@@ -62,6 +63,9 @@ namespace Asterra.Gameplay
         public MatchLobbyState Lobby { get; private set; }
         public MatchPlayMode PlayMode => playMode;
         public bool IsMatchRunning { get; private set; }
+
+        /// <summary>True while pause/options/profile overlay is open (blocks orders).</summary>
+        public bool IsMenuOverlayOpen { get; set; }
         public MatchResult Result { get; private set; } = MatchResult.None;
         public VictoryEvaluator Victory { get; private set; }
 
@@ -103,6 +107,13 @@ namespace Asterra.Gameplay
         {
             get => aiDifficulty;
             set => aiDifficulty = value;
+        }
+
+        /// <summary>0 = west keep, 1 = east keep for the local offline player.</summary>
+        public int LocalSpawnSeat
+        {
+            get => localSpawnSeat;
+            set => localSpawnSeat = value <= 0 ? 0 : 1;
         }
 
         private CommandBus _commandBus;
@@ -155,10 +166,21 @@ namespace Asterra.Gameplay
             string mapCatalogKey,
             AiDifficulty difficulty)
         {
+            ConfigureAndStartOffline(playerFaction, enemyFaction, mapCatalogKey, difficulty, localSpawnSeat);
+        }
+
+        public void ConfigureAndStartOffline(
+            int playerFaction,
+            int enemyFaction,
+            string mapCatalogKey,
+            AiDifficulty difficulty,
+            int spawnSeat)
+        {
             PlayerFactionIndex = playerFaction;
             EnemyFactionIndex = enemyFaction;
             MapKey = mapCatalogKey;
             aiDifficulty = difficulty;
+            LocalSpawnSeat = spawnSeat;
             StartOfflineVsAi();
         }
 
@@ -170,7 +192,7 @@ namespace Asterra.Gameplay
             IsMatchRunning = false;
             EnsureOfflineMenu(enabled: true);
             if (AsterraAudio.Instance != null)
-                AsterraAudio.Instance.SetMusicMuted(false);
+                AsterraSettings.ApplyAudio();
         }
 
         /// <summary>Soft rematch with the same faction/map picks (no scene reload).</summary>
@@ -179,7 +201,7 @@ namespace Asterra.Gameplay
             TeardownMatchRuntime();
             Result = MatchResult.None;
             if (AsterraAudio.Instance != null)
-                AsterraAudio.Instance.SetMusicMuted(false);
+                AsterraSettings.ApplyAudio();
             StartOfflineVsAi();
             var menu = FindFirstObjectByType<OfflineMatchMenu>();
             if (menu != null)
@@ -230,7 +252,7 @@ namespace Asterra.Gameplay
             TeardownMatchRuntime();
             Result = MatchResult.None;
             if (AsterraAudio.Instance != null)
-                AsterraAudio.Instance.SetMusicMuted(false);
+                AsterraSettings.ApplyAudio();
 
             playMode = MatchPlayMode.OfflineVsAi;
             matchSeed = data.matchSeed;
@@ -394,40 +416,30 @@ namespace Asterra.Gameplay
             }
             else
             {
-                seats = new[]
+                var local = new PlayerSlotState
                 {
-                    new PlayerSlotState
-                    {
-                        Player = localPlayer,
-                        FactionIndex = PlayerRoster.Id.Value,
-                        IsReady = true,
-                        DisplayName = "Player",
-                    },
-                    new PlayerSlotState
-                    {
-                        Player = new PlayerId(1),
-                        FactionIndex = EnemyRoster.Id.Value,
-                        IsReady = true,
-                        DisplayName = "Enemy AI",
-                    },
+                    Player = localPlayer,
+                    FactionIndex = PlayerRoster.Id.Value,
+                    IsReady = true,
+                    DisplayName = "Player",
                 };
-                System.Array.Sort(seats, (a, b) => a.Player.Value.CompareTo(b.Player.Value));
+                var ai = new PlayerSlotState
+                {
+                    Player = new PlayerId(1),
+                    FactionIndex = EnemyRoster.Id.Value,
+                    IsReady = true,
+                    DisplayName = "Enemy AI",
+                };
+                // seats[0]=west, seats[1]=east — honor lobby spawn pick (AI takes the other).
+                seats = LocalSpawnSeat == 0
+                    ? new[] { local, ai }
+                    : new[] { ai, local };
             }
 
             if (restore != null)
             {
                 SkirmishDefaultContent.ApplyMapEnvironmentOnly(_sim, MapKey);
-                if (restore.wallets != null)
-                {
-                    for (int i = 0; i < restore.wallets.Length; i++)
-                    {
-                        var w = restore.wallets[i];
-                        var p = new PlayerId(w.player);
-                        Wallet.Seed(p, ResourceType.Gold, w.gold);
-                        Wallet.Seed(p, ResourceType.Timber, w.timber);
-                    }
-                }
-
+                Asterra.Gameplay.Save.OfflineMatchSaveService.RestoreWallets(restore, Wallet);
                 _sim.RestoreFrom(restore);
                 if (Ids is SequentialIdFactory seq)
                     seq.Seek(restore.nextEntityId);
@@ -449,7 +461,7 @@ namespace Asterra.Gameplay
                 string powerId = EnemyRoster.PowerIds != null && EnemyRoster.PowerIds.Length > 0
                     ? EnemyRoster.PowerIds[0]
                     : EnemyRoster.PowerId;
-                var brain = new DummyEnemyCamp(
+                var brain = new SkirmishOpponentBrain(
                     new PlayerId(1),
                     EnemyRoster.KeepBuildingId,
                     EnemyRoster.ProducerBuildingId,
@@ -462,7 +474,8 @@ namespace Asterra.Gameplay
                     EnemyRoster.WallBuildingId,
                     EnemyRoster.BasicUpgradeId,
                     powerId,
-                    aiDifficulty);
+                    aiDifficulty,
+                    FactionDefaultContent.KeepTurretId);
                 coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
             }
 
@@ -536,6 +549,25 @@ namespace Asterra.Gameplay
 
         private void ResolveCameraFocus(out float focusX, out float focusZ)
         {
+            var keeps = MapPreviewBuilder.GetKeepMarkers(MapKey);
+            if (keeps.Count > 0)
+            {
+                int seat = LocalSpawnSeat;
+                for (int i = 0; i < keeps.Count; i++)
+                {
+                    if (keeps[i].SeatIndex == seat)
+                    {
+                        focusX = keeps[i].X;
+                        focusZ = keeps[i].Z;
+                        return;
+                    }
+                }
+
+                focusX = keeps[0].X;
+                focusZ = keeps[0].Z;
+                return;
+            }
+
             if (MapCatalog.TryLoad(MapKey, out var custom))
             {
                 focusX = custom.cameraFocusX;
@@ -543,18 +575,18 @@ namespace Asterra.Gameplay
                 return;
             }
 
-            focusX = -320f;
+            focusX = LocalSpawnSeat == 0 ? -320f : 320f;
             focusZ = 0f;
             if (MapCatalog.TryParseBuiltin(MapKey, out var builtin))
             {
                 if (builtin == SkirmishMapId.RiverCrossing)
                 {
-                    focusX = -280f;
-                    focusZ = -200f;
+                    focusX = LocalSpawnSeat == 0 ? -280f : 280f;
+                    focusZ = LocalSpawnSeat == 0 ? -200f : 200f;
                 }
                 else if (builtin == SkirmishMapId.BlackridgePass)
                 {
-                    focusX = -330f;
+                    focusX = LocalSpawnSeat == 0 ? -330f : 330f;
                     focusZ = 0f;
                 }
             }

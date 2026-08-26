@@ -15,7 +15,7 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 1. [x] ~1 km play space data + keeps at ±350, center territory (no scene asset yet)
 2. [x] Place barracks + train militia via commands / `SkirmishDefaultContent`
 3. [x] Select / move / attack through `LocalOrderController` → lockstep bus → `SkirmishWorldSim`
-4. [x] `DummyEnemyCamp` scripted opponent
+4. [x] `SkirmishOpponentBrain` scripted opponent
 5. [x] Territory capture + gold income tick
 6. [x] `upgrade_militia_training` (faster train + damage buff)
 7. [x] `SkirmishSmokeTest` headless driver (enable `runSmokeOnAwake` on `MatchBootstrap`)

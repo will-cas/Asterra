@@ -16,7 +16,10 @@ namespace Asterra.Gameplay
         [Tooltip("Shows tick/weather/territory diagnostics. Off by default.")]
         [SerializeField] private bool showDebugHud;
         private bool _endSfxPlayed;
+        private bool _statsRecorded;
         private string _hoverTip = string.Empty;
+        private AsterraMenuPanels.Overlay _overlay = AsterraMenuPanels.Overlay.None;
+        private AsterraMenuPanels.Overlay _overlayReturn = AsterraMenuPanels.Overlay.None;
 
         private void Awake()
         {
@@ -29,11 +32,38 @@ namespace Asterra.Gameplay
         private void Update()
         {
             if (match == null || !match.IsMatchRunning || match.Result.IsOver)
+            {
+                if (match != null)
+                    match.IsMenuOverlayOpen = false;
                 return;
+            }
+
             if (UnityEngine.Input.GetKeyDown(KeyCode.F5))
                 match.SaveOfflineQuick();
             if (UnityEngine.Input.GetKeyDown(KeyCode.F9))
                 match.LoadOfflineQuick();
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+            {
+                bool armed = orders != null && orders.HasArmedMode;
+                if (!armed)
+                {
+                    if (_overlay == AsterraMenuPanels.Overlay.None)
+                        _overlay = AsterraMenuPanels.Overlay.Pause;
+                    else if (_overlay == AsterraMenuPanels.Overlay.Pause)
+                        _overlay = AsterraMenuPanels.Overlay.None;
+                    else
+                        _overlay = AsterraMenuPanels.Overlay.Pause; // Esc from Options → pause
+                    match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
+                    AsterraAudio.PlayUiClick();
+                }
+            }
+
+            // Never keep Profile open during a match (lobby-only).
+            if (_overlay == AsterraMenuPanels.Overlay.Profile)
+                _overlay = AsterraMenuPanels.Overlay.Pause;
+
+            match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
         }
 
         private void OnGUI()
@@ -48,6 +78,21 @@ namespace Asterra.Gameplay
 
             var player = match.Session.LocalPlayer;
             HudStyle.Ensure();
+
+            if (match.Result.IsOver)
+            {
+                RecordStatsOnce(player);
+                DrawEndScreen(player);
+                HudClickBlocker.PublishFrame();
+                return;
+            }
+
+            if (!match.IsMatchRunning)
+            {
+                HudClickBlocker.PublishFrame();
+                return;
+            }
+
             DrawResources(player);
             DrawSaveLoadChrome();
             DrawSelectionStrip(player);
@@ -59,24 +104,56 @@ namespace Asterra.Gameplay
 
             DrawCommandBar(player);
             DrawHoverTip();
-            HudClickBlocker.PublishFrame();
 
-            if (!match.Result.IsOver)
+            if (_overlay != AsterraMenuPanels.Overlay.None)
             {
-                _endSfxPlayed = false;
-                return;
+                var prior = _overlay;
+                AsterraMenuPanels.Draw(_overlay, out bool quitMenu, out var next);
+                if (next == AsterraMenuPanels.Overlay.Profile)
+                    next = AsterraMenuPanels.Overlay.Pause; // Profile is lobby-only
+                if (prior == AsterraMenuPanels.Overlay.Pause && next == AsterraMenuPanels.Overlay.Options)
+                    _overlayReturn = AsterraMenuPanels.Overlay.Pause;
+                if (prior == AsterraMenuPanels.Overlay.Options
+                    && next == AsterraMenuPanels.Overlay.None
+                    && _overlayReturn != AsterraMenuPanels.Overlay.None)
+                {
+                    next = _overlayReturn;
+                    _overlayReturn = AsterraMenuPanels.Overlay.None;
+                }
+
+                if (next == AsterraMenuPanels.Overlay.None || next == AsterraMenuPanels.Overlay.Pause)
+                    _overlayReturn = AsterraMenuPanels.Overlay.None;
+
+                _overlay = next;
+                match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
+                if (quitMenu)
+                {
+                    _overlay = AsterraMenuPanels.Overlay.None;
+                    _overlayReturn = AsterraMenuPanels.Overlay.None;
+                    match.IsMenuOverlayOpen = false;
+                    match.ReturnToMainMenu();
+                }
             }
 
-            DrawEndScreen(player);
             HudClickBlocker.PublishFrame();
+        }
+
+        private void RecordStatsOnce(PlayerId player)
+        {
+            if (_statsRecorded || match == null)
+                return;
+            _statsRecorded = true;
+            bool won = match.Result.Winner == player;
+            int faction = match.PlayerRoster != null ? match.PlayerRoster.Id.Value : match.PlayerFactionIndex;
+            AsterraLocalProfile.RecordMatchEnd(won, faction);
         }
 
         private void DrawResources(PlayerId player)
         {
             float hold = match.Victory != null ? match.Victory.GetHoldProgress(player) : 0f;
             bool showHold = hold > 0.001f;
-            float stripH = showDebugHud ? 28f : (showHold ? 72f : 52f);
-            var strip = new Rect(8f, 8f, 420f, stripH);
+            float stripH = showDebugHud ? HudStyle.S(28f) : (showHold ? HudStyle.S(72f) : HudStyle.S(52f));
+            var strip = new Rect(HudStyle.S(8f), HudStyle.S(8f), HudStyle.S(420f), stripH);
             HudClickBlocker.Block(strip);
             HudStyle.DrawPanel(strip, new Color(0.05f, 0.07f, 0.08f, 0.82f));
 
@@ -90,19 +167,27 @@ namespace Asterra.Gameplay
                     $"    Timber {match.Wallet.Get(player, ResourceType.Timber)}";
             }
 
-            GUI.Label(new Rect(18f, 12f, 400f, 22f), resources, HudStyle.Label);
+            GUI.Label(
+                new Rect(HudStyle.S(18f), HudStyle.S(12f), HudStyle.S(400f), HudStyle.S(22f)),
+                resources,
+                HudStyle.Label);
             if (!showDebugHud)
             {
-                GUI.Label(new Rect(18f, 32f, 400f, 18f), BuildContextLine(), HudStyle.Label);
+                GUI.Label(
+                    new Rect(HudStyle.S(18f), HudStyle.S(32f), HudStyle.S(400f), HudStyle.S(18f)),
+                    BuildContextLine(),
+                    HudStyle.Label);
                 if (showHold)
                 {
-                    float barW = 200f;
-                    HudStyle.DrawPanel(new Rect(18f, 52f, barW, 10f), new Color(0.12f, 0.12f, 0.14f, 0.95f));
+                    float barW = HudStyle.S(200f);
                     HudStyle.DrawPanel(
-                        new Rect(18f, 52f, barW * Mathf.Clamp01(hold), 10f),
+                        new Rect(HudStyle.S(18f), HudStyle.S(52f), barW, HudStyle.S(10f)),
+                        new Color(0.12f, 0.12f, 0.14f, 0.95f));
+                    HudStyle.DrawPanel(
+                        new Rect(HudStyle.S(18f), HudStyle.S(52f), barW * Mathf.Clamp01(hold), HudStyle.S(10f)),
                         new Color(0.95f, 0.75f, 0.25f, 0.95f));
                     GUI.Label(
-                        new Rect(18f + barW + 8f, 48f, 160f, 18f),
+                        new Rect(HudStyle.S(18f) + barW + HudStyle.S(8f), HudStyle.S(48f), HudStyle.S(160f), HudStyle.S(18f)),
                         $"Hold {(int)(hold * 100f)}%",
                         HudStyle.Caption);
                 }
@@ -114,11 +199,17 @@ namespace Asterra.Gameplay
             if (match == null || !match.IsMatchRunning || match.Result.IsOver)
                 return;
 
-            float x = Screen.width - 188f;
-            float y = 8f;
-            if (HudButton(new Rect(x, y, 80f, 28f), "Save", "Save skirmish (F5)"))
+            // Sit under the resource strip (left) so commander powers own the top-right.
+            float hold = match.Victory != null ? match.Victory.GetHoldProgress(match.Session.LocalPlayer) : 0f;
+            bool showHold = hold > 0.001f;
+            float stripH = showDebugHud ? HudStyle.S(28f) : (showHold ? HudStyle.S(72f) : HudStyle.S(52f));
+            float x = HudStyle.S(8f);
+            float y = HudStyle.S(8f) + stripH + HudStyle.S(6f);
+            float bw = HudStyle.S(80f);
+            float bh = HudStyle.S(28f);
+            if (HudButton(new Rect(x, y, bw, bh), "Save", "Save skirmish (F5)"))
                 match.SaveOfflineQuick();
-            if (HudButton(new Rect(x + 88f, y, 80f, 28f), "Load", "Load quicksave (F9)"))
+            if (HudButton(new Rect(x + bw + HudStyle.S(8f), y, bw, bh), "Load", "Load quicksave (F9)"))
                 match.LoadOfflineQuick();
         }
 
@@ -130,14 +221,15 @@ namespace Asterra.Gameplay
             if (selected.Count == 0 && !orders.SelectedBuilding.HasValue)
                 return;
 
-            float y = Screen.height - 278f;
+            float y = Screen.height - HudStyle.S(278f);
             BuildingSnapshot selectedBuilding = default;
             bool buildingSelected = orders.SelectedBuilding.HasValue
                 && TryGetSelectedBuilding(out selectedBuilding);
-            float panelW = 56f + selected.Count * 48f + (buildingSelected ? 56f : 0f);
+            float panelW = HudStyle.S(56f) + selected.Count * HudStyle.S(48f) + (buildingSelected ? HudStyle.S(56f) : 0f);
             if (buildingSelected && selectedBuilding.State == BuildingState.Constructing)
-                panelW = Mathf.Max(panelW, 280f);
-            var panel = new Rect(8f, y, Mathf.Min(520f, panelW), 56f);
+                panelW = Mathf.Max(panelW, HudStyle.S(280f));
+            float maxW = Mathf.Min(HudStyle.S(520f), HudStyle.ContentRight - HudStyle.S(8f));
+            var panel = new Rect(HudStyle.S(8f), y, Mathf.Min(maxW, panelW), HudStyle.S(56f));
             HudClickBlocker.Block(panel);
             HudStyle.DrawPanel(panel, new Color(0.05f, 0.07f, 0.09f, 0.88f));
 
@@ -267,7 +359,7 @@ namespace Asterra.Gameplay
             if (powerIds == null || powerIds.Length == 0)
                 return;
 
-            float y = 10f;
+            float y = HudStyle.S(10f);
             for (int i = 0; i < powerIds.Length; i++)
             {
                 string powerId = powerIds[i];
@@ -302,7 +394,7 @@ namespace Asterra.Gameplay
                     clickUse = true;
                 }
 
-                var rect = new Rect(Screen.width - 240f, y, 228f, 30f);
+                var rect = new Rect(Screen.width - HudStyle.S(240f), y, HudStyle.S(228f), HudStyle.S(30f));
                 string tip = DescribePower(powerDef, unlocked, buff, cd);
                 if (faded)
                 {
@@ -316,42 +408,39 @@ namespace Asterra.Gameplay
                         orders.ActivateCommanderAbility(powerId);
                 }
 
-                y += 34f;
+                y += HudStyle.S(34f);
             }
         }
 
         private void DrawCommandBar(PlayerId player)
         {
-            float panelY = Screen.height - 210f;
-            float x = 12f;
-            const float btnW = 118f;
-            const float btnH = 30f;
-            const float gap = 6f;
+            float panelY = Screen.height - HudStyle.S(210f);
+            float x = HudStyle.S(12f);
+            float btnW = HudStyle.S(118f);
+            float btnH = HudStyle.S(30f);
+            float gap = HudStyle.S(6f);
+            float maxX = HudStyle.ContentRight - HudStyle.S(4f);
 
             // Only block real controls — do not blanket the bottom third of the screen
             // (that swallowed world selection).
             if (orders != null)
             {
-                if (HudButton(new Rect(x, panelY, 100f, btnH), $"Idle ({orders.IdleWorkerCount})"))
+                float idleW = HudStyle.S(100f);
+                if (HudButton(new Rect(x, panelY, idleW, btnH), $"Idle ({orders.IdleWorkerCount})"))
                     orders.SelectIdleWorker();
-                x += 100f + gap;
+                x += idleW + gap;
             }
 
             bool hasCombat = orders != null && orders.HasCombatUnitSelected;
             if (hasCombat)
             {
-                if (HudButton(new Rect(x, panelY, 64f, btnH), "Stop"))
-                    orders.StopSelected();
-                x += 64f + gap;
-                if (HudButton(new Rect(x, panelY, 64f, btnH), "Aggro"))
-                    orders.SetSelectedStance(UnitStance.Aggressive);
-                x += 64f + gap;
-                if (HudButton(new Rect(x, panelY, 72f, btnH), "Defend"))
-                    orders.SetSelectedStance(UnitStance.Defensive);
-                x += 72f + gap;
-                if (HudButton(new Rect(x, panelY, 64f, btnH), "Hold"))
-                    orders.SetSelectedStance(UnitStance.Hold);
-                x += 64f + gap;
+                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Stop", () => orders.StopSelected());
+                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Aggro",
+                    () => orders.SetSelectedStance(UnitStance.Aggressive));
+                x = DrawCmdChip(x, panelY, HudStyle.S(72f), btnH, gap, maxX, "Defend",
+                    () => orders.SetSelectedStance(UnitStance.Defensive));
+                x = DrawCmdChip(x, panelY, HudStyle.S(64f), btnH, gap, maxX, "Hold",
+                    () => orders.SetSelectedStance(UnitStance.Hold));
 
                 if (match.World != null && match.PlayerRoster != null)
                 {
@@ -365,29 +454,39 @@ namespace Asterra.Gameplay
                                 continue;
                             if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
                                 continue;
-                            string tip = DescribeUpgrade(up) + " — apply to selected combat units";
+                            int equipCost = up.ResolvedEquipGoldCost;
+                            string tip = DescribeUpgrade(up)
+                                + $" — equip selected units for {equipCost}g each (research unlocks only)";
+                            float ew = HudStyle.S(160f);
+                            if (x + ew > maxX)
+                            {
+                                panelY += btnH + gap;
+                                x = HudStyle.S(12f);
+                            }
+
                             if (SelectionAllHaveEquipment(upId))
                             {
-                                HudFadedLabel(new Rect(x, panelY, 140f, btnH),
+                                HudFadedLabel(new Rect(x, panelY, ew, btnH),
                                     $"Equip {ShortName(up.DisplayName)} ✓",
                                     tip + " — already equipped");
                             }
-                            else if (HudButton(new Rect(x, panelY, 140f, btnH), $"Equip {ShortName(up.DisplayName)}", tip))
+                            else if (HudButton(new Rect(x, panelY, ew, btnH),
+                                         $"Equip {ShortName(up.DisplayName)} ({equipCost}g)", tip))
                             {
                                 orders.ApplyUpgradeToSelected(upId);
                             }
 
-                            x += 146f;
+                            x += ew + gap;
                         }
                     }
                 }
             }
 
-            float buildY = panelY + 36f;
-            float bx = 12f;
+            float buildY = panelY + HudStyle.S(36f);
+            float bx = HudStyle.S(12f);
             if (orders != null && orders.IsPlaceMode)
             {
-                if (HudButton(new Rect(bx, buildY, 160f, btnH), "Cancel Build (Esc)"))
+                if (HudButton(new Rect(bx, buildY, HudStyle.S(160f), btnH), "Cancel Build (Esc)"))
                     orders.CancelPlaceMode();
             }
             else if (orders != null && orders.HasBuilderSelected && match.PlayerRoster != null)
@@ -407,16 +506,17 @@ namespace Asterra.Gameplay
 
             if (b.State == BuildingState.Constructing)
             {
-                DrawConstructionStatus(b, panelY - 88f);
+                DrawConstructionStatus(b, panelY - HudStyle.S(88f));
                 return;
             }
 
             bool producing = !string.IsNullOrEmpty(b.ProductionUnitDefId) || b.QueueCount > 0;
             if (producing)
-                DrawProductionQueue(b, panelY - 72f);
+                DrawProductionQueue(b, panelY - HudStyle.S(72f));
 
             if (b.AllowsGarrison && b.GarrisonCount > 0
-                && HudButton(new Rect(12f, panelY - 104f, 160f, 28f), $"Unload ({b.GarrisonCount})"))
+                && HudButton(new Rect(HudStyle.S(12f), panelY - HudStyle.S(104f), HudStyle.S(160f), HudStyle.S(28f)),
+                    $"Unload ({b.GarrisonCount})"))
             {
                 if (match.Commands != null)
                 {
@@ -428,7 +528,7 @@ namespace Asterra.Gameplay
                 }
             }
 
-            float trainX = 12f;
+            float trainX = HudStyle.S(12f);
             float trainY = buildY;
             bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
             bool canTrain = isKeep || b.CanProduce
@@ -442,11 +542,11 @@ namespace Asterra.Gameplay
             if (isKeep)
             {
                 trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Builder", r.BuilderUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW + 20f, btnH, gap, "Leader", r.LeaderUnitId);
+                trainX = DrawPricedTrainButton(trainX, trainY, btnW + HudStyle.S(20f), btnH, gap, "Leader", r.LeaderUnitId);
 
-                // Keep research
-                float researchY = trainY + btnH + 6f;
-                float rx = 12f;
+                // Keep research (keep techs + equipment unlocks)
+                float researchY = trainY + btnH + HudStyle.S(6f);
+                float rx = HudStyle.S(12f);
                 var keepUps = r.KeepUpgradeIds != null && r.KeepUpgradeIds.Length > 0
                     ? r.KeepUpgradeIds
                     : r.UpgradeIds;
@@ -459,15 +559,26 @@ namespace Asterra.Gameplay
                             continue;
                         if (up.Kind == UpgradeKind.Equipment)
                             continue;
-                        rx = DrawResearchButton(rx, researchY, 150f, btnH, player, b, upId, up);
+                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
+                    }
+                }
+
+                if (r.EquipmentUpgradeIds != null)
+                {
+                    for (int i = 0; i < r.EquipmentUpgradeIds.Length; i++)
+                    {
+                        string upId = r.EquipmentUpgradeIds[i];
+                        if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
+                            continue;
+                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
                     }
                 }
 
                 // Attachment slots
                 if (b.AttachmentSlotCount > 0 && match.Definitions != null)
                 {
-                    float attachY = researchY + btnH + 6f;
-                    float ax = 12f;
+                    float attachY = researchY + btnH + HudStyle.S(6f);
+                    float ax = HudStyle.S(12f);
                     string attachDef = FactionDefaultContent.KeepTurretId;
                     if (!match.Definitions.TryGetBuilding(attachDef, out _)
                         && match.Definitions.TryGetBuilding(r.TowerBuildingId, out _))
@@ -479,19 +590,19 @@ namespace Asterra.Gameplay
                         string slotName = slot == 0 ? "N" : slot == 1 ? "E" : slot == 2 ? "S" : "W";
                         if (occupied)
                         {
-                            HudFadedLabel(new Rect(ax, attachY, 100f, btnH), $"Turret {slotName} ✓",
+                            HudFadedLabel(new Rect(ax, attachY, HudStyle.S(100f), btnH), $"Turret {slotName} ✓",
                                 "Attachment slot occupied");
-                            ax += 106f;
+                            ax += HudStyle.S(106f);
                             continue;
                         }
 
                         string cost = string.Empty;
                         if (match.Definitions.TryGetBuilding(attachDef, out var aDef))
                             cost = $" {aDef.GoldCost}g/{aDef.TimberCost}t";
-                        if (HudButton(new Rect(ax, attachY, 130f, btnH), $"Turret {slotName}{cost}",
+                        if (HudButton(new Rect(ax, attachY, HudStyle.S(130f), btnH), $"Turret {slotName}{cost}",
                                 "Mount a keep turret on this pad (attach-only)"))
                             orders.AttachToKeep(slot, attachDef);
-                        ax += 136f;
+                        ax += HudStyle.S(136f);
                     }
                 }
             }
@@ -507,20 +618,44 @@ namespace Asterra.Gameplay
                     && r.EquipmentUpgradeIds != null
                     && r.EquipmentUpgradeIds.Length > 0)
                 {
-                    float researchY = trainY + btnH + 6f;
-                    float rx = 12f;
+                    float researchY = trainY + btnH + HudStyle.S(6f);
+                    float rx = HudStyle.S(12f);
                     for (int i = 0; i < r.EquipmentUpgradeIds.Length; i++)
                     {
                         string upId = r.EquipmentUpgradeIds[i];
                         if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
                             continue;
-                        rx = DrawResearchButton(rx, researchY, 150f, btnH, player, b, upId, up);
+                        rx = DrawResearchButton(rx, researchY, HudStyle.S(150f), btnH, player, b, upId, up);
                     }
                 }
             }
 
-            if (producing && HudButton(new Rect(trainX, trainY, 110f, btnH), "Cancel (X)"))
+            if (producing && HudButton(new Rect(trainX, trainY, HudStyle.S(110f), btnH), "Cancel (X)"))
                 orders.CancelProduction();
+        }
+
+        private float DrawCmdChip(
+            float x,
+            float y,
+            float w,
+            float h,
+            float gap,
+            float maxX,
+            string label,
+            System.Action onClick)
+        {
+            if (x + w > maxX)
+            {
+                // Caller keeps y; wrapping handled by returning reset x via sentinel is awkward —
+                // combat chips are short enough for typical widths; clamp instead.
+                w = Mathf.Max(HudStyle.S(48f), maxX - x);
+                if (w < HudStyle.S(40f))
+                    return x;
+            }
+
+            if (HudButton(new Rect(x, y, w, h), label))
+                onClick?.Invoke();
+            return x + w + gap;
         }
 
         private float DrawPricedTrainButton(float x, float y, float w, float h, float gap, string title, string unitId)
@@ -552,14 +687,18 @@ namespace Asterra.Gameplay
         private float DrawPricedBuildingButton(float x, float y, float h, float gap, string title, string buildingId)
         {
             string label = title;
-            float w = 128f;
+            float w = HudStyle.S(128f);
             string tip = title;
             if (match.Definitions != null && match.Definitions.TryGetBuilding(buildingId, out var def))
             {
                 label = $"{title} {def.GoldCost}g/{def.TimberCost}t";
-                w = 150f;
+                w = HudStyle.S(150f);
                 tip = DescribeBuilding(def);
             }
+
+            float maxX = HudStyle.ContentRight - HudStyle.S(4f);
+            if (x + w > maxX)
+                w = Mathf.Max(HudStyle.S(80f), maxX - x);
 
             if (HudButton(new Rect(x, y, w, h), label, tip))
                 orders.EnterPlaceMode(buildingId);
@@ -597,9 +736,7 @@ namespace Asterra.Gameplay
 
         private static bool HudButton(Rect rect, string label, string tip)
         {
-            HudClickBlocker.Block(rect);
-            HudStyle.DrawPanel(rect, new Color(0.09f, 0.11f, 0.13f, 0.94f));
-            bool clicked = GUI.Button(rect, label, HudStyle.Button);
+            bool clicked = HudStyle.PanelButton(rect, label, new Color(0.09f, 0.11f, 0.13f, 0.94f));
             if (clicked)
                 AsterraAudio.PlayUiClick();
             if (!string.IsNullOrEmpty(tip) && rect.Contains(Event.current.mousePosition))
@@ -630,10 +767,17 @@ namespace Asterra.Gameplay
             if (string.IsNullOrEmpty(_hoverTip))
                 return;
 
-            var tipRect = new Rect(12f, Screen.height - 248f, Mathf.Min(520f, Screen.width - 24f), 34f);
+            var tipRect = new Rect(
+                HudStyle.S(12f),
+                Screen.height - HudStyle.S(248f),
+                Mathf.Min(HudStyle.S(520f), HudStyle.ContentRight - HudStyle.S(16f)),
+                HudStyle.S(34f));
             HudClickBlocker.Block(tipRect);
             HudStyle.DrawPanel(tipRect, new Color(0.04f, 0.05f, 0.07f, 0.92f));
-            GUI.Label(new Rect(tipRect.x + 10f, tipRect.y + 6f, tipRect.width - 20f, 22f), _hoverTip, HudStyle.Label);
+            GUI.Label(
+                new Rect(tipRect.x + HudStyle.S(10f), tipRect.y + HudStyle.S(6f), tipRect.width - HudStyle.S(20f), HudStyle.S(22f)),
+                _hoverTip,
+                HudStyle.Label);
         }
 
         private void DrawEndScreen(PlayerId player)
@@ -664,11 +808,15 @@ namespace Asterra.Gameplay
             if (HudButton(new Rect(endRect.x + 40f, by, 160f, 34f), "Main Menu"))
             {
                 _endSfxPlayed = false;
+                _statsRecorded = false;
+                _overlay = AsterraMenuPanels.Overlay.None;
                 match.ReturnToMainMenu();
             }
             if (HudButton(new Rect(endRect.xMax - 200f, by, 160f, 34f), "Rematch"))
             {
                 _endSfxPlayed = false;
+                _statsRecorded = false;
+                _overlay = AsterraMenuPanels.Overlay.None;
                 match.RematchOffline();
             }
         }
@@ -824,6 +972,11 @@ namespace Asterra.Gameplay
             var selected = orders.Selection.Selected;
             if (selected.Count == 0)
                 return false;
+
+            UpgradeDefData def = null;
+            if (match.Definitions != null)
+                match.Definitions.TryGetUpgrade(upgradeId, out def);
+
             int matched = 0;
             for (int i = 0; i < selected.Count; i++)
             {
@@ -835,6 +988,13 @@ namespace Asterra.Gameplay
                     if (snap.Id.Value != id)
                         continue;
                     found = true;
+                    if (FactionDefaultContent.IsBuilderUnitId(snap.DefinitionId))
+                        break;
+                    if (def != null
+                        && match.Definitions != null
+                        && match.Definitions.TryGetUnit(snap.DefinitionId, out var unitDef)
+                        && !def.FitsUnitRole(unitDef.Role))
+                        break;
                     if (!snap.HasAppliedEquipment(upgradeId))
                         return false;
                     matched++;
@@ -846,6 +1006,22 @@ namespace Asterra.Gameplay
             }
 
             return matched > 0;
+        }
+
+        private static string DescribeCompatibleRoles(UpgradeDefData up)
+        {
+            if (up == null || up.CompatibleRoleMask == 0)
+                return string.Empty;
+            var names = new System.Collections.Generic.List<string>(3);
+            if ((up.CompatibleRoleMask & (1 << (int)UnitRole.Infantry)) != 0)
+                names.Add("infantry");
+            if ((up.CompatibleRoleMask & (1 << (int)UnitRole.Ranged)) != 0)
+                names.Add("ranged");
+            if ((up.CompatibleRoleMask & (1 << (int)UnitRole.Cavalry)) != 0)
+                names.Add("cavalry");
+            if ((up.CompatibleRoleMask & (1 << (int)UnitRole.Siege)) != 0)
+                names.Add("siege");
+            return names.Count > 0 ? " [" + string.Join("/", names) + " only]" : string.Empty;
         }
 
         private bool TryGetSelectedBuilding(out BuildingSnapshot building)
@@ -929,7 +1105,8 @@ namespace Asterra.Gameplay
                 if (System.Math.Abs(up.UnitDamageMultiplier - 1f) > 0.01f)
                     parts.Add($"×{up.UnitDamageMultiplier:0.##} damage");
                 string effect = parts.Count > 0 ? string.Join(", ", parts) : "equipment boost";
-                return $"{up.DisplayName}: research then Equip on selected units — {effect}";
+                string roles = DescribeCompatibleRoles(up);
+                return $"{up.DisplayName}: research ({up.GoldCost}g) then Equip selected ({up.ResolvedEquipGoldCost}g each){roles} — {effect}";
             }
 
             if (up.KeepHealthBonus > 0f || up.KeepSightBonus > 0f)

@@ -158,6 +158,42 @@ namespace Asterra.Gameplay
                 "progress with builder on site",
                 foundation.BuildSecondsRemaining < remainingAtArrive - 0.5f);
 
+            // Keep turret attach (attach-only) + builder attract.
+            var attachBuilder = sim.SpawnUnit(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.IronBuilderId,
+                keep.X + 55f,
+                keep.Z + 10f);
+            int beforeAttach = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new AttachBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    ParentBuildingId = keep.Id,
+                    SlotIndex = 0,
+                    BuildingDefId = FactionDefaultContent.KeepTurretId,
+                },
+            });
+            Expect(ref fails, sb, "keep turret attached", sim.Buildings.Count == beforeAttach + 1);
+            Expect(ref fails, sb, "keep slot occupied", keep.AttachmentOccupantIds[0] != 0);
+            Expect(ref fails, sb, "attach attracts builder", attachBuilder.PathCount > 0);
+
+            int beforeBad = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new PlaceBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    BuildingDefId = FactionDefaultContent.KeepTurretId,
+                    X = keep.X + 70f,
+                    Z = keep.Z + 70f,
+                },
+            });
+            Expect(ref fails, sb, "keep turret cannot free-place", sim.Buildings.Count == beforeBad);
+
             sb.Append(fails == 0 ? "BuildingSystemsSelfTest: OK" : $"BuildingSystemsSelfTest: FAIL ({fails})");
             return sb.ToString();
         }

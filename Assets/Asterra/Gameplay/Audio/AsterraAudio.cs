@@ -72,7 +72,9 @@ namespace Asterra.Gameplay.Audio
             DontDestroyOnLoad(gameObject);
             EnsureSources();
             BuildLibrary();
+            AsterraSettings.ApplyAudio();
             StartBeds();
+            AsterraSettings.ApplyAudio();
         }
 
         private void OnDestroy()
@@ -86,6 +88,30 @@ namespace Asterra.Gameplay.Audio
 
         public static void PlayUiClick() => Instance.PlayUiClickInternal();
 
+        public void SetMusicMuted(bool muted)
+        {
+            if (_music != null)
+                _music.mute = muted;
+        }
+
+        /// <summary>Apply persisted volumes (and mute preference) without rewriting prefs.</summary>
+        public void ApplyVolumes(float master, float music, float sfx, float ambience, bool musicMuted)
+        {
+            masterVolume = Mathf.Clamp01(master);
+            musicVolume = Mathf.Clamp01(music);
+            sfxVolume = Mathf.Clamp01(sfx);
+            ambienceVolume = Mathf.Clamp01(ambience);
+            EnsureSources();
+            if (_music != null)
+            {
+                _music.volume = musicVolume * masterVolume;
+                _music.mute = musicMuted;
+            }
+
+            if (_ambience != null)
+                _ambience.volume = ambienceVolume * masterVolume;
+        }
+
         public void SetAmbienceIntensity(float intensity01)
         {
             if (_ambience == null)
@@ -93,20 +119,23 @@ namespace Asterra.Gameplay.Audio
             _ambience.volume = ambienceVolume * masterVolume * Mathf.Clamp01(intensity01);
         }
 
-        public void SetMusicMuted(bool muted)
-        {
-            if (_music != null)
-                _music.mute = muted;
-        }
-
         private void EnsureSources()
         {
-            _sfx = CreateSource("Sfx", spatial: false);
-            _ui = CreateSource("Ui", spatial: false);
-            _music = CreateSource("Music", spatial: false);
-            _ambience = CreateSource("Ambience", spatial: false);
-            _music.loop = true;
-            _ambience.loop = true;
+            if (_sfx == null)
+                _sfx = CreateSource("Sfx", spatial: false);
+            if (_ui == null)
+                _ui = CreateSource("Ui", spatial: false);
+            if (_music == null)
+            {
+                _music = CreateSource("Music", spatial: false);
+                _music.loop = true;
+            }
+
+            if (_ambience == null)
+            {
+                _ambience = CreateSource("Ambience", spatial: false);
+                _ambience.loop = true;
+            }
         }
 
         private AudioSource CreateSource(string name, bool spatial)

@@ -60,11 +60,27 @@ namespace Asterra.Gameplay.Player
         public bool IsPlaceMode => _placeMode;
         public bool IsAttackMoveArmed => _attackMoveArmed;
         public bool IsPatrolArmed => _patrolArmed;
+        public bool HasArmedMode => _placeMode || _attackMoveArmed || _patrolArmed;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
         public int IdleWorkerCount => CountIdleWorkers();
         public bool HasBuilderSelected => HasSelectedBuilder();
         public bool HasCombatUnitSelected => HasSelectedCombatUnit();
+        public bool HasOwnedGarrisonedCombatUnit()
+        {
+            if (_world == null)
+                return false;
+            for (int u = 0; u < _world.Units.Count; u++)
+            {
+                var unit = _world.Units[u];
+                if (unit.Owner != _local || !unit.IsAlive || !unit.IsGarrisoned)
+                    continue;
+                if (!FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
+                    return true;
+            }
+
+            return false;
+        }
 
         private static List<SimEntityId>[] CreateControlGroups()
         {
@@ -303,6 +319,43 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (!TryGetBuildingSnapshot(_selectedBuilding.Value, out var building))
+            {
+                MatchFeedback.Show("Select a keep or barracks to research", AsterraSfx.Invalid);
+                return;
+            }
+
+            if (match != null && match.Definitions != null
+                && match.Definitions.TryGetUpgrade(upgradeDefId, out var def))
+            {
+                bool keepTech = def.Kind == UpgradeKind.Keep;
+                bool atKeep = building.Kind == BuildingKind.Keep;
+                bool atProducer = building.Kind == BuildingKind.Producer;
+                if (keepTech && !atKeep)
+                {
+                    MatchFeedback.Show("Research this at the keep", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (!keepTech && !atProducer && !atKeep)
+                {
+                    MatchFeedback.Show("Research equipment at barracks or keep", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(building.ResearchUpgradeDefId))
+                {
+                    MatchFeedback.Show("Already researching", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (match.Wallet != null && !match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost))
+                {
+                    MatchFeedback.Show("Not enough gold", AsterraSfx.Invalid);
+                    return;
+                }
+            }
+
             _commands.SubmitLocal(new ChooseUpgradeCommand
             {
                 Issuer = _local,
@@ -321,42 +374,70 @@ namespace Asterra.Gameplay.Player
 
         public void ApplyUpgradeToSelected(string upgradeDefId)
         {
-            if (_commands == null || _selection == null || _selection.Selected.Count == 0)
+            if (_commands == null || _world == null)
                 return;
-            if (_world == null || !_world.HasUpgrade(_local, upgradeDefId))
+            if (!_world.HasUpgrade(_local, upgradeDefId))
             {
                 MatchFeedback.Show("Research equipment at barracks first", AsterraSfx.Invalid);
                 return;
             }
 
-            var selected = _selection.Selected;
-            var pending = new System.Collections.Generic.List<SimEntityId>(selected.Count);
-            for (int i = 0; i < selected.Count; i++)
+            if (_selection == null || _selection.Selected.Count == 0)
             {
-                var id = selected[i];
-                bool already = false;
-                bool skip = false;
+                MatchFeedback.Show("Select combat units to equip", AsterraSfx.Invalid);
+                return;
+            }
+
+            UpgradeDefData def = null;
+            int equipCost = 40;
+            if (match?.Definitions != null && match.Definitions.TryGetUpgrade(upgradeDefId, out def))
+                equipCost = def.ResolvedEquipGoldCost;
+
+            var pending = new System.Collections.Generic.List<SimEntityId>(_selection.Selected.Count);
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
                 for (int u = 0; u < _world.Units.Count; u++)
                 {
                     var snap = _world.Units[u];
                     if (snap.Id.Value != id.Value)
                         continue;
+                    if (snap.Owner != _local || !snap.IsAlive)
+                        break;
                     if (FactionDefaultContent.IsBuilderUnitId(snap.DefinitionId))
-                        skip = true;
-                    else
-                        already = snap.HasAppliedEquipment(upgradeDefId);
+                        break;
+                    if (def != null
+                        && match.Definitions != null
+                        && match.Definitions.TryGetUnit(snap.DefinitionId, out var unitDef)
+                        && !def.FitsUnitRole(unitDef.Role))
+                        break;
+                    if (snap.HasAppliedEquipment(upgradeDefId))
+                        break;
+                    pending.Add(id);
                     break;
                 }
-
-                if (skip || already)
-                    continue;
-                pending.Add(id);
             }
 
             if (pending.Count == 0)
             {
-                MatchFeedback.Show("Already equipped on selection", AsterraSfx.Invalid);
+                MatchFeedback.Show(
+                    "Nothing eligible to equip (wrong unit type or already equipped)",
+                    AsterraSfx.Invalid);
                 return;
+            }
+
+            if (match?.Wallet != null && equipCost > 0)
+            {
+                int gold = match.Wallet.Get(_local, ResourceType.Gold);
+                int affordable = gold / equipCost;
+                if (affordable <= 0)
+                {
+                    MatchFeedback.Show($"Need {equipCost}g per unit to equip", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (affordable < pending.Count)
+                    pending.RemoveRange(affordable, pending.Count - affordable);
             }
 
             _commands.SubmitLocal(new ApplyUnitUpgradeCommand
@@ -365,6 +446,9 @@ namespace Asterra.Gameplay.Player
                 UpgradeDefId = upgradeDefId,
                 UnitIds = pending.ToArray(),
             });
+            MatchFeedback.Show(
+                $"Equipping {pending.Count} (−{pending.Count * equipCost}g)",
+                AsterraSfx.OrderMove);
         }
 
         public void AttachToKeep(byte slotIndex, string buildingDefId)
@@ -570,6 +654,8 @@ namespace Asterra.Gameplay.Player
         {
             if (match == null || _commands == null || match.Result.IsOver)
                 return;
+            if (match.IsMenuOverlayOpen)
+                return;
 
             HandlePointer();
             HandleHotkeys();
@@ -603,11 +689,14 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             {
-                if (_attackMoveArmed)
-                    CancelAttackMoveArm();
-                if (_patrolArmed)
-                    CancelPatrolArm();
-                CancelPlaceMode();
+                if (_attackMoveArmed || _patrolArmed || _placeMode)
+                {
+                    if (_attackMoveArmed)
+                        CancelAttackMoveArm();
+                    if (_patrolArmed)
+                        CancelPatrolArm();
+                    CancelPlaceMode();
+                }
             }
 
             if (_attackMoveArmed)
@@ -868,22 +957,13 @@ namespace Asterra.Gameplay.Player
 
         private void HandleClickSelect(bool additive)
         {
-            if (TryPickEntity(out var view, preferUnits: true))
+            // Prefer buildings when the ray hits one — large squad pick spheres otherwise steal keep/tower clicks.
+            if (TryPickEntity(out var view, preferUnits: false))
             {
-                if (view.IsUnit && view.Owner == _local)
-                {
-                    _selectedBuilding = null;
-                    if (additive)
-                        _selection.Toggle(view.Id);
-                    else
-                        _selection.Set(new[] { view.Id });
-                    return;
-                }
-
                 if (!view.IsUnit && view.Owner == _local)
                 {
-                    // Prefer keeping unit selection when a unit is under / near the cursor.
-                    if (TryPickOwnedUnitNearCursor(out var nearbyUnit))
+                    // Only keep unit selection if a unit collider is clearly closer than the building.
+                    if (TryPickCloserOwnedUnitThan(view, out var nearbyUnit))
                     {
                         _selectedBuilding = null;
                         if (additive)
@@ -898,6 +978,16 @@ namespace Asterra.Gameplay.Player
                     return;
                 }
 
+                if (view.IsUnit && view.Owner == _local)
+                {
+                    _selectedBuilding = null;
+                    if (additive)
+                        _selection.Toggle(view.Id);
+                    else
+                        _selection.Set(new[] { view.Id });
+                    return;
+                }
+
                 // Enemy / neutral under cursor: keep current selection (do not clear).
                 return;
             }
@@ -907,6 +997,36 @@ namespace Asterra.Gameplay.Player
                 _selection.Clear();
                 _selectedBuilding = null;
             }
+        }
+
+        private bool TryPickCloserOwnedUnitThan(EntityView building, out EntityView unit)
+        {
+            unit = null;
+            if (rigCamera == null || building == null)
+                return false;
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, 5000f, clickMask, QueryTriggerInteraction.Ignore);
+            float buildingDist = float.MaxValue;
+            float bestUnitDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var candidate = _rayHits[i].collider != null
+                    ? _rayHits[i].collider.GetComponentInParent<EntityView>()
+                    : null;
+                if (candidate == null || !candidate.IsRevealed)
+                    continue;
+                float d = _rayHits[i].distance;
+                if (candidate == building || (!candidate.IsUnit && candidate.Id.Value == building.Id.Value))
+                    buildingDist = Mathf.Min(buildingDist, d);
+                if (candidate.IsUnit && candidate.Owner == _local && d < bestUnitDist)
+                {
+                    bestUnitDist = d;
+                    unit = candidate;
+                }
+            }
+
+            // Unit must be meaningfully closer (not just overlapping a huge old pick sphere).
+            return unit != null && bestUnitDist + 1.5f < buildingDist;
         }
 
         private bool TryPickOwnedUnitNearCursor(out EntityView unit)
@@ -1296,6 +1416,13 @@ namespace Asterra.Gameplay.Player
 
         private void UpdateCursorMode()
         {
+            // HUD / menus own the pointer — never show world move/invalid under chrome.
+            if (IsPointerOverUi())
+            {
+                CurrentCursorMode = OrderCursorMode.Select;
+                return;
+            }
+
             if (_placeMode)
             {
                 if (TryRaycastGround(out float x, out float z))
@@ -1307,7 +1434,8 @@ namespace Asterra.Gameplay.Player
 
             if (_attackMoveArmed)
             {
-                if (TryRaycastGround(out float ax, out float az) && !IsPassableForSelection(ax, az))
+                if (TryRaycastGround(out float ax, out float az) && !IsPassableForSelection(ax, az)
+                    && !TryPickEntity(out _))
                     CurrentCursorMode = OrderCursorMode.Invalid;
                 else
                     CurrentCursorMode = OrderCursorMode.Attack;
@@ -1316,7 +1444,8 @@ namespace Asterra.Gameplay.Player
 
             if (_patrolArmed)
             {
-                if (TryRaycastGround(out float px, out float pz) && !IsPassableForSelection(px, pz))
+                if (TryRaycastGround(out float px, out float pz) && !IsPassableForSelection(px, pz)
+                    && !TryPickEntity(out _))
                     CurrentCursorMode = OrderCursorMode.Invalid;
                 else
                     CurrentCursorMode = OrderCursorMode.Move;
@@ -1337,9 +1466,16 @@ namespace Asterra.Gameplay.Player
                     return;
                 }
 
-                if (TryPickEntity(out var hover) && hover.Owner != _local && hover.IsRevealed)
+                if (TryPickEntity(out var hover) && hover.IsRevealed)
                 {
-                    CurrentCursorMode = OrderCursorMode.Attack;
+                    if (hover.Owner != _local)
+                    {
+                        CurrentCursorMode = OrderCursorMode.Attack;
+                        return;
+                    }
+
+                    // Own building / unit under cursor — never show no-entry over footprints.
+                    CurrentCursorMode = OrderCursorMode.Move;
                     return;
                 }
 
@@ -1350,6 +1486,12 @@ namespace Asterra.Gameplay.Player
                 }
 
                 CurrentCursorMode = OrderCursorMode.Move;
+                return;
+            }
+
+            if (TryPickEntity(out var underCursor) && underCursor.IsRevealed && underCursor.Owner == _local)
+            {
+                CurrentCursorMode = underCursor.IsUnit ? OrderCursorMode.Select : OrderCursorMode.Train;
                 return;
             }
 

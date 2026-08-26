@@ -3,19 +3,42 @@ using UnityEngine;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Shared OnGUI chrome: panels, icon buttons, selection portraits.</summary>
+    /// <summary>Shared OnGUI chrome: panels, icon buttons, selection portraits, layout scale.</summary>
     public static class HudStyle
     {
         private static GUIStyle _panel;
         private static GUIStyle _title;
         private static GUIStyle _label;
         private static GUIStyle _button;
+        private static GUIStyle _flatButton;
         private static GUIStyle _toast;
         private static GUIStyle _subtitle;
         private static GUIStyle _caption;
         private static GUIStyle _body;
         private static Texture2D _white;
         private static readonly Dictionary<string, Texture2D> Icons = new();
+        private static float _appliedScale = -1f;
+
+        /// <summary>Current UI scale from settings.</summary>
+        public static float Scale => AsterraSettings.UiScale;
+
+        public static float S(float pixels) => pixels * Scale;
+
+        public static float MinimapSize => S(180f);
+        public static float MinimapMargin => S(12f);
+
+        /// <summary>Bottom-right minimap rect (shared with <see cref="Presentation.MinimapPresenter"/>).</summary>
+        public static Rect MinimapRect =>
+            new Rect(
+                Screen.width - MinimapSize - MinimapMargin,
+                Screen.height - MinimapSize - MinimapMargin,
+                MinimapSize,
+                MinimapSize);
+
+        /// <summary>Right edge for bottom HUD chrome (clears the minimap).</summary>
+        public static float ContentRight => Screen.width - MinimapSize - MinimapMargin * 2f;
+
+        public static void InvalidateScale() => _appliedScale = -1f;
 
         public static void Ensure()
         {
@@ -26,79 +49,83 @@ namespace Asterra.Gameplay
                 _white.Apply();
             }
 
-            if (_panel == null)
-            {
-                _panel = new GUIStyle(GUI.skin.box)
-                {
-                    alignment = TextAnchor.UpperLeft,
-                    fontSize = 13,
-                    padding = new RectOffset(10, 10, 8, 8),
-                };
-            }
+            float scale = Scale;
+            bool needStyles = _panel == null || !Mathf.Approximately(scale, _appliedScale);
+            if (!needStyles)
+                return;
 
-            if (_title == null)
-            {
-                _title = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 22,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-            }
+            _appliedScale = scale;
+            int fs = Mathf.RoundToInt(13f * scale);
+            int fsTitle = Mathf.RoundToInt(22f * scale);
+            int fsCaption = Mathf.RoundToInt(11f * scale);
+            int fsButton = Mathf.RoundToInt(12f * scale);
+            int fsToast = Mathf.RoundToInt(14f * scale);
 
-            if (_label == null)
-                _label = new GUIStyle(GUI.skin.label) { fontSize = 13 };
-
-            if (_subtitle == null)
+            _panel = new GUIStyle(GUI.skin.box)
             {
-                _subtitle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 12,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-            }
+                alignment = TextAnchor.UpperLeft,
+                fontSize = fs,
+                padding = new RectOffset(10, 10, 8, 8),
+            };
 
-            if (_caption == null)
+            _title = new GUIStyle(GUI.skin.label)
             {
-                _caption = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 11,
-                    alignment = TextAnchor.MiddleLeft,
-                    wordWrap = true,
-                };
-            }
+                fontSize = fsTitle,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
 
-            if (_body == null)
-            {
-                _body = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 13,
-                    alignment = TextAnchor.UpperLeft,
-                    wordWrap = true,
-                };
-            }
+            _label = new GUIStyle(GUI.skin.label) { fontSize = fs };
 
-            if (_button == null)
+            _subtitle = new GUIStyle(GUI.skin.label)
             {
-                _button = new GUIStyle(GUI.skin.button)
-                {
-                    fontSize = 12,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                    padding = new RectOffset(6, 6, 4, 4),
-                };
-            }
+                fontSize = Mathf.RoundToInt(12f * scale),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
 
-            if (_toast == null)
+            _caption = new GUIStyle(GUI.skin.label)
             {
-                _toast = new GUIStyle(GUI.skin.box)
-                {
-                    fontSize = 14,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-            }
+                fontSize = fsCaption,
+                alignment = TextAnchor.MiddleLeft,
+                wordWrap = true,
+            };
+
+            _body = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fs,
+                alignment = TextAnchor.UpperLeft,
+                wordWrap = true,
+            };
+
+            _button = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = fsButton,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(6, 6, 4, 4),
+            };
+
+            // Hit-tested over custom DrawPanel/DrawFrame so skin chrome doesn't shift the face.
+            _flatButton = new GUIStyle(GUIStyle.none)
+            {
+                fontSize = fsButton,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(6, 6, 4, 4),
+                clipping = TextClipping.Clip,
+            };
+            _flatButton.normal.textColor = new Color(0.92f, 0.94f, 0.9f, 1f);
+            _flatButton.hover.textColor = Color.white;
+            _flatButton.active.textColor = new Color(1f, 0.95f, 0.75f, 1f);
+            _flatButton.focused.textColor = _flatButton.normal.textColor;
+
+            _toast = new GUIStyle(GUI.skin.box)
+            {
+                fontSize = fsToast,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
         }
 
         public static GUIStyle Panel
@@ -115,7 +142,33 @@ namespace Asterra.Gameplay
         public static GUIStyle Caption { get { Ensure(); return _caption; } }
         public static GUIStyle Body { get { Ensure(); return _body; } }
         public static GUIStyle Button { get { Ensure(); return _button; } }
+        public static GUIStyle FlatButton { get { Ensure(); return _flatButton; } }
         public static GUIStyle Toast { get { Ensure(); return _toast; } }
+
+        /// <summary>
+        /// Draw chrome + a full-rect clickable that matches the visual (no skin button inset).
+        /// </summary>
+        public static bool PanelButton(Rect rect, string label, Color fill)
+        {
+            Ensure();
+            HudClickBlocker.Block(rect);
+            bool hover = Event.current != null && rect.Contains(Event.current.mousePosition);
+            DrawPanel(rect, hover ? Color.Lerp(fill, Color.white, 0.08f) : fill);
+            return GUI.Button(rect, label, FlatButton);
+        }
+
+        public static bool FrameButton(Rect rect, string label, Color fill, Color border, float borderWidth = 1f)
+        {
+            Ensure();
+            HudClickBlocker.Block(rect);
+            bool hover = Event.current != null && rect.Contains(Event.current.mousePosition);
+            DrawFrame(
+                rect,
+                hover ? Color.Lerp(fill, Color.white, 0.1f) : fill,
+                border,
+                borderWidth);
+            return GUI.Button(rect, label, FlatButton);
+        }
 
         public static void DrawPanel(Rect rect, Color fill)
         {
@@ -156,16 +209,17 @@ namespace Asterra.Gameplay
         {
             Ensure();
             HudClickBlocker.Block(rect);
-            DrawPanel(rect, new Color(0.08f, 0.1f, 0.12f, 0.92f));
+            bool hover = Event.current != null && rect.Contains(Event.current.mousePosition);
+            DrawPanel(rect, hover
+                ? new Color(0.12f, 0.14f, 0.16f, 0.95f)
+                : new Color(0.08f, 0.1f, 0.12f, 0.92f));
             var icon = GetIcon(iconKey, accent);
             float iconSize = Mathf.Min(22f, rect.height - 8f);
             GUI.DrawTexture(new Rect(rect.x + 6f, rect.y + (rect.height - iconSize) * 0.5f, iconSize, iconSize), icon);
             var old = GUI.color;
             GUI.color = new Color(0.92f, 0.94f, 0.9f, 1f);
-            bool clicked = GUI.Button(
-                new Rect(rect.x + iconSize + 8f, rect.y, rect.width - iconSize - 10f, rect.height),
-                label,
-                Button);
+            // Full-rect hit target (icon + label) so clickable matches the chrome.
+            bool clicked = GUI.Button(rect, "    " + label, FlatButton);
             GUI.color = old;
             return clicked;
         }
@@ -279,48 +333,61 @@ namespace Asterra.Gameplay
 
         private static Texture2D BuildPortrait(string definitionId, Color faction)
         {
-            const int s = 40;
+            const int s = 48;
             var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
             tex.filterMode = FilterMode.Bilinear;
-            Color bg = Color.Lerp(faction, new Color(0.05f, 0.07f, 0.08f), 0.45f);
+            Color deep = new Color(0.04f, 0.05f, 0.06f, 1f);
+            Color bg = Color.Lerp(faction, deep, 0.55f);
+            Color rim = Color.Lerp(faction, Color.white, 0.45f);
             for (int y = 0; y < s; y++)
             for (int x = 0; x < s; x++)
             {
+                bool outer = x == 0 || y == 0 || x == s - 1 || y == s - 1;
                 bool border = x < 2 || y < 2 || x >= s - 2 || y >= s - 2;
-                tex.SetPixel(x, y, border ? Color.Lerp(faction, Color.white, 0.35f) : bg);
+                if (outer)
+                    tex.SetPixel(x, y, Color.Lerp(rim, Color.black, 0.35f));
+                else if (border)
+                    tex.SetPixel(x, y, rim);
+                else
+                {
+                    // Subtle vertical vignette so portraits read less flat.
+                    float t = y / (float)(s - 1);
+                    tex.SetPixel(x, y, Color.Lerp(bg, deep, t * 0.35f));
+                }
             }
 
-            Color body = Color.Lerp(faction, Color.white, 0.2f);
+            Color body = Color.Lerp(faction, Color.white, 0.22f);
             string id = definitionId ?? string.Empty;
             if (id.Contains("archer") || id.Contains("ranger") || id.Contains("acolyte") || id.Contains("mage"))
             {
-                FillRect(tex, 16, 8, 24, 32, body);
-                FillRect(tex, 22, 10, 28, 30, Color.Lerp(body, Color.cyan, 0.35f));
+                FillRect(tex, 18, 10, 30, 38, body);
+                FillRect(tex, 26, 12, 34, 36, Color.Lerp(body, Color.cyan, 0.35f));
             }
             else if (id.Contains("knight") || id.Contains("cavalry") || id.Contains("rider"))
             {
-                FillRect(tex, 8, 18, 32, 28, body);
-                FillRect(tex, 14, 8, 24, 20, Color.Lerp(body, Color.white, 0.2f));
+                FillRect(tex, 8, 22, 40, 34, body);
+                FillRect(tex, 16, 10, 30, 24, Color.Lerp(body, Color.white, 0.2f));
             }
-            else if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista") || id.Contains("guardian"))
+            else if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista"))
             {
-                FillRect(tex, 6, 16, 34, 28, body);
-                FillRect(tex, 18, 6, 30, 18, Color.Lerp(body, Color.black, 0.2f));
+                FillRect(tex, 6, 20, 42, 34, body);
+                FillRect(tex, 20, 8, 36, 22, Color.Lerp(body, Color.black, 0.2f));
             }
-            else if (id.Contains("builder") || id.Contains("guardian") && id.Contains("forest"))
+            else if (id.Contains("builder"))
             {
-                FillRect(tex, 12, 10, 28, 30, body);
-                FillRect(tex, 26, 14, 34, 20, Color.Lerp(body, Color.yellow, 0.3f));
+                FillRect(tex, 14, 12, 34, 36, body);
+                FillRect(tex, 30, 16, 40, 24, Color.Lerp(body, Color.yellow, 0.3f));
             }
-            else if (id.Contains("lucien") || id.Contains("captain") || id.Contains("hierophant") || id.Contains("leader"))
+            else if (id.Contains("lucien") || id.Contains("captain") || id.Contains("hierophant") || id.Contains("leader")
+                     || id.Contains("vale") || id.Contains("flame"))
             {
-                FillRect(tex, 12, 10, 28, 32, body);
-                FillRect(tex, 10, 4, 30, 12, Color.Lerp(faction, Color.yellow, 0.55f));
+                FillRect(tex, 14, 12, 34, 38, body);
+                FillRect(tex, 12, 6, 36, 14, Color.Lerp(faction, Color.yellow, 0.55f));
             }
             else
             {
-                FillRect(tex, 12, 8, 28, 32, body);
-                FillRect(tex, 8, 16, 14, 26, Color.Lerp(body, Color.white, 0.15f));
+                FillRect(tex, 14, 10, 34, 38, body);
+                FillRect(tex, 8, 18, 16, 30, Color.Lerp(body, Color.white, 0.15f));
             }
 
             tex.Apply();

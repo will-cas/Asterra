@@ -64,6 +64,12 @@ namespace Asterra.Core
         public bool IsLeader;
         /// <summary>Hard collision radius vs units and building footprints.</summary>
         public float CollisionRadius = 2.2f;
+        /// <summary>
+        /// How many troop meshes to show for this unit (presentation only).
+        /// 0 = use role default (infantry 16, ranged 12, cavalry 6, else 1).
+        /// Leaders, builders, and siege stay single regardless.
+        /// </summary>
+        public int SquadSize;
     }
 
     public enum UpgradeKind : byte
@@ -125,6 +131,38 @@ namespace Asterra.Core
         /// <summary>Seconds to research (0 = instant unlock).</summary>
         public float ResearchSeconds = 8f;
         public UpgradeKind Kind = UpgradeKind.Equipment;
+        /// <summary>
+        /// Gold charged each time this equipment is applied to one unit (after research).
+        /// 0 = default to max(25, GoldCost / 4).
+        /// </summary>
+        public int EquipGoldCost;
+        /// <summary>
+        /// Bitmask of <see cref="UnitRole"/> values that may receive this equipment.
+        /// 0 = all non-builder combat roles.
+        /// </summary>
+        public int CompatibleRoleMask;
+
+        public int ResolvedEquipGoldCost =>
+            EquipGoldCost > 0 ? EquipGoldCost : System.Math.Max(25, GoldCost / 4);
+
+        public bool FitsUnitRole(UnitRole role)
+        {
+            if (role == UnitRole.Builder)
+                return false;
+            if (CompatibleRoleMask == 0)
+                return true;
+            return (CompatibleRoleMask & (1 << (int)role)) != 0;
+        }
+
+        public static int RoleMask(params UnitRole[] roles)
+        {
+            int mask = 0;
+            if (roles == null)
+                return 0;
+            for (int i = 0; i < roles.Length; i++)
+                mask |= 1 << (int)roles[i];
+            return mask;
+        }
     }
 
     public enum PowerEffectKind : byte

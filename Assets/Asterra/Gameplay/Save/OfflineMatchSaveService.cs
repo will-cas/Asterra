@@ -27,42 +27,91 @@ namespace Asterra.Gameplay.Save
             if (match == null || sim == null)
                 throw new ArgumentNullException(match == null ? nameof(match) : nameof(sim));
 
+            var data = CaptureSim(
+                sim,
+                wallet,
+                matchSeed: match.MatchSeed,
+                mapKey: match.MapKey,
+                playerFaction: match.PlayerFactionIndex,
+                enemyFaction: match.EnemyFactionIndex,
+                aiDifficulty: (int)match.AiDifficulty,
+                tick: match.Clock != null ? match.Clock.CurrentTick.Value : 0u,
+                nextEntityId: match.Ids != null ? match.Ids.PeekNext : 1u,
+                holdSecondsP0: match.Victory != null ? match.Victory.GetHoldSeconds(new PlayerId(0)) : 0f,
+                holdSecondsP1: match.Victory != null ? match.Victory.GetHoldSeconds(new PlayerId(1)) : 0f);
+            return data;
+        }
+
+        /// <summary>Capture sim + wallet without a live MatchBootstrap (tests / tools).</summary>
+        public static MatchSaveData CaptureSim(
+            SkirmishWorldSim sim,
+            IResourceWallet wallet,
+            uint matchSeed = 0,
+            string mapKey = null,
+            int playerFaction = 0,
+            int enemyFaction = 1,
+            int aiDifficulty = 1,
+            uint tick = 0,
+            uint nextEntityId = 1,
+            float holdSecondsP0 = 0f,
+            float holdSecondsP1 = 0f)
+        {
+            if (sim == null)
+                throw new ArgumentNullException(nameof(sim));
+
             var data = new MatchSaveData
             {
                 formatVersion = CurrentFormatVersion,
                 savedAtUtc = DateTime.UtcNow.ToString("o"),
-                matchSeed = match.MatchSeed,
-                mapKey = match.MapKey,
-                playerFaction = match.PlayerFactionIndex,
-                enemyFaction = match.EnemyFactionIndex,
-                aiDifficulty = (int)match.AiDifficulty,
-                tick = match.Clock != null ? match.Clock.CurrentTick.Value : 0u,
-                nextEntityId = match.Ids != null ? match.Ids.PeekNext : 1u,
-                holdSecondsP0 = match.Victory != null ? match.Victory.GetHoldSeconds(new PlayerId(0)) : 0f,
-                holdSecondsP1 = match.Victory != null ? match.Victory.GetHoldSeconds(new PlayerId(1)) : 0f,
+                matchSeed = matchSeed,
+                mapKey = string.IsNullOrEmpty(mapKey) ? "blackridge_pass" : mapKey,
+                playerFaction = playerFaction,
+                enemyFaction = enemyFaction,
+                aiDifficulty = aiDifficulty,
+                tick = tick,
+                nextEntityId = nextEntityId,
+                holdSecondsP0 = holdSecondsP0,
+                holdSecondsP1 = holdSecondsP1,
             };
 
-            if (wallet != null)
-            {
-                data.wallets = new[]
-                {
-                    new WalletSave
-                    {
-                        player = 0,
-                        gold = wallet.Get(new PlayerId(0), ResourceType.Gold),
-                        timber = wallet.Get(new PlayerId(0), ResourceType.Timber),
-                    },
-                    new WalletSave
-                    {
-                        player = 1,
-                        gold = wallet.Get(new PlayerId(1), ResourceType.Gold),
-                        timber = wallet.Get(new PlayerId(1), ResourceType.Timber),
-                    },
-                };
-            }
-
+            ApplyWallets(data, wallet);
             sim.CaptureInto(data);
             return data;
+        }
+
+        public static void ApplyWallets(MatchSaveData data, IResourceWallet wallet)
+        {
+            if (data == null || wallet == null)
+                return;
+            data.wallets = new[]
+            {
+                new WalletSave
+                {
+                    player = 0,
+                    gold = wallet.Get(new PlayerId(0), ResourceType.Gold),
+                    timber = wallet.Get(new PlayerId(0), ResourceType.Timber),
+                },
+                new WalletSave
+                {
+                    player = 1,
+                    gold = wallet.Get(new PlayerId(1), ResourceType.Gold),
+                    timber = wallet.Get(new PlayerId(1), ResourceType.Timber),
+                },
+            };
+        }
+
+        /// <summary>Restore wallets from save into a wallet (MatchBootstrap load path).</summary>
+        public static void RestoreWallets(MatchSaveData data, IResourceWallet wallet)
+        {
+            if (data?.wallets == null || wallet == null)
+                return;
+            for (int i = 0; i < data.wallets.Length; i++)
+            {
+                var w = data.wallets[i];
+                var p = new PlayerId(w.player);
+                wallet.Seed(p, ResourceType.Gold, w.gold);
+                wallet.Seed(p, ResourceType.Timber, w.timber);
+            }
         }
 
         public static string SaveQuick(MatchBootstrap match, SkirmishWorldSim sim, IResourceWallet wallet)

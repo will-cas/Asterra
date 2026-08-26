@@ -32,6 +32,13 @@ namespace Asterra.Gameplay.Presentation
         private Material _crystalMat;
         private Texture2D _detailTex;
 
+        private float[] _heightSamples;
+        private int _heightW;
+        private int _heightH;
+        private float _heightOriginX;
+        private float _heightOriginZ;
+        private float _heightCellSize = 1f;
+
         /// <summary>
         /// Units render at <see cref="EntityView.UnitVisualScale"/> (~14 world units tall).
         /// Props were authored for 1-unit silhouettes — multiply into that space.
@@ -143,9 +150,48 @@ namespace Asterra.Gameplay.Presentation
             }
 
             BuildContinuousMesh(grid, smoothHeight, colors, categories);
+            CacheHeightSamples(grid, smoothHeight);
             BuildWaterSurface(grid, smoothHeight, categories);
             ScatterTrees(grid, smoothHeight, categories, propRoot);
             ScatterDeco(grid, smoothHeight, categories, propRoot);
+        }
+
+        private void CacheHeightSamples(WorldTerrainGrid grid, float[] heights)
+        {
+            _heightW = grid.Width;
+            _heightH = grid.Height;
+            _heightCellSize = Mathf.Max(0.01f, grid.CellSize);
+            _heightOriginX = grid.OriginX;
+            _heightOriginZ = grid.OriginZ;
+            if (_heightSamples == null || _heightSamples.Length != heights.Length)
+                _heightSamples = new float[heights.Length];
+            System.Array.Copy(heights, _heightSamples, heights.Length);
+        }
+
+        /// <summary>Bilinear sample of the painted terrain height at a world XZ (for unit footing / rings).</summary>
+        public float SampleHeight(float worldX, float worldZ)
+        {
+            if (_heightSamples == null || _heightW < 2 || _heightH < 2)
+                return yBias;
+
+            float fx = (worldX - _heightOriginX) / _heightCellSize - 0.5f;
+            float fz = (worldZ - _heightOriginZ) / _heightCellSize - 0.5f;
+            int x0 = Mathf.FloorToInt(fx);
+            int z0 = Mathf.FloorToInt(fz);
+            float tx = fx - x0;
+            float tz = fz - z0;
+            x0 = Mathf.Clamp(x0, 0, _heightW - 1);
+            z0 = Mathf.Clamp(z0, 0, _heightH - 1);
+            int x1 = Mathf.Min(x0 + 1, _heightW - 1);
+            int z1 = Mathf.Min(z0 + 1, _heightH - 1);
+
+            float h00 = _heightSamples[z0 * _heightW + x0];
+            float h10 = _heightSamples[z0 * _heightW + x1];
+            float h01 = _heightSamples[z1 * _heightW + x0];
+            float h11 = _heightSamples[z1 * _heightW + x1];
+            float h0 = Mathf.Lerp(h00, h10, tx);
+            float h1 = Mathf.Lerp(h01, h11, tx);
+            return Mathf.Lerp(h0, h1, tz);
         }
 
         private void BuildContinuousMesh(

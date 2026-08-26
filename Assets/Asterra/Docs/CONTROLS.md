@@ -26,7 +26,7 @@ Local offline / skirmish input (keyboard + mouse).
 | M | Place palisade wall — requires builder selected |
 | O | Place gold mine (passive gold income + vision) — requires builder selected |
 | Q / E / [ / ] / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
-| Esc | Cancel armed order / place mode |
+| Esc | Cancel armed order / place mode; otherwise open pause (Options / Main Menu). Profile is lobby-only. |
 | Shift while placing | Keep place mode after one building |
 | . or I | Select idle workers |
 | T | Train from selected / auto-pick keep or producer |

@@ -25,6 +25,7 @@ namespace Asterra.Gameplay
         private readonly Dictionary<uint, DestructibleView> _destructibleViews = new();
         private System.Func<IReadOnlyList<SimEntityId>> _getSelected;
         private System.Func<SimEntityId?> _getSelectedBuilding;
+        private TerrainGridPresenter _terrain;
 
         public void BindSelection(System.Func<IReadOnlyList<SimEntityId>> getSelected)
         {
@@ -138,6 +139,7 @@ namespace Asterra.Gameplay
                 alive.Add(snap.Id.Value);
                 if (!_unitViews.TryGetValue(snap.Id.Value, out var view))
                 {
+                    int squad = ResolveSquadSize(snap.DefinitionId);
                     view = SpawnEntity(
                         unitRoot,
                         $"Unit_{snap.Id.Value}",
@@ -145,11 +147,12 @@ namespace Asterra.Gameplay
                         isUnit: true,
                         snap.Owner,
                         snap.DefinitionId,
-                        snap.Faction.Value);
+                        snap.Faction.Value,
+                        squad);
                     _unitViews[snap.Id.Value] = view;
                 }
 
-                view.SyncPresentation(new Vector3(snap.X, yPosition, snap.Z));
+                view.SyncPresentation(new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z));
                 view.SetHealth(snap.Health, snap.MaxHealth);
                 view.SetEquipmentVisuals(snap.EquipmentVisualFlags);
             }
@@ -182,7 +185,7 @@ namespace Asterra.Gameplay
                 if (view.IsCollapsing)
                     continue;
 
-                view.SyncPresentation(new Vector3(snap.X, yPosition, snap.Z));
+                view.SyncPresentation(new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z));
                 view.SetHealth(snap.Health, snap.MaxHealth);
                 if (snap.Kind == BuildingKind.Wall || snap.Kind == BuildingKind.Gate)
                     view.ApplyWallLinks(snap.WallLinks, snap.YawDegrees);
@@ -212,7 +215,7 @@ namespace Asterra.Gameplay
                     _resourceViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, yPosition + 2f, snap.Z);
+                view.transform.position = new Vector3(snap.X, SampleY(snap.X, snap.Z) + 2f, snap.Z);
             }
 
             var stale = new List<uint>();
@@ -274,7 +277,7 @@ namespace Asterra.Gameplay
                     _destructibleViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, yPosition, snap.Z);
+                view.transform.position = new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z);
                 view.SetDamaged(snap.State == DestructibleState.Damaged);
             }
 
@@ -356,6 +359,14 @@ namespace Asterra.Gameplay
             }
         }
 
+        private int ResolveSquadSize(string definitionId)
+        {
+            if (match != null && match.Definitions != null
+                && match.Definitions.TryGetUnit(definitionId, out var def))
+                return UnitSquadVisual.ResolveSquadSize(def);
+            return UnitSquadVisual.ResolveSquadSize(definitionId);
+        }
+
         private static EntityView SpawnEntity(
             Transform parent,
             string name,
@@ -363,12 +374,13 @@ namespace Asterra.Gameplay
             bool isUnit,
             PlayerId owner,
             string definitionId,
-            byte factionIndex)
+            byte factionIndex,
+            int squadSize = 1)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             var view = go.AddComponent<EntityView>();
-            view.Initialize(id, isUnit, owner, definitionId, factionIndex);
+            view.Initialize(id, isUnit, owner, definitionId, factionIndex, squadSize);
             return view;
         }
 
@@ -399,6 +411,15 @@ namespace Asterra.Gameplay
                     _buildingViews.Remove(id);
                 }
             }
+        }
+
+        private float SampleY(float x, float z)
+        {
+            if (_terrain == null)
+                _terrain = FindFirstObjectByType<TerrainGridPresenter>();
+            if (_terrain != null)
+                return _terrain.SampleHeight(x, z);
+            return yPosition;
         }
 
         private static void RemoveMissing(Dictionary<uint, EntityView> views, HashSet<uint> alive)

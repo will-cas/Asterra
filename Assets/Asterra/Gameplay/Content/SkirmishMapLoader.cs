@@ -25,7 +25,61 @@ namespace Asterra.Gameplay.Content
             ApplyTerrain(world.Environment, map);
             ApplyTraversal(world.Environment, map);
             ApplySpawns(world, ids, westPlayer, westFaction, eastPlayer, eastFaction, map);
+            EnsureMinimumStartingArmy(world, ids, westPlayer, westFaction);
+            EnsureMinimumStartingArmy(world, ids, eastPlayer, eastFaction);
             ApplyDestructibles(world, ids, map);
+        }
+
+        /// <summary>
+        /// Ensure each seat has a starting worker near the keep. Combat is trained in-match, not gifted.
+        /// </summary>
+        public static void EnsureMinimumStartingArmy(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerId player,
+            FactionRoster faction)
+        {
+            if (world == null || faction == null || ids == null)
+                return;
+
+            float keepX = 0f;
+            float keepZ = 0f;
+            bool foundKeep = false;
+            for (int i = 0; i < world.Buildings.Count; i++)
+            {
+                var b = world.Buildings[i];
+                if (b.Owner != player || b.State == BuildingState.Destroyed)
+                    continue;
+                if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                    continue;
+                keepX = b.X;
+                keepZ = b.Z;
+                foundKeep = true;
+                break;
+            }
+
+            if (!foundKeep)
+                return;
+
+            int builders = 0;
+            for (int i = 0; i < world.Units.Count; i++)
+            {
+                var u = world.Units[i];
+                if (u.Owner == player && u.IsAlive && FactionDefaultContent.IsBuilderUnitId(u.DefinitionId))
+                    builders++;
+            }
+
+            if (builders >= 1 || string.IsNullOrEmpty(faction.BuilderUnitId))
+                return;
+
+            float side = keepX < 0f ? 1f : -1f;
+            world.SpawnUnit(
+                ids.Next(),
+                player,
+                faction.Id,
+                faction.BuilderUnitId,
+                keepX + side * 28f,
+                keepZ);
         }
 
         public static void ApplyTerrain(WorldEnvironmentSim environment, MapDefinition map)

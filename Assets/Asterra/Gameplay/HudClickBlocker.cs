@@ -58,8 +58,8 @@ namespace Asterra.Gameplay
         {
             // Prefer last published OnGUI rects (always previous-or-current completed frame).
             var list = Queryable;
-            float guiY = Screen.height - screenPos.y;
-            var p = new Vector2(screenPos.x, guiY);
+            // OnGUI rects use top-left origin; Input.mousePosition uses bottom-left.
+            var p = new Vector2(screenPos.x, Screen.height - screenPos.y);
             for (int i = 0; i < list.Count; i++)
             {
                 if (list[i].Contains(p))

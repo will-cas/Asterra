@@ -83,31 +83,88 @@
     ],
     "blocked": [],
     "keeps": [
-        { "seatIndex": 0, "x": -320.0, "z": 0.0 },
-        { "seatIndex": 1, "x": 320.0, "z": 0.0 }
+        {
+            "seatIndex": 0,
+            "x": -320.0,
+            "z": 0.0
+        },
+        {
+            "seatIndex": 1,
+            "x": 320.0,
+            "z": 0.0
+        }
     ],
     "units": [
-        { "seatIndex": 0, "role": "basic", "x": -290.0, "z": -15.0 },
-        { "seatIndex": 0, "role": "basic", "x": -290.0, "z": 15.0 },
-        { "seatIndex": 0, "role": "builder", "x": -270.0, "z": 0.0 },
-        { "seatIndex": 1, "role": "basic", "x": 290.0, "z": -15.0 },
-        { "seatIndex": 1, "role": "basic", "x": 290.0, "z": 15.0 },
-        { "seatIndex": 1, "role": "builder", "x": 270.0, "z": 0.0 }
+        {
+            "seatIndex": 0,
+            "role": "builder",
+            "x": -270.0,
+            "z": 0.0
+        },
+        {
+            "seatIndex": 1,
+            "role": "builder",
+            "x": 270.0,
+            "z": 0.0
+        }
     ],
     "buildings": [],
     "resources": [
-        { "type": "gold", "amount": 2200, "x": -80.0, "z": 60.0 },
-        { "type": "timber", "amount": 1800, "x": 80.0, "z": -60.0 },
-        { "type": "gold", "amount": 2400, "x": -260.0, "z": 50.0 },
-        { "type": "timber", "amount": 2000, "x": -260.0, "z": -50.0 },
-        { "type": "gold", "amount": 2400, "x": 260.0, "z": -50.0 },
-        { "type": "timber", "amount": 2000, "x": 260.0, "z": 50.0 }
+        {
+            "type": "gold",
+            "amount": 2200,
+            "x": -80.0,
+            "z": 60.0
+        },
+        {
+            "type": "timber",
+            "amount": 1800,
+            "x": 80.0,
+            "z": -60.0
+        },
+        {
+            "type": "gold",
+            "amount": 2400,
+            "x": -260.0,
+            "z": 50.0
+        },
+        {
+            "type": "timber",
+            "amount": 2000,
+            "x": -260.0,
+            "z": -50.0
+        },
+        {
+            "type": "gold",
+            "amount": 2400,
+            "x": 260.0,
+            "z": -50.0
+        },
+        {
+            "type": "timber",
+            "amount": 2000,
+            "x": 260.0,
+            "z": 50.0
+        }
     ],
     "territories": [
-        { "x": 0.0, "z": 0.0, "radius": 40.0, "goldPerSecond": 8 }
+        {
+            "x": 0.0,
+            "z": 0.0,
+            "radius": 40.0,
+            "goldPerSecond": 8
+        }
     ],
     "destructibles": [
-        { "catalogId": "tree", "x": -100.0, "z": -120.0 },
-        { "catalogId": "rock", "x": 90.0, "z": 110.0 }
+        {
+            "catalogId": "tree",
+            "x": -100.0,
+            "z": -120.0
+        },
+        {
+            "catalogId": "rock",
+            "x": 90.0,
+            "z": 110.0
+        }
     ]
 }

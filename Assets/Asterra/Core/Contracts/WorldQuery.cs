@@ -316,6 +316,8 @@ namespace Asterra.Core
         bool TryGetCommanderAbilityStatus(PlayerId player, string powerDefId, out float cooldownRemaining, out float buffRemaining);
         /// <summary>Legacy: status for the faction primary power (PowerIds[0]).</summary>
         bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining);
+        /// <summary>True if <paramref name="player"/> currently has vision of world point (x,z).</summary>
+        bool IsVisibleTo(PlayerId player, float x, float z);
     }
 
     public interface IUpgradeState
