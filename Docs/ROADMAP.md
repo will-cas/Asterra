@@ -21,7 +21,7 @@ Skirmish-first vertical slice. Persist campaign / world mutation **after** multi
 7. [x] `SkirmishSmokeTest` headless driver (enable `runSmokeOnAwake` on `MatchBootstrap`)
 8. [x] Three faction rosters as data (`FactionDefaultContent`)
 9. [x] `CommandCodec` + `ReplayBuffer` + `DesyncDetector` + NGO bridge wiring
-10. [ ] Create `Skirmish.unity`, ground, camera; flip smoke off for play
+10. [x] Create `Skirmish.unity`, ground, camera; smoke off for play (`Asterra/Build Skirmish Scene`)
 
 **Exit criteria:** 5-minute loop: build → train → fight → capture → gather → upgrade.
 

@@ -1,5 +1,7 @@
 # Asterra controls
 
+**Play:** open `Assets/Asterra/Shared/Scenes/Skirmish.unity` → Press Play → pick factions/map in the offline menu → Start. Rebuild scene anytime via **Asterra → Build Skirmish Scene**.
+
 Local offline / skirmish input (keyboard + mouse).
 
 ## Selection & camera
