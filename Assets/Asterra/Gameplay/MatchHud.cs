@@ -503,7 +503,26 @@ namespace Asterra.Gameplay
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Wall (M)", roster.WallBuildingId);
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Gold Mine (O)", roster.OutpostBuildingId);
                 bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Bridge (V)", FactionDefaultContent.BridgeId);
-                DrawPricedBuildingButton(bx, buildY, btnH, gap, "Trench (J)", FactionDefaultContent.TrenchWorksId);
+                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Trench (J)", FactionDefaultContent.TrenchWorksId);
+                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Barricade (,)", FactionDefaultContent.BarricadeId);
+                bx = DrawPricedBuildingButton(bx, buildY, btnH, gap, "Ferry (.)", FactionDefaultContent.FerryDockId);
+            }
+
+            // Terrain work row
+            if (orders != null && orders.HasBuilderSelected && !orders.IsPlaceMode)
+            {
+                float workY = buildY + HudStyle.S(36f);
+                float wx = HudStyle.S(12f);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Fill (Y)", TerrainWorkKind.FillTrench);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Berm (K)", TerrainWorkKind.RaiseBerm);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Moat (L)", TerrainWorkKind.DigMoat);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Clear (;)", TerrainWorkKind.ClearForest);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Burn (')", TerrainWorkKind.BurnBrush);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Quarry", TerrainWorkKind.QuarryRock);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "Spikes ([)", TerrainWorkKind.PlaceSpikes);
+                wx = DrawTerrainWorkChip(wx, workY, btnH, gap, "ClearDebris (])", TerrainWorkKind.ClearDebris);
+                if (HudButton(new Rect(wx, workY, HudStyle.S(110f), btnH), "Repair (=)"))
+                    orders.RepairBridgeAtCursor();
             }
 
             if (orders == null || !orders.SelectedBuilding.HasValue || match.World == null || match.PlayerRoster == null)
@@ -544,6 +563,27 @@ namespace Asterra.Gameplay
                     "Tear down this building (half refund if complete). Bridges also collapse their crossing."))
             {
                 orders.DemolishSelectedBuilding();
+            }
+
+            if (b.Owner == player
+                && (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate)
+                && HudButton(new Rect(HudStyle.S(308f), panelY - HudStyle.S(104f), HudStyle.S(100f), HudStyle.S(28f)),
+                    "Raze",
+                    "Raze wall for full timber refund."))
+            {
+                orders.RazeSelectedWall();
+            }
+
+            if (b.Owner == player
+                && (b.DefinitionId == FactionDefaultContent.PalisadeId
+                    || b.DefinitionId == FactionDefaultContent.BarricadeId)
+                && match.World != null
+                && match.World.HasUpgrade(player, FactionDefaultContent.StoneWallsUpgradeId)
+                && HudButton(new Rect(HudStyle.S(416f), panelY - HudStyle.S(104f), HudStyle.S(130f), HudStyle.S(28f)),
+                    "→ Stone",
+                    "Upgrade this wall to stone (requires Stone Masonry)."))
+            {
+                orders.UpgradeSelectedWallToStone();
             }
 
             float trainX = HudStyle.S(12f);
@@ -720,6 +760,14 @@ namespace Asterra.Gameplay
 
             if (HudButton(new Rect(x, y, w, h), label, tip))
                 orders.EnterPlaceMode(buildingId);
+            return x + w + gap;
+        }
+
+        private float DrawTerrainWorkChip(float x, float y, float h, float gap, string title, TerrainWorkKind kind)
+        {
+            float w = HudStyle.S(108f);
+            if (HudButton(new Rect(x, y, w, h), title, kind + " — click ground with builder nearby"))
+                orders.EnterTerrainWorkMode(kind);
             return x + w + gap;
         }
 

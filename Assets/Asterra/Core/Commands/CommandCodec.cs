@@ -190,6 +190,24 @@ namespace Asterra.Core
                 case DemolishBuildingCommand demolish:
                     writer.Write((byte)CommandType.DemolishBuilding);
                     writer.Write(demolish.BuildingId.Value);
+                    writer.Write(demolish.RazeForMaterials);
+                    break;
+                case TerrainWorkCommand work:
+                    writer.Write((byte)CommandType.TerrainWork);
+                    writer.Write((byte)work.Kind);
+                    WriteQuantized(writer, work.X);
+                    WriteQuantized(writer, work.Z);
+                    WriteQuantized(writer, work.HalfExtent);
+                    break;
+                case RepairBridgeCommand repair:
+                    writer.Write((byte)CommandType.RepairBridge);
+                    WriteQuantized(writer, repair.X);
+                    WriteQuantized(writer, repair.Z);
+                    break;
+                case UpgradeBuildingCommand upgradeBuilding:
+                    writer.Write((byte)CommandType.UpgradeBuilding);
+                    writer.Write(upgradeBuilding.BuildingId.Value);
+                    WriteString(writer, upgradeBuilding.UpgradeDefId);
                     break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
@@ -352,6 +370,30 @@ namespace Asterra.Core
                     command = new DemolishBuildingCommand
                     {
                         BuildingId = new SimEntityId(reader.ReadUInt32()),
+                        RazeForMaterials = reader.ReadBoolean(),
+                    };
+                    break;
+                case CommandType.TerrainWork:
+                    command = new TerrainWorkCommand
+                    {
+                        Kind = (TerrainWorkKind)reader.ReadByte(),
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                        HalfExtent = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.RepairBridge:
+                    command = new RepairBridgeCommand
+                    {
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.UpgradeBuilding:
+                    command = new UpgradeBuildingCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                        UpgradeDefId = ReadString(reader),
                     };
                     break;
                 default:

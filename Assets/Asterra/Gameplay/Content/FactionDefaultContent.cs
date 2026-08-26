@@ -80,6 +80,10 @@ namespace Asterra.Gameplay.Content
         public const string PalisadeId = "building_palisade";
         public const string BridgeId = "building_bridge";
         public const string TrenchWorksId = "building_trench_works";
+        public const string BarricadeId = "building_barricade";
+        public const string FerryDockId = "building_ferry_dock";
+        public const string StoneWallId = "building_stone_wall";
+        public const string StoneWallsUpgradeId = "upgrade_stone_walls";
         public const string OutpostId = "building_outpost";
 
         // Concord of the Free Realms
@@ -143,7 +147,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
             BasicUpgradeId = HeavyArmourId,
-            KeepUpgradeIds = new[] { MilitiaTrainingId, KeepBastionId, KeepArmoryId },
+            KeepUpgradeIds = new[] { MilitiaTrainingId, KeepBastionId, KeepArmoryId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[] { HeavyArmourId, FireSwordsId },
             LeaderUnitId = LucienLeaderId,
             PowerId = LucienIronWallAbilityId,
@@ -174,7 +178,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
             BasicUpgradeId = BarkskinArmourId,
-            KeepUpgradeIds = new[] { WildGrowthId, ConcordKeepwardId },
+            KeepUpgradeIds = new[] { WildGrowthId, ConcordKeepwardId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[] { BarkskinArmourId, ThornBladesId },
             LeaderUnitId = AllianceLeaderId,
             PowerId = AllianceMarchAbilityId,
@@ -205,7 +209,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
             BasicUpgradeId = EmberPlateId,
-            KeepUpgradeIds = new[] { EmberRitesId, FlameKeepfireId },
+            KeepUpgradeIds = new[] { EmberRitesId, FlameKeepfireId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[] { EmberPlateId, SacredBladesId },
             LeaderUnitId = FlameLeaderId,
             PowerId = SacredBurstAbilityId,
@@ -1029,6 +1033,60 @@ namespace Asterra.Gameplay.Content
                 Kind = BuildingKind.Special,
                 Category = BuildingCategory.Wall,
                 SightRadius = 20f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = BarricadeId,
+                DisplayName = "Barricade",
+                MaxHealth = 220f,
+                GoldCost = 30,
+                TimberCost = 55,
+                BuildSeconds = 3f,
+                FootprintX = 10f,
+                FootprintZ = 4f,
+                Kind = BuildingKind.Wall,
+                Category = BuildingCategory.Wall,
+                SnapToWallGrid = true,
+                WallSegmentLength = 10f,
+                SightRadius = 30f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = FerryDockId,
+                DisplayName = "Ferry Dock",
+                MaxHealth = 280f,
+                GoldCost = 90,
+                TimberCost = 110,
+                BuildSeconds = 7f,
+                FootprintX = 8f,
+                FootprintZ = 8f,
+                Kind = BuildingKind.Special,
+                Category = BuildingCategory.Resource,
+                SightRadius = 70f,
+            });
+            registry.Register(new BuildingDefData
+            {
+                Id = StoneWallId,
+                DisplayName = "Stone Wall",
+                MaxHealth = 1400f,
+                GoldCost = 90,
+                TimberCost = 40,
+                BuildSeconds = 6f,
+                FootprintX = 14f,
+                FootprintZ = 4.5f,
+                Kind = BuildingKind.Wall,
+                Category = BuildingCategory.Wall,
+                SnapToWallGrid = true,
+                WallSegmentLength = 14f,
+                SightRadius = 45f,
+            });
+            registry.Register(new UpgradeDefData
+            {
+                Id = StoneWallsUpgradeId,
+                DisplayName = "Stone Masonry",
+                GoldCost = 220,
+                ResearchSeconds = 14f,
+                Kind = UpgradeKind.Fortification,
             });
         }
     }

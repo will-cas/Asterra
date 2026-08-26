@@ -78,6 +78,8 @@ namespace Asterra.Core
         Keep = 0,
         /// <summary>Equipment researched at barracks/workshop; applied to combat units.</summary>
         Equipment = 1,
+        /// <summary>Researched fortification applied to owned walls / buildings.</summary>
+        Fortification = 2,
     }
 
     public sealed class BuildingDefData

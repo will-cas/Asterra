@@ -233,7 +233,7 @@ namespace Asterra.Gameplay.Sim
         public SimEntityId Id { get; }
         public PlayerId Owner { get; }
         public FactionId Faction { get; }
-        public string DefinitionId { get; }
+        public string DefinitionId { get; set; }
         public BuildingState State { get; set; }
         public float Health { get; set; }
         public float MaxHealth { get; set; }

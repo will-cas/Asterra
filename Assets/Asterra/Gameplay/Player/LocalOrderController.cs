@@ -139,6 +139,7 @@ namespace Asterra.Gameplay.Player
         public void CancelPlaceMode()
         {
             _placeMode = false;
+            _terrainWorkArmed = null;
             _placeBuildingDefId = null;
             _placeYawDegrees = 0f;
             if (_ghost != null)
@@ -708,14 +709,47 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             {
-                if (_attackMoveArmed || _patrolArmed || _placeMode)
+                if (_attackMoveArmed || _patrolArmed || _placeMode || _terrainWorkArmed.HasValue)
                 {
                     if (_attackMoveArmed)
                         CancelAttackMoveArm();
                     if (_patrolArmed)
                         CancelPatrolArm();
                     CancelPlaceMode();
+                    _terrainWorkArmed = null;
                 }
+            }
+
+            if (_terrainWorkArmed.HasValue)
+            {
+                if (UnityEngine.Input.GetMouseButtonDown(1))
+                {
+                    _terrainWorkArmed = null;
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi()
+                    && TryRaycastGround(out float tx, out float tz))
+                {
+                    var kind = _terrainWorkArmed.Value;
+                    IssueTerrainWork(kind, tx, tz);
+                    var builders = GetSelectedBuilderIds();
+                    if (builders.Length > 0)
+                    {
+                        _commands.SubmitLocal(new MoveCommand
+                        {
+                            Issuer = _local,
+                            UnitIds = builders,
+                            TargetX = tx,
+                            TargetZ = tz,
+                        });
+                    }
+
+                    if (!IsAdditiveModifierHeld())
+                        _terrainWorkArmed = null;
+                }
+
+                return;
             }
 
             if (_attackMoveArmed)
@@ -1106,6 +1140,67 @@ namespace Asterra.Gameplay.Player
             _selectedBuilding = null;
         }
 
+        public void RazeSelectedWall()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new DemolishBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+                RazeForMaterials = true,
+            });
+            MatchFeedback.Show("Raze for timber", AsterraSfx.OrderBuild);
+            _selectedBuilding = null;
+        }
+
+        public void UpgradeSelectedWallToStone()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new UpgradeBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+                UpgradeDefId = FactionDefaultContent.StoneWallsUpgradeId,
+            });
+            MatchFeedback.Show("Upgrade to stone", AsterraSfx.OrderResearch);
+        }
+
+        public void IssueTerrainWork(TerrainWorkKind kind, float x, float z, float halfExtent = 8f)
+        {
+            if (_commands == null)
+                return;
+            _commands.SubmitLocal(new TerrainWorkCommand
+            {
+                Issuer = _local,
+                Kind = kind,
+                X = x,
+                Z = z,
+                HalfExtent = halfExtent,
+            });
+            MatchFeedback.Show(kind.ToString(), AsterraSfx.OrderBuild);
+        }
+
+        public void EnterTerrainWorkMode(TerrainWorkKind kind)
+        {
+            CancelPlaceMode();
+            CancelAttackMoveArm();
+            CancelPatrolArm();
+            _terrainWorkArmed = kind;
+            MatchFeedback.Show($"{kind}: click ground (builder nearby)", AsterraSfx.OrderBuild);
+        }
+
+        public void RepairBridgeAtCursor()
+        {
+            if (_commands == null || !TryRaycastGround(out float x, out float z))
+                return;
+            _commands.SubmitLocal(new RepairBridgeCommand { Issuer = _local, X = x, Z = z });
+            MatchFeedback.Show("Repair bridge", AsterraSfx.OrderBuild);
+        }
+
+        private TerrainWorkKind? _terrainWorkArmed;
+
         private bool TryPickDestructible(out DestructibleView view)
         {
             view = null;
@@ -1280,6 +1375,30 @@ namespace Asterra.Gameplay.Player
                 EnterPlaceMode(FactionDefaultContent.BridgeId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.J) && HasSelectedBuilder())
                 EnterPlaceMode(FactionDefaultContent.TrenchWorksId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.V) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.BridgeId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Comma) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.BarricadeId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Period) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.FerryDockId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Y) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.FillTrench);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.K) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.RaiseBerm);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.L) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.DigMoat);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Semicolon) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.ClearForest);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Quote) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.BurnBrush);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Backslash) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.QuarryRock);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.LeftBracket) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.PlaceSpikes);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.RightBracket) && HasSelectedBuilder())
+                EnterTerrainWorkMode(TerrainWorkKind.ClearDebris);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Equals) && HasSelectedBuilder())
+                RepairBridgeAtCursor();
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.T))
             {

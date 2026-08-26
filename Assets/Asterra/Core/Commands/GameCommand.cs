@@ -133,7 +133,21 @@ namespace Asterra.Core
         public SimEntityId BuildingId;
     }
 
-    /// <summary>Builder earthwork: dig a trench rectangle centered at X/Z.</summary>
+    /// <summary>Builder / siege earthworks and vegetation work.</summary>
+    public enum TerrainWorkKind : byte
+    {
+        DigTrench = 0,
+        FillTrench = 1,
+        FlattenHill = 2,
+        RaiseBerm = 3,
+        DigMoat = 4,
+        ClearForest = 5,
+        QuarryRock = 6,
+        BurnBrush = 7,
+        PlaceSpikes = 8,
+        ClearDebris = 9,
+    }
+
     public sealed class DigTrenchCommand : GameCommand
     {
         public float X;
@@ -141,10 +155,33 @@ namespace Asterra.Core
         public float HalfExtent = 8f;
     }
 
-    /// <summary>Owner-ordered teardown of a friendly building (including faction bridges).</summary>
     public sealed class DemolishBuildingCommand : GameCommand
     {
         public SimEntityId BuildingId;
+        /// <summary>When true, walls refund full timber (raze); otherwise half gold+timber.</summary>
+        public bool RazeForMaterials;
+    }
+
+    public sealed class TerrainWorkCommand : GameCommand
+    {
+        public TerrainWorkKind Kind;
+        public float X;
+        public float Z;
+        public float HalfExtent = 8f;
+    }
+
+    /// <summary>Re-enable a collapsed bridge link near X/Z and rebuild the prop.</summary>
+    public sealed class RepairBridgeCommand : GameCommand
+    {
+        public float X;
+        public float Z;
+    }
+
+    /// <summary>Mutate an owned building in place (e.g. palisade → stone).</summary>
+    public sealed class UpgradeBuildingCommand : GameCommand
+    {
+        public SimEntityId BuildingId;
+        public string UpgradeDefId;
     }
 
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>

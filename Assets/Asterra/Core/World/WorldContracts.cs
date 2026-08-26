@@ -34,6 +34,8 @@ namespace Asterra.Core.World
         public const byte FlagMuddy = 1 << 0;
         public const byte FlagOnFire = 1 << 1;
         public const byte FlagTrench = 1 << 2;
+        public const byte FlagSpikes = 1 << 3;
+        public const byte FlagBurningRuin = 1 << 4;
     }
 
     public interface ITraversalGraph

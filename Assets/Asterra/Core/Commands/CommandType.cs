@@ -23,5 +23,8 @@ namespace Asterra.Core
         AttachBuilding = 19,
         DigTrench = 20,
         DemolishBuilding = 21,
+        TerrainWork = 22,
+        RepairBridge = 23,
+        UpgradeBuilding = 24,
     }
 }

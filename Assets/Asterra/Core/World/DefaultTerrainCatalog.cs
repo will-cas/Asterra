@@ -32,6 +32,16 @@ namespace Asterra.Core.World
         public const ushort WaterDeep = 19;
         /// <summary>Fast current — boats only, higher move speed.</summary>
         public const ushort WaterFast = 20;
+        /// <summary>Raised earth berm — cover + LOS block.</summary>
+        public const ushort Berm = 21;
+        /// <summary>Spike / caltrop pit — damages units that stand in it.</summary>
+        public const ushort SpikePit = 22;
+        /// <summary>Combat debris — blocks movement until cleared.</summary>
+        public const ushort Debris = 23;
+        /// <summary>Siege crater — trench-like depression.</summary>
+        public const ushort Crater = 24;
+        /// <summary>Burned brush / scorched earth.</summary>
+        public const ushort Scorched = 25;
 
         public static TerrainDefData[] CreateDefs()
         {
@@ -55,10 +65,14 @@ namespace Asterra.Core.World
                 Def("terrain_ice_thin", "Thin Ice", TerrainCategory.Ice, 0.8f, 1.35f, TraversalCapability.Land, sound: 1.25f, combat: 0.9f, destructible: true, drainage: 0.15f),
                 Def("terrain_trench", "Trench", TerrainCategory.Trench, 0.7f, 1.3f, TraversalCapability.Land, visibility: 0.75f, cover: 0.4f, los: 0.35f, combat: 1.1f, allowsBuild: false),
                 TerrainDefData.CreateNoEntry("terrain_no_entry"),
-                // Append-only river variants (indices 18–20).
                 Def("terrain_water_shallow", "Shallow River", TerrainCategory.WaterRiver, 0.48f, 2.2f, TraversalCapability.Land, allowsBuild: false, allowsGather: false, drainage: 0.6f, waterlog: 1.6f),
                 Def("terrain_water_deep", "Deep River", TerrainCategory.WaterRiver, 0.9f, 1.4f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
                 Def("terrain_water_fast", "Fast River", TerrainCategory.WaterRiver, 1.35f, 1.1f, TraversalCapability.Water, allowsBuild: false, allowsGather: false),
+                Def("terrain_berm", "Earth Berm", TerrainCategory.Hill, 0.8f, 1.5f, TraversalCapability.Land, visibility: 0.85f, cover: 0.45f, los: 0.55f, combat: 1.05f, allowsBuild: false),
+                Def("terrain_spike_pit", "Spike Pit", TerrainCategory.Trench, 0.55f, 2.2f, TraversalCapability.Land, visibility: 0.8f, cover: 0.1f, combat: 0.85f, allowsBuild: false),
+                Def("terrain_debris", "Debris", TerrainCategory.Rock, 0f, TerrainDefData.PathCostBlocked, TraversalCapability.Land, visibility: 0.9f, allowsBuild: false, allowsGather: false, los: 0.25f),
+                Def("terrain_crater", "Crater", TerrainCategory.Trench, 0.65f, 1.6f, TraversalCapability.Land, visibility: 0.8f, cover: 0.3f, los: 0.2f, combat: 1.05f, allowsBuild: false),
+                Def("terrain_scorched", "Scorched Earth", TerrainCategory.GrassBare, 1.02f, 1.05f, TraversalCapability.Land, visibility: 1.1f, cover: 0f, los: 0f, drainage: 1.3f),
             };
         }
 

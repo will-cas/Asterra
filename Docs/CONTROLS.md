@@ -27,8 +27,14 @@ Local offline / skirmish input (keyboard + mouse).
 | N | Place watchtower — requires builder selected |
 | M | Place palisade wall — requires builder selected |
 | O | Place gold mine (passive gold income + vision) — requires builder selected |
-| V | Place timber bridge (shore, yaw across water) — requires builder selected |
-| J | Dig trench works — requires builder selected |
+| V | Place timber bridge (shore, yaw across water) — requires builder |
+| J | Dig trench works — requires builder |
+| , | Place barricade — requires builder |
+| . | Place ferry dock (shore) — requires builder |
+| Y / K / L | Fill trench / raise berm / dig moat — click ground |
+| ; / ' / \ | Clear forest / burn brush / quarry rock — click ground |
+| [ / ] | Spike pits / clear debris — click ground |
+| = | Repair nearest collapsed bridge |
 | Q / E / [ / ] / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
 | Esc | Cancel armed order / place mode; otherwise open pause (Options / Main Menu). Profile is lobby-only. |
 | Shift while placing | Keep place mode after one building |

@@ -295,6 +295,15 @@ namespace Asterra.Gameplay
                     case DemolishBuildingCommand demolish:
                         ApplyDemolishBuilding(demolish);
                         break;
+                    case TerrainWorkCommand terrainWork:
+                        ApplyTerrainWork(terrainWork);
+                        break;
+                    case RepairBridgeCommand repairBridge:
+                        ApplyRepairBridge(repairBridge);
+                        break;
+                    case UpgradeBuildingCommand upgradeBuilding:
+                        ApplyUpgradeBuilding(upgradeBuilding);
+                        break;
                     default:
                         break;
                 }
@@ -318,6 +327,7 @@ namespace Asterra.Gameplay
             TickProjectiles(deltaSeconds);
             TickTerritory(deltaSeconds);
             TickTerritoryIncome(deltaSeconds);
+            TickTerrainHazards(deltaSeconds);
             CullDead();
             RepathUnitsForDirtyRegions();
             _environment.PathDirty.Clear();
@@ -651,6 +661,11 @@ namespace Asterra.Gameplay
                 if (!CanPlaceFactionBridge(x, z, NormalizeYaw90(place.YawDegrees)))
                     return;
             }
+            else if (place.BuildingDefId == FactionDefaultContent.FerryDockId)
+            {
+                if (!CanPlaceFerryDock(x, z, NormalizeYaw90(place.YawDegrees)))
+                    return;
+            }
             else if (!_environment.CanPlaceBuilding(x, z))
                 return;
 
@@ -709,11 +724,20 @@ namespace Asterra.Gameplay
             if (building.Kind == BuildingKind.Keep)
                 return;
 
-            // Partial refund for completed works.
-            if (_defs.TryGetBuilding(building.DefinitionId, out var def) && building.State == BuildingState.Active)
+            // Partial refund — raze walls for full timber, otherwise half resources.
+            if (_defs.TryGetBuilding(building.DefinitionId, out var def)
+                && (building.State == BuildingState.Active || building.State == BuildingState.Constructing))
             {
-                _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost / 2);
-                _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost / 2);
+                if (cmd.RazeForMaterials
+                    && (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Gate))
+                {
+                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost);
+                }
+                else if (building.State == BuildingState.Active)
+                {
+                    _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost / 2);
+                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost / 2);
+                }
             }
 
             TearDownFactionBridgeLinks(building);
@@ -737,6 +761,420 @@ namespace Asterra.Gameplay
 
             if (building.DefinitionId == FactionDefaultContent.BridgeId)
                 ActivateFactionBridge(building);
+            else if (building.DefinitionId == FactionDefaultContent.FerryDockId)
+                ActivateFerryDock(building);
+        }
+
+        private void ApplyTerrainWork(TerrainWorkCommand work)
+        {
+            float half = work.HalfExtent > 1f ? work.HalfExtent : 8f;
+            if (!IsInsidePlayable(work.X, work.Z))
+                return;
+            if (!HasNearbyBuilder(work.Issuer, work.X, work.Z, ConstructionWorkRadius))
+            {
+                AttractBuildersToSite(work.Issuer, work.X, work.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            int gold = 20;
+            int timber = 5;
+            switch (work.Kind)
+            {
+                case TerrainWorkKind.RaiseBerm:
+                case TerrainWorkKind.DigMoat:
+                    gold = 35;
+                    timber = 8;
+                    break;
+                case TerrainWorkKind.ClearForest:
+                case TerrainWorkKind.BurnBrush:
+                    gold = 15;
+                    timber = 0;
+                    break;
+                case TerrainWorkKind.QuarryRock:
+                    gold = 10;
+                    timber = 5;
+                    break;
+                case TerrainWorkKind.PlaceSpikes:
+                    gold = 40;
+                    timber = 25;
+                    break;
+                case TerrainWorkKind.ClearDebris:
+                    gold = 5;
+                    timber = 0;
+                    break;
+            }
+
+            if (!_wallet.TrySpend(work.Issuer, ResourceType.Gold, gold))
+                return;
+            if (timber > 0 && !_wallet.TrySpend(work.Issuer, ResourceType.Timber, timber))
+            {
+                _wallet.Add(work.Issuer, ResourceType.Gold, gold);
+                return;
+            }
+
+            bool ok;
+            switch (work.Kind)
+            {
+                case TerrainWorkKind.DigTrench:
+                    DigTrenchAt(work.X, work.Z, half);
+                    ok = true;
+                    break;
+                case TerrainWorkKind.FillTrench:
+                    ok = ReplaceTerrainCategoryAt(work.X, work.Z, half, TerrainCategory.Trench, DefaultTerrainCatalog.GrassShort);
+                    break;
+                case TerrainWorkKind.FlattenHill:
+                    ok = ReplaceTerrainCategoryAt(work.X, work.Z, half, TerrainCategory.Hill, DefaultTerrainCatalog.GrassShort);
+                    break;
+                case TerrainWorkKind.RaiseBerm:
+                    FillTerrainRect(work.X - half, work.Z - half, work.X + half, work.Z + half, DefaultTerrainCatalog.Berm);
+                    ok = true;
+                    break;
+                case TerrainWorkKind.DigMoat:
+                    ok = DigMoatAt(work.X, work.Z, half);
+                    break;
+                case TerrainWorkKind.ClearForest:
+                    ok = ClearVegetationAt(work.X, work.Z, half, burn: false);
+                    break;
+                case TerrainWorkKind.QuarryRock:
+                    ok = QuarryRockAt(work.X, work.Z, half);
+                    break;
+                case TerrainWorkKind.BurnBrush:
+                    ok = ClearVegetationAt(work.X, work.Z, half, burn: true);
+                    break;
+                case TerrainWorkKind.PlaceSpikes:
+                    FillTerrainRect(
+                        work.X - half * 0.6f, work.Z - half * 0.6f,
+                        work.X + half * 0.6f, work.Z + half * 0.6f,
+                        DefaultTerrainCatalog.SpikePit);
+                    MarkCellFlags(work.X, work.Z, half * 0.6f, TerrainCell.FlagSpikes, set: true);
+                    ok = true;
+                    break;
+                case TerrainWorkKind.ClearDebris:
+                    ok = ReplaceTerrainDefsAt(
+                        work.X, work.Z, half,
+                        DefaultTerrainCatalog.Debris, DefaultTerrainCatalog.Crater,
+                        DefaultTerrainCatalog.GrassShort);
+                    break;
+                default:
+                    ok = false;
+                    break;
+            }
+
+            if (!ok)
+            {
+                _wallet.Add(work.Issuer, ResourceType.Gold, gold);
+                if (timber > 0)
+                    _wallet.Add(work.Issuer, ResourceType.Timber, timber);
+                return;
+            }
+
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(work.X, work.Z, half + 4f, PathDirtyReason.DestructibleCleared);
+            _mutationCounter ^= 0x7E11AAul ^ ((ulong)work.Kind << 8) ^ (ulong)(work.Issuer.Value + 1);
+        }
+
+        private void ApplyRepairBridge(RepairBridgeCommand cmd)
+        {
+            if (!HasNearbyBuilder(cmd.Issuer, cmd.X, cmd.Z, ConstructionWorkRadius * 1.5f))
+            {
+                AttractBuildersToSite(cmd.Issuer, cmd.X, cmd.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, 60))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Timber, 100))
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, 60);
+                return;
+            }
+
+            int best = -1;
+            float bestD2 = 40f * 40f;
+            var links = _environment.TraversalGraph.Links;
+            for (int i = 0; i < links.Count; i++)
+            {
+                var L = links[i];
+                if (L.Type != TraversalLinkType.Bridge || L.Enabled)
+                    continue;
+                float mx = (L.StartX + L.EndX) * 0.5f;
+                float mz = (L.StartZ + L.EndZ) * 0.5f;
+                float dx = mx - cmd.X;
+                float dz = mz - cmd.Z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < bestD2)
+                {
+                    bestD2 = d2;
+                    best = L.Id;
+                }
+            }
+
+            if (best < 0)
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, 60);
+                _wallet.Add(cmd.Issuer, ResourceType.Timber, 100);
+                return;
+            }
+
+            _environment.TraversalGraph.SetLinkEnabled(best, true);
+            if (!_environment.TraversalGraph.TryGetLink(best, out var link))
+                return;
+            float cx = (link.StartX + link.EndX) * 0.5f;
+            float cz = (link.StartZ + link.EndZ) * 0.5f;
+            FillTerrainRect(cx - 5f, cz - 5f, cx + 5f, cz + 5f, DefaultTerrainCatalog.Beach);
+            SpawnDestructible(_ids.Next(), DefaultDestructibleCatalog.Bridge(), cx, cz, best);
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(cx, cz, 24f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= (ulong)(best + 1) * 1637ul;
+        }
+
+        private void ApplyUpgradeBuilding(UpgradeBuildingCommand cmd)
+        {
+            if (!_buildingsById.TryGetValue(cmd.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != cmd.Issuer || building.State != BuildingState.Active)
+                return;
+            if (cmd.UpgradeDefId != FactionDefaultContent.StoneWallsUpgradeId)
+                return;
+            if (!_upgrades.Has(cmd.Issuer, FactionDefaultContent.StoneWallsUpgradeId))
+                return;
+            if (building.DefinitionId != FactionDefaultContent.PalisadeId
+                && building.DefinitionId != FactionDefaultContent.BarricadeId)
+                return;
+            if (!_defs.TryGetBuilding(FactionDefaultContent.StoneWallId, out var stone))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, Math.Max(40, stone.GoldCost / 2)))
+                return;
+
+            SetBuildingBlocked(building, false);
+            building.DefinitionId = FactionDefaultContent.StoneWallId;
+            building.MaxHealth = stone.MaxHealth;
+            building.Health = stone.MaxHealth;
+            building.FootprintHalfX = stone.FootprintX * 0.5f;
+            building.FootprintHalfZ = stone.FootprintZ * 0.5f;
+            building.FootprintRadius = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+            building.Kind = BuildingKind.Wall;
+            building.WallSegmentLength = stone.WallSegmentLength;
+            ApplyBuildingYawToFootprint(building);
+            SetBuildingBlocked(building, true);
+            RefreshWallConnectionsAround(building);
+            _mutationCounter ^= building.Id.Value * 1643ul;
+        }
+
+        private void ActivateFerryDock(SimBuilding building)
+        {
+            float yaw = building.YawDegrees;
+            float rad = yaw * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            float shoreX = building.X;
+            float shoreZ = building.Z;
+            float waterX = building.X + fx * 16f;
+            float waterZ = building.Z + fz * 16f;
+            if (!IsWaterWorld(waterX, waterZ))
+            {
+                waterX = building.X - fx * 16f;
+                waterZ = building.Z - fz * 16f;
+            }
+
+            FillTerrainRect(shoreX - 4f, shoreZ - 4f, shoreX + 4f, shoreZ + 4f, DefaultTerrainCatalog.Beach);
+            int linkId = _environment.TraversalGraph.AddLink(
+                shoreX, shoreZ, waterX, waterZ,
+                TraversalLinkType.ShoreTransition,
+                TraversalCapability.Land | TraversalCapability.Water,
+                durationSeconds: 1.4f,
+                allowsCombat: false,
+                enabled: true,
+                isDestructible: false);
+            building.LinkedTraversalLinkId = linkId;
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(building.X, building.Z, 20f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= building.Id.Value * 1651ul;
+        }
+
+        private bool DigMoatAt(float x, float z, float half)
+        {
+            // Require water somewhere near the site.
+            bool nearWater = false;
+            for (int i = -2; i <= 2 && !nearWater; i++)
+            {
+                for (int j = -2; j <= 2; j++)
+                {
+                    if (IsWaterWorld(x + i * 8f, z + j * 8f))
+                        nearWater = true;
+                }
+            }
+
+            if (!nearWater)
+                return false;
+
+            FillTerrainRect(x - half, z - half, x + half, z + half, DefaultTerrainCatalog.WaterShallow);
+            return true;
+        }
+
+        private bool ClearVegetationAt(float x, float z, float half, bool burn)
+        {
+            ushort to = burn ? DefaultTerrainCatalog.Scorched : DefaultTerrainCatalog.GrassShort;
+            bool any = ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Forest, to)
+                       | ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Tree, to)
+                       | ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.GrassLong, to);
+            if (burn && any)
+                MarkCellFlags(x, z, half, TerrainCell.FlagOnFire, set: true);
+            if (any && !burn)
+            {
+                // Timber salvage from cleared stands.
+                AddResourceNode(_ids.Next(), ResourceType.Timber, 40, x + 2f, z + 2f);
+            }
+
+            return any;
+        }
+
+        private bool QuarryRockAt(float x, float z, float half)
+        {
+            if (!ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Rock, DefaultTerrainCatalog.GrassBare))
+                return false;
+            AddResourceNode(_ids.Next(), ResourceType.Gold, 35, x, z);
+            return true;
+        }
+
+        private bool ReplaceTerrainCategoryAt(float x, float z, float half, TerrainCategory category, ushort toDef)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return false;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            bool any = false;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var def = grid.GetDef(cell.TerrainDefIndex);
+                    if (def == null || def.Category != category)
+                        continue;
+                    grid.SetCellDef(cx, cz, toDef);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = toDef;
+                    any = true;
+                }
+            }
+
+            return any;
+        }
+
+        private bool ReplaceTerrainDefsAt(float x, float z, float half, ushort a, ushort b, ushort toDef)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return false;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            bool any = false;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if (cell.TerrainDefIndex != a && cell.TerrainDefIndex != b)
+                        continue;
+                    grid.SetCellDef(cx, cz, toDef);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = toDef;
+                    any = true;
+                }
+            }
+
+            return any;
+        }
+
+        private void MarkCellFlags(float x, float z, float half, byte flag, bool set)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if (set)
+                        cell.Flags = (byte)(cell.Flags | flag);
+                    else
+                        cell.Flags = (byte)(cell.Flags & ~flag);
+                    grid.SetCell(cx, cz, cell);
+                }
+            }
+        }
+
+        private void TickTerrainHazards(float dt)
+        {
+            // Spike pits + burning ruins: light DoT on standing units.
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.IsGarrisoned)
+                    continue;
+                if (!_environment.Grid.TryGetCell(u.X, u.Z, out var cell))
+                    continue;
+                float dps = 0f;
+                if ((cell.Flags & TerrainCell.FlagSpikes) != 0
+                    || cell.TerrainDefIndex == DefaultTerrainCatalog.SpikePit)
+                    dps += 8f;
+                if ((cell.Flags & (TerrainCell.FlagOnFire | TerrainCell.FlagBurningRuin)) != 0)
+                    dps += 6f;
+                if (dps <= 0f)
+                    continue;
+                u.Health -= dps * dt;
+                if (u.Health <= 0f)
+                {
+                    u.Health = 0f;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.Death, u.Id, u.X, u.Z, false));
+                }
+            }
+
+            // Slowly extinguish brush fires → scorched stays, flag clears.
+            _burnTimer += dt;
+            if (_burnTimer < 1f)
+                return;
+            _burnTimer = 0f;
+            DecayFireFlags(step: 1);
+        }
+
+        private float _burnTimer;
+
+        private void DecayFireFlags(int step)
+        {
+            // Sample a sparse grid each second to avoid O(cells) every tick.
+            var grid = _environment.Grid;
+            int w = grid.Width;
+            int h = grid.Height;
+            int stride = 3;
+            int offset = (int)(_mutationCounter % (uint)stride);
+            for (int cz = offset; cz < h; cz += stride)
+            {
+                for (int cx = offset; cx < w; cx += stride)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if ((cell.Flags & TerrainCell.FlagOnFire) == 0
+                        && (cell.Flags & TerrainCell.FlagBurningRuin) == 0)
+                        continue;
+                    // Probabilistic clear over ~12s.
+                    if (((cx * 17 + cz * 31 + step) & 7) != 0)
+                        continue;
+                    cell.Flags = (byte)(cell.Flags & ~(TerrainCell.FlagOnFire | TerrainCell.FlagBurningRuin));
+                    grid.SetCell(cx, cz, cell);
+                }
+            }
         }
 
         private void TearDownCompletedEarthwork(SimBuilding building)
@@ -837,6 +1275,16 @@ namespace Asterra.Gameplay
             }
 
             return false;
+        }
+
+        private bool CanPlaceFerryDock(float x, float z, float yawDegrees)
+        {
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float rad = yawDegrees * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            return IsWaterWorld(x + fx * 14f, z + fz * 14f) || IsWaterWorld(x - fx * 14f, z - fz * 14f);
         }
 
         private bool IsWaterWorld(float x, float z)
@@ -1053,7 +1501,7 @@ namespace Asterra.Gameplay
             if (building.IsResearching)
                 return;
 
-            bool keepTech = def.Kind == UpgradeKind.Keep;
+            bool keepTech = def.Kind == UpgradeKind.Keep || def.Kind == UpgradeKind.Fortification;
             bool atKeep = building.Kind == BuildingKind.Keep;
             bool atProducer = building.Kind == BuildingKind.Producer;
             if (keepTech && !atKeep)
@@ -2528,6 +2976,14 @@ namespace Asterra.Gameplay
         {
             TearDownFactionBridgeLinks(building);
             SetBuildingBlocked(building, blocked: false);
+
+            // Combat aftermath: debris ring + crater core + brief burning ruin.
+            float r = MathF.Max(4f, building.FootprintRadius);
+            FillTerrainRect(building.X - r * 0.7f, building.Z - r * 0.7f, building.X + r * 0.7f, building.Z + r * 0.7f, DefaultTerrainCatalog.Debris);
+            FillTerrainRect(building.X - r * 0.35f, building.Z - r * 0.35f, building.X + r * 0.35f, building.Z + r * 0.35f, DefaultTerrainCatalog.Crater);
+            MarkCellFlags(building.X, building.Z, r, TerrainCell.FlagBurningRuin, set: true);
+            _environment.RebuildFeatureIndex();
+
             if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Tower || building.Kind == BuildingKind.Keep)
             {
                 _environment.PathDirty.MarkRadius(
