@@ -287,13 +287,13 @@ namespace Asterra.Gameplay
                 new Rect(dock.x + 1f, dock.y + 1f, dock.width - 2f, HudStyle.S(3f)),
                 HudStyle.AccentSoft);
 
-            float selectW = HudStyle.S(250f);
+            float selectW = HudStyle.S(220f);
             DrawSelectionInto(player, new Rect(dock.x + HudStyle.S(8f), dock.y + HudStyle.S(10f), selectW, dock.height - HudStyle.S(18f)));
 
-            _cmdCardW = HudStyle.S(64f);
-            _cmdCardH = HudStyle.S(62f);
-            _cmdGap = HudStyle.S(5f);
-            _cmdGridX = dock.x + selectW + HudStyle.S(14f);
+            _cmdCardW = HudStyle.S(60f);
+            _cmdCardH = HudStyle.S(58f);
+            _cmdGap = HudStyle.S(4f);
+            _cmdGridX = dock.x + selectW + HudStyle.S(12f);
             _cmdGridY = dock.y + HudStyle.S(12f);
             _cmdCardIndex = 0;
 
@@ -312,21 +312,43 @@ namespace Asterra.Gameplay
                 return;
             }
 
+            // Builder submenus own the whole grid so More / Earth cards are never clipped away.
+            if (orders.HasBuilderSelected
+                && (_cmdPage == CmdPage.BuildMore || _cmdPage == CmdPage.Earthworks))
+            {
+                DrawBuilderCommands();
+                return;
+            }
+
             PushCard("idle", $"Idle {orders.IdleWorkerCount}", "Select idle workers (. / I)", HudStyle.Timber,
                 () => orders.SelectIdleWorker());
 
             if (orders.IsPlaceMode)
             {
                 PushCard("cancel", "Cancel", "Cancel place mode (Esc)", HudStyle.Danger,
-                    () => orders.CancelPlaceMode());
+                    () =>
+                    {
+                        orders.CancelPlaceMode();
+                        _cmdPage = CmdPage.Main;
+                    });
                 return;
             }
 
-            if (orders.HasCombatUnitSelected)
-                DrawCombatCommands(player);
+            if (orders.HasTerrainWorkArmed)
+            {
+                PushCard("cancel", "Cancel", "Cancel terrain work (Esc / RMB)", HudStyle.Danger,
+                    () =>
+                    {
+                        orders.CancelTerrainWorkMode();
+                        _cmdPage = CmdPage.Main;
+                    });
+                return;
+            }
 
             if (orders.HasBuilderSelected)
                 DrawBuilderCommands();
+            else if (orders.HasCombatUnitSelected)
+                DrawCombatCommands(player);
         }
 
         private void DrawSelectionInto(PlayerId player, Rect area)
@@ -474,10 +496,9 @@ namespace Asterra.Gameplay
             if (_cmdPage == CmdPage.BuildMore)
             {
                 PushCard("back", "Back", "Return", HudStyle.Accent, () => _cmdPage = CmdPage.Main);
-                PushBuildCard("bridge", "Bridge", "V", FactionDefaultContent.BridgeId);
-                PushBuildCard("trench", "Trench", "J", FactionDefaultContent.TrenchWorksId);
                 PushBuildCard("barricade", "Barrier", ",", FactionDefaultContent.BarricadeId);
                 PushBuildCard("ferry", "Ferry", ".", FactionDefaultContent.FerryDockId);
+                PushBuildCard("outpost", "Mine", "O", roster.OutpostBuildingId);
                 return;
             }
 
@@ -497,14 +518,16 @@ namespace Asterra.Gameplay
                 return;
             }
 
+            // Primary builder row — world mods (trench/bridge) sit here, not buried.
             PushBuildCard("hammer", "Barracks", "B", roster.ProducerBuildingId);
             PushBuildCard("tower", "Tower", "N", roster.TowerBuildingId);
             PushBuildCard("wall", "Wall", "M", roster.WallBuildingId);
-            PushBuildCard("outpost", "Mine", "O", roster.OutpostBuildingId);
-            PushCard("more", "More", "Bridge, trench, barricade, ferry", HudStyle.Accent,
-                () => _cmdPage = CmdPage.BuildMore);
-            PushCard("earth", "Earth", "Terrain works", HudStyle.Timber,
+            PushBuildCard("trench", "Trench", "J", FactionDefaultContent.TrenchWorksId);
+            PushBuildCard("bridge", "Bridge", "V", FactionDefaultContent.BridgeId);
+            PushCard("earth", "Earth", "Fill, berm, moat, clear, burn, quarry, spikes…", HudStyle.Timber,
                 () => _cmdPage = CmdPage.Earthworks);
+            PushCard("more", "More", "Barricade, ferry, gold mine", HudStyle.Accent,
+                () => _cmdPage = CmdPage.BuildMore);
         }
 
         private void DrawBuildingCommands(PlayerId player, BuildingSnapshot b)
@@ -694,19 +717,21 @@ namespace Asterra.Gameplay
 
         private void PushCard(string icon, string label, string tip, Color accent, System.Action onClick, bool enabled = true)
         {
-            const int cols = 6;
-            int col = _cmdCardIndex % cols;
-            int row = _cmdCardIndex / cols;
+            float maxX = HudStyle.ContentRight - HudStyle.S(8f);
+            float cell = _cmdCardW + _cmdGap;
+            int maxCols = Mathf.Max(1, Mathf.FloorToInt((maxX - _cmdGridX + _cmdGap) / cell));
+
+            int col = _cmdCardIndex % maxCols;
+            int row = _cmdCardIndex / maxCols;
+            // Keep two rows inside the dock.
+            if (row > 1)
+                return;
+
             var rect = new Rect(
-                _cmdGridX + col * (_cmdCardW + _cmdGap),
+                _cmdGridX + col * cell,
                 _cmdGridY + row * (_cmdCardH + _cmdGap),
                 _cmdCardW,
                 _cmdCardH);
-            if (rect.xMax > HudStyle.ContentRight - HudStyle.S(4f))
-            {
-                _cmdCardIndex++;
-                return;
-            }
 
             if (HudStyle.CommandCard(rect, icon, label, accent, out bool hovered, enabled))
             {

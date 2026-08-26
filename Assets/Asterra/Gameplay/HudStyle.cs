@@ -46,7 +46,7 @@ namespace Asterra.Gameplay
                 MinimapSize);
 
         public static float ContentRight => Screen.width - MinimapSize - MinimapMargin * 2f;
-        public static float CommandDockHeight => S(168f);
+        public static float CommandDockHeight => S(196f);
 
         public static void InvalidateScale() => _appliedScale = -1f;
 
@@ -235,7 +235,17 @@ namespace Asterra.Gameplay
                 CardLabel);
             GUI.color = prev;
 
-            return enabled && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            // FlatButton (not GUIStyle.none) — none often fails to receive clicks in IMGUI.
+            bool clicked = false;
+            if (enabled)
+            {
+                var prevCol = GUI.color;
+                GUI.color = Color.clear;
+                clicked = GUI.Button(rect, GUIContent.none, FlatButton);
+                GUI.color = prevCol;
+            }
+
+            return clicked;
         }
 
         public static void ResourcePill(Rect rect, string iconKey, string value, Color accent)

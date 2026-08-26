@@ -60,11 +60,12 @@ namespace Asterra.Gameplay.Player
         public bool IsPlaceMode => _placeMode;
         public bool IsAttackMoveArmed => _attackMoveArmed;
         public bool IsPatrolArmed => _patrolArmed;
-        public bool HasArmedMode => _placeMode || _attackMoveArmed || _patrolArmed;
+        public bool HasArmedMode => _placeMode || _attackMoveArmed || _patrolArmed || _terrainWorkArmed.HasValue;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
         public int IdleWorkerCount => CountIdleWorkers();
         public bool HasBuilderSelected => HasSelectedBuilder();
+        public bool HasTerrainWorkArmed => _terrainWorkArmed.HasValue;
         public bool HasCombatUnitSelected => HasSelectedCombatUnit();
         public bool HasOwnedGarrisonedCombatUnit()
         {
@@ -808,6 +809,11 @@ namespace Asterra.Gameplay.Player
                         if (!IsAdditiveModifierHeld())
                             CancelPlaceMode();
                     }
+                    else
+                    {
+                        string why = DescribeInvalidPlace();
+                        MatchFeedback.Show(why, AsterraSfx.Invalid);
+                    }
                 }
 
                 return;
@@ -1189,6 +1195,11 @@ namespace Asterra.Gameplay.Player
             CancelPatrolArm();
             _terrainWorkArmed = kind;
             MatchFeedback.Show($"{kind}: click ground (builder nearby)", AsterraSfx.OrderBuild);
+        }
+
+        public void CancelTerrainWorkMode()
+        {
+            _terrainWorkArmed = null;
         }
 
         public void RepairBridgeAtCursor()
@@ -1848,6 +1859,31 @@ namespace Asterra.Gameplay.Player
             }
 
             return true;
+        }
+
+        private string DescribeInvalidPlace()
+        {
+            if (!HasSelectedBuilder())
+                return "Select a builder first";
+            string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                ? (_roster != null ? _roster.ProducerBuildingId : null)
+                : _placeBuildingDefId;
+            if (defId == FactionDefaultContent.BridgeId)
+                return "Bridge needs shore + water/gap along facing (Q/E rotate)";
+            if (defId == FactionDefaultContent.FerryDockId)
+                return "Ferry dock needs shore facing water (Q/E rotate)";
+            if (defId == FactionDefaultContent.TrenchWorksId)
+                return "Trench needs diggable ground (grass/forest/beach)";
+            if (match != null && match.Definitions != null && match.Wallet != null
+                && !string.IsNullOrEmpty(defId)
+                && match.Definitions.TryGetBuilding(defId, out var def))
+            {
+                if (!match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost)
+                    || !match.Wallet.CanAfford(_local, ResourceType.Timber, def.TimberCost))
+                    return "Not enough gold/timber";
+            }
+
+            return "Cannot place here";
         }
 
         private bool HasSelectedBuilder()

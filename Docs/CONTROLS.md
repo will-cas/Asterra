@@ -68,7 +68,9 @@ Bottom command dock (classic RTS):
 | --- | --- |
 | Always | Idle workers |
 | Combat selected | Stop / stances; Gear submenu for equipment |
-| Builder selected | Barracks / Tower / Wall / Mine; **More** (bridge/trench/…) · **Earth** (terrain works) |
+| Builder selected | Barracks / Tower / Wall / **Trench** / **Bridge** / Earth / More |
+| Earth submenu | Fill, berm, moat, clear, burn, quarry, spikes, debris, repair |
+| More submenu | Barricade, ferry, gold mine |
 | Producer / keep | Train cards + research; **More** for demolish / turrets |
 | Esc pause | Resume · Save/Load · Options · Main Menu |
 
