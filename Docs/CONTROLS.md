@@ -55,7 +55,7 @@ Local offline / skirmish input (keyboard + mouse).
 ## Production
 
 - Select a producer / keep, then use train buttons
-- Keep → train builders; producer → train combat units
+- Keep → train builders; producer → train Infantry / Ranged / Cavalry / Elite (faction) / Siege / Scout / Sapper
 - Repeated train (or Shift while training) queues units
 - Queue portraits jump the camera to that building
 - Cancel appears only while a building has active/queued production
@@ -69,8 +69,8 @@ The bottom panel only shows actions valid for the current selection:
 | Always | Idle workers button |
 | Builder(s) selected (or place mode) | Barracks / Tower / Wall / Gold Mine (or Cancel Build) |
 | Combat unit(s) selected | Stop, Aggro / Defend / Hold |
+| Producer selected | Infantry / Ranged / Cavalry / Elite (Dominion & Flame) / Siege / Scout / Sapper |
 | Keep selected | Builder train |
-| Producer selected | Soldier / Archer / Cavalry / Siege train |
 | Building producing / queued | Production queue + Cancel |
 
 Context line (top-left) summarizes selection, e.g. “Builder selected — B/N/M/O build”, “Keep selected — train”, “N combat units selected”.

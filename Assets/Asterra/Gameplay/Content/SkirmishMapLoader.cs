@@ -296,8 +296,11 @@ namespace Asterra.Gameplay.Content
                 case "ranged":
                     return faction.RangedUnitId;
                 case "cavalry":
-                case "elite":
                     return faction.CavalryUnitId;
+                case "elite":
+                    return !string.IsNullOrEmpty(faction.EliteUnitId)
+                        ? faction.EliteUnitId
+                        : faction.CavalryUnitId;
                 case "siege":
                     return faction.SiegeUnitId;
                 case "leader":
@@ -305,7 +308,14 @@ namespace Asterra.Gameplay.Content
                 case "boat":
                     return FactionDefaultContent.RiverBoatId;
                 case "pathfinder":
-                    return FactionDefaultContent.PathfinderId;
+                case "scout":
+                    return !string.IsNullOrEmpty(faction.ScoutUnitId)
+                        ? faction.ScoutUnitId
+                        : FactionDefaultContent.PathfinderId;
+                case "sapper":
+                    return !string.IsNullOrEmpty(faction.SapperUnitId)
+                        ? faction.SapperUnitId
+                        : FactionDefaultContent.SapperId;
                 default:
                     return faction.BasicUnitId;
             }

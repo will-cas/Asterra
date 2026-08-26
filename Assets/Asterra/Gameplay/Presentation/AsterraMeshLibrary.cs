@@ -111,6 +111,10 @@ namespace Asterra.Gameplay.Presentation
                 return UnitRole.Infantry;
             if (definitionId.Contains("builder"))
                 return UnitRole.Builder;
+            if (definitionId.Contains("sapper"))
+                return UnitRole.Infantry;
+            if (definitionId.Contains("pathfinder"))
+                return UnitRole.Infantry;
             // Notion-aligned roles that still use legacy ids.
             if (definitionId.Contains("iron_knight"))
                 return UnitRole.Infantry; // Iron Guard
@@ -118,7 +122,9 @@ namespace Asterra.Gameplay.Presentation
                 return UnitRole.Ranged; // Fire Mage
             if (definitionId.Contains("archer") || definitionId.Contains("bow") || definitionId.Contains("acolyte"))
                 return UnitRole.Ranged;
-            if (definitionId.Contains("knight") || definitionId.Contains("cavalry") || definitionId.Contains("rider"))
+            if (definitionId.Contains("cavalry") || definitionId.Contains("rider"))
+                return UnitRole.Cavalry;
+            if (definitionId.Contains("knight"))
                 return UnitRole.Cavalry;
             if (definitionId.Contains("catapult") || definitionId.Contains("siege") || definitionId.Contains("mortar")
                 || definitionId.Contains("engine"))

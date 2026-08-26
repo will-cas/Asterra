@@ -668,8 +668,12 @@ namespace Asterra.Gameplay
             {
                 trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Infantry", r.BasicUnitId);
                 trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Ranged", r.RangedUnitId);
-                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Elite", r.CavalryUnitId);
+                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Cavalry", r.CavalryUnitId);
+                if (!string.IsNullOrEmpty(r.EliteUnitId))
+                    trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Elite", r.EliteUnitId);
                 trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Siege", r.SiegeUnitId);
+                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Scout", r.ScoutUnitId);
+                trainX = DrawPricedTrainButton(trainX, trainY, btnW, btnH, gap, "Sapper", r.SapperUnitId);
 
                 // Equipment research at barracks / unit building
                 if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId)
@@ -718,6 +722,9 @@ namespace Asterra.Gameplay
 
         private float DrawPricedTrainButton(float x, float y, float w, float h, float gap, string title, string unitId)
         {
+            if (string.IsNullOrEmpty(unitId))
+                return x;
+
             string label = title;
             string tip = title;
             bool leaderBlocked = false;

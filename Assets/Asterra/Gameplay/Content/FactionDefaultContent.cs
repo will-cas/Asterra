@@ -15,7 +15,13 @@ namespace Asterra.Gameplay.Content
         public string BuilderUnitId;
         public string RangedUnitId;
         public string CavalryUnitId;
+        /// <summary>Faction specialty (e.g. Iron Guard, Fire Mage). Empty = none.</summary>
+        public string EliteUnitId;
         public string SiegeUnitId;
+        /// <summary>Shared scout (Pathfinder). Trainable at producer.</summary>
+        public string ScoutUnitId;
+        /// <summary>Shared anti-structure sapper. Trainable at producer.</summary>
+        public string SapperUnitId;
         public string TowerBuildingId;
         public string WallBuildingId;
         public string OutpostBuildingId;
@@ -51,7 +57,8 @@ namespace Asterra.Gameplay.Content
         public const string MilitiaId = "unit_militia";
         public const string IronBuilderId = "unit_iron_builder";
         public const string IronArcherId = "unit_iron_archer";
-        public const string IronKnightId = "unit_iron_knight";
+        public const string IronKnightId = "unit_iron_knight"; // Iron Guard (elite infantry)
+        public const string IronCavalryId = "unit_iron_cavalry";
         public const string IronCatapultId = "unit_iron_catapult";
         public const string BarracksId = "building_barracks";
         public const string IronKeepId = "building_iron_keep";
@@ -71,9 +78,10 @@ namespace Asterra.Gameplay.Content
         public const string KeepBastionId = "upgrade_keep_bastion";
         public const string KeepArmoryId = "upgrade_keep_armory";
 
-        // Shared vehicles / traversal specialists
+        // Shared vehicles / traversal specialists / support
         public const string RiverBoatId = "unit_river_boat";
         public const string PathfinderId = "unit_pathfinder";
+        public const string SapperId = "unit_sapper";
 
         // Shared fortifications
         public const string WatchtowerId = "building_watchtower";
@@ -112,7 +120,8 @@ namespace Asterra.Gameplay.Content
         public const string EmberRaiderId = "unit_ember_raider";
         public const string AshenBuilderId = "unit_ashen_builder";
         public const string AshenArcherId = "unit_ashen_archer";
-        public const string AshenKnightId = "unit_ashen_knight";
+        public const string AshenKnightId = "unit_ashen_knight"; // Fire Mage (elite ranged)
+        public const string AshenCavalryId = "unit_ashen_cavalry";
         public const string AshenCatapultId = "unit_ashen_catapult";
         public const string ForgeId = "building_forge";
         public const string AshCitadelId = "building_ash_citadel";
@@ -141,8 +150,11 @@ namespace Asterra.Gameplay.Content
             BasicUnitId = MilitiaId,
             BuilderUnitId = IronBuilderId,
             RangedUnitId = IronArcherId,
-            CavalryUnitId = IronKnightId,
+            CavalryUnitId = IronCavalryId,
+            EliteUnitId = IronKnightId,
             SiegeUnitId = IronCatapultId,
+            ScoutUnitId = PathfinderId,
+            SapperUnitId = SapperId,
             TowerBuildingId = WatchtowerId,
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
@@ -173,7 +185,10 @@ namespace Asterra.Gameplay.Content
             BuilderUnitId = VerdantBuilderId,
             RangedUnitId = VerdantArcherId,
             CavalryUnitId = VerdantKnightId,
+            EliteUnitId = string.Empty,
             SiegeUnitId = VerdantCatapultId,
+            ScoutUnitId = PathfinderId,
+            SapperUnitId = SapperId,
             TowerBuildingId = WatchtowerId,
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
@@ -203,8 +218,11 @@ namespace Asterra.Gameplay.Content
             BasicUnitId = EmberRaiderId,
             BuilderUnitId = AshenBuilderId,
             RangedUnitId = AshenArcherId,
-            CavalryUnitId = AshenKnightId,
+            CavalryUnitId = AshenCavalryId,
+            EliteUnitId = AshenKnightId,
             SiegeUnitId = AshenCatapultId,
+            ScoutUnitId = PathfinderId,
+            SapperUnitId = SapperId,
             TowerBuildingId = WatchtowerId,
             WallBuildingId = PalisadeId,
             OutpostBuildingId = OutpostId,
@@ -325,6 +343,21 @@ namespace Asterra.Gameplay.Content
             });
             registry.Register(new UnitDefData
             {
+                Id = IronCavalryId,
+                DisplayName = "Dominion Rider",
+                MaxHealth = 115f,
+                MoveSpeed = 7.6f,
+                AttackDamage = 14f,
+                AttackRange = 1.7f,
+                AttackCooldown = 1f,
+                GoldCost = 110,
+                TrainSeconds = 6f,
+                Role = UnitRole.Cavalry,
+                SquadSize = 6,
+                Armor = 3f,
+            });
+            registry.Register(new UnitDefData
+            {
                 Id = IronCatapultId,
                 DisplayName = "Siege Cannon",
                 MaxHealth = 90f,
@@ -354,7 +387,10 @@ namespace Asterra.Gameplay.Content
                 SightRadius = 85f,
                 FootprintX = 12f,
                 FootprintZ = 12f,
-                TrainableUnitIds = new[] { MilitiaId, IronArcherId, IronKnightId, IronCatapultId },
+                TrainableUnitIds = new[]
+                {
+                    MilitiaId, IronArcherId, IronCavalryId, IronKnightId, IronCatapultId, PathfinderId, SapperId,
+                },
             });
             registry.Register(new BuildingDefData
             {
@@ -578,7 +614,10 @@ namespace Asterra.Gameplay.Content
                 SightRadius = 85f,
                 FootprintX = 12f,
                 FootprintZ = 12f,
-                TrainableUnitIds = new[] { DryadId, VerdantArcherId, VerdantKnightId, VerdantCatapultId },
+                TrainableUnitIds = new[]
+                {
+                    DryadId, VerdantArcherId, VerdantKnightId, VerdantCatapultId, PathfinderId, SapperId,
+                },
             });
             registry.Register(new BuildingDefData
             {
@@ -760,6 +799,21 @@ namespace Asterra.Gameplay.Content
             });
             registry.Register(new UnitDefData
             {
+                Id = AshenCavalryId,
+                DisplayName = "Ember Cavalry",
+                MaxHealth = 95f,
+                MoveSpeed = 8.8f,
+                AttackDamage = 15f,
+                AttackRange = 1.7f,
+                AttackCooldown = 0.9f,
+                GoldCost = 105,
+                TrainSeconds = 5.8f,
+                Role = UnitRole.Cavalry,
+                SquadSize = 6,
+                Armor = 1.5f,
+            });
+            registry.Register(new UnitDefData
+            {
                 Id = AshenCatapultId,
                 DisplayName = "Ancient Guardian",
                 MaxHealth = 140f,
@@ -789,7 +843,10 @@ namespace Asterra.Gameplay.Content
                 SightRadius = 85f,
                 FootprintX = 12f,
                 FootprintZ = 12f,
-                TrainableUnitIds = new[] { EmberRaiderId, AshenArcherId, AshenKnightId, AshenCatapultId },
+                TrainableUnitIds = new[]
+                {
+                    EmberRaiderId, AshenArcherId, AshenCavalryId, AshenKnightId, AshenCatapultId, PathfinderId, SapperId,
+                },
             });
             registry.Register(new BuildingDefData
             {
@@ -853,7 +910,8 @@ namespace Asterra.Gameplay.Content
                 UnitDamageMultiplier = 1.12f,
                 Kind = UpgradeKind.Equipment,
                 ResearchSeconds = 12f,
-                CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry),
+                // Melee + Fire Mage (ranged elite).
+                CompatibleRoleMask = UpgradeDefData.RoleMask(UnitRole.Infantry, UnitRole.Cavalry, UnitRole.Ranged),
             });
             registry.Register(new PowerDefData
             {
@@ -953,8 +1011,26 @@ namespace Asterra.Gameplay.Content
                 TrainSeconds = 5f,
                 Role = UnitRole.Infantry,
                 SquadSize = 4, // scout party, not a full company
+                SightRadius = 165f,
                 TraversalCapabilities = Asterra.Core.World.TraversalCapability.Land
                     | Asterra.Core.World.TraversalCapability.Jump,
+            });
+            registry.Register(new UnitDefData
+            {
+                Id = SapperId,
+                DisplayName = "Sapper",
+                MaxHealth = 85f,
+                MoveSpeed = 4.7f,
+                AttackDamage = 11f,
+                AttackRange = 1.6f,
+                AttackCooldown = 1.05f,
+                GoldCost = 85,
+                TrainSeconds = 5.5f,
+                Role = UnitRole.Infantry,
+                SquadSize = 8,
+                Armor = 2f,
+                BuildingDamageMultiplier = 2.6f,
+                SightRadius = 100f,
             });
             registry.Register(new BuildingDefData
             {

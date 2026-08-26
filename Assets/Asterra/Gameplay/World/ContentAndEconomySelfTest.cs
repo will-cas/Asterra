@@ -16,6 +16,7 @@ namespace Asterra.Gameplay
 
             Expect(ref fails, sb, "three factions registered", ThreeFactions());
             Expect(ref fails, sb, "each faction has keep+producer+builder", FactionCoreIds());
+            Expect(ref fails, sb, "each faction has cavalry+scout+sapper", FactionCombatRoster());
             Expect(ref fails, sb, "keeps allow keep turret only", KeepsAllowTurret());
             Expect(ref fails, sb, "wallet spend and afford", WalletBasics());
             Expect(ref fails, sb, "wallet reject overspend", WalletReject());
@@ -126,6 +127,54 @@ namespace Asterra.Gameplay
             }
 
             return true;
+        }
+
+        private static bool FactionCombatRoster()
+        {
+            var defs = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs);
+            var all = FactionDefaultContent.All;
+            for (int i = 0; i < all.Length; i++)
+            {
+                var r = all[i];
+                if (string.IsNullOrEmpty(r.CavalryUnitId)
+                    || string.IsNullOrEmpty(r.ScoutUnitId)
+                    || string.IsNullOrEmpty(r.SapperUnitId)
+                    || string.IsNullOrEmpty(r.SiegeUnitId)
+                    || string.IsNullOrEmpty(r.RangedUnitId))
+                    return false;
+                if (!defs.TryGetUnit(r.CavalryUnitId, out var cav) || cav.Role != UnitRole.Cavalry)
+                    return false;
+                if (!defs.TryGetUnit(r.ScoutUnitId, out _) || !defs.TryGetUnit(r.SapperUnitId, out var sapper))
+                    return false;
+                if (sapper.BuildingDamageMultiplier < 2f)
+                    return false;
+                if (!defs.TryGetBuilding(r.ProducerBuildingId, out var producer)
+                    || producer.TrainableUnitIds == null
+                    || !Contains(producer.TrainableUnitIds, r.CavalryUnitId)
+                    || !Contains(producer.TrainableUnitIds, r.ScoutUnitId)
+                    || !Contains(producer.TrainableUnitIds, r.SapperUnitId))
+                    return false;
+                if (!string.IsNullOrEmpty(r.EliteUnitId)
+                    && (!defs.TryGetUnit(r.EliteUnitId, out _)
+                        || !Contains(producer.TrainableUnitIds, r.EliteUnitId)))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool Contains(string[] ids, string id)
+        {
+            if (ids == null || string.IsNullOrEmpty(id))
+                return false;
+            for (int i = 0; i < ids.Length; i++)
+            {
+                if (ids[i] == id)
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool KeepsAllowTurret()
