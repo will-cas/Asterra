@@ -15,6 +15,7 @@ namespace Asterra.Core
         int CommandDelayTicks { get; }
         float FixedDeltaSeconds { get; }
         void Advance();
+        void Seek(Tick tick);
     }
 
     public interface ICommandBus
@@ -87,5 +88,7 @@ namespace Asterra.Core
     public interface IIdFactory
     {
         SimEntityId Next();
+        uint PeekNext { get; }
+        void Seek(uint nextId);
     }
 }

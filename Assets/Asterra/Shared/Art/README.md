@@ -2,12 +2,8 @@
 
 Low-poly meshes live in `Meshes/*.obj` (Unity-importable and Blender-editable).
 
-Runtime fallback: `AsterraMeshLibrary` builds the same shapes in code so the demo works before OBJ import.
+Runtime: `AsterraMeshLibrary` loads these OBJs via `ObjMeshLoader` only. Missing keys log an error and return an empty mesh. Free CC0 OBJs only — no procedural mesh fallback.
 
-Regenerate OBJs:
+Sources: Quaternius (Ultimate Fantasy RTS buildings + RPG Character Pack units) and Kenney (Nature Kit / Castle Kit). See `ThirdParty/CREDITS.md`.
 
-```bash
-python3 tools/meshgen/generate_objs.py
-```
-
-In Blender: File → Import → Wavefront (.obj), edit, export back to this folder.
+Basenames: `unit_*`, `building_*`, `resource_*`, `prop_*`.

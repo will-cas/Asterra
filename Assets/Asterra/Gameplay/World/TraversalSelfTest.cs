@@ -37,7 +37,7 @@ namespace Asterra.Gameplay
             var sim = new SkirmishWorldSim(wallet, ids, defs, env);
             var player = new PlayerId(0);
             var faction = new FactionId(0);
-            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.MilitiaId, 65f, -32f);
+            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.VeiledApprenticeId, 65f, -32f);
             unit.MoveTargetX = 65f;
             unit.MoveTargetZ = 32f;
 

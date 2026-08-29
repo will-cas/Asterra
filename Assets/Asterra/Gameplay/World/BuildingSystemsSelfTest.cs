@@ -39,12 +39,12 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "west link on B", (b.WallLinks & 8) != 0);
 
             var keep = sim.SpawnBuilding(
-                ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.IronKeepId, -80f, -80f, startActive: true);
+                ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.ArcaneumId, -80f, -80f, startActive: true);
             Expect(ref fails, sb, "keep garrison", keep.AllowsGarrison && keep.GarrisonCapacity >= 8);
             Expect(ref fails, sb, "keep category castle", keep.Category == BuildingCategory.Castle);
 
             sim.AddTerritory(ids.Next(), 100f, 100f, 40f, goldPerSecond: 1);
-            sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.MilitiaId, 100f, 100f);
+            sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 100f, 100f);
             bool sawStart = false;
             bool sawComplete = false;
             for (int i = 0; i < 200; i++)
@@ -65,7 +65,7 @@ namespace Asterra.Gameplay
             // Garrison enter/exit.
             var tower = sim.SpawnBuilding(
                 ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.WatchtowerId, 200f, 200f, startActive: true);
-            var grunt = sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.MilitiaId, 205f, 200f);
+            var grunt = sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 205f, 200f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new EnterGarrisonCommand
@@ -93,6 +93,106 @@ namespace Asterra.Gameplay
             env.Tick(0.05f);
             float nightTemp = env.CombinedTemperature();
             Expect(ref fails, sb, "night colder bias", nightTemp < dayTemp);
+
+            // Foundations can be placed without a builder nearby.
+            int buildingsBefore = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new PlaceBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
+                    X = -120f,
+                    Z = 120f,
+                },
+            });
+            Expect(ref fails, sb, "foundation placed without nearby builder", sim.Buildings.Count == buildingsBefore + 1);
+            bool sawConstructing = false;
+            for (int i = 0; i < sim.Buildings.Count; i++)
+            {
+                var snap = sim.Buildings[i];
+                if (snap.DefinitionId == FactionDefaultContent.ArcaneAcademyId
+                    && snap.State == BuildingState.Constructing
+                    && Abs(snap.X + 120f) < 0.5f)
+                {
+                    sawConstructing = true;
+                    break;
+                }
+            }
+
+            Expect(ref fails, sb, "placed building starts constructing", sawConstructing);
+
+            // Construction progress requires a builder on site.
+            float siteX = -40f;
+            float siteZ = 40f;
+            var foundation = sim.SpawnBuilding(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.ArcaneAcademyId,
+                siteX,
+                siteZ,
+                startActive: false);
+            float remainingBefore = foundation.BuildSecondsRemaining;
+            for (int i = 0; i < 20; i++)
+                sim.Tick(0.25f);
+            Expect(
+                ref fails,
+                sb,
+                "no progress without builder on site",
+                Abs(foundation.BuildSecondsRemaining - remainingBefore) < 0.001f);
+
+            sim.SpawnUnit(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.VeiledBuilderId,
+                siteX + 2f,
+                siteZ + 2f);
+            float remainingAtArrive = foundation.BuildSecondsRemaining;
+            for (int i = 0; i < 8; i++)
+                sim.Tick(0.25f);
+            Expect(
+                ref fails,
+                sb,
+                "progress with builder on site",
+                foundation.BuildSecondsRemaining < remainingAtArrive - 0.5f);
+
+            // Keep turret attach (attach-only) + builder attract.
+            var attachBuilder = sim.SpawnUnit(
+                ids.Next(),
+                new PlayerId(0),
+                new FactionId(0),
+                FactionDefaultContent.VeiledBuilderId,
+                keep.X + 55f,
+                keep.Z + 10f);
+            int beforeAttach = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new AttachBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    ParentBuildingId = keep.Id,
+                    SlotIndex = 0,
+                    BuildingDefId = FactionDefaultContent.KeepTurretId,
+                },
+            });
+            Expect(ref fails, sb, "keep turret attached", sim.Buildings.Count == beforeAttach + 1);
+            Expect(ref fails, sb, "keep slot occupied", keep.AttachmentOccupantIds[0] != 0);
+            Expect(ref fails, sb, "attach attracts builder", attachBuilder.PathCount > 0);
+
+            int beforeBad = sim.Buildings.Count;
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new PlaceBuildingCommand
+                {
+                    Issuer = new PlayerId(0),
+                    BuildingDefId = FactionDefaultContent.KeepTurretId,
+                    X = keep.X + 70f,
+                    Z = keep.Z + 70f,
+                },
+            });
+            Expect(ref fails, sb, "keep turret cannot free-place", sim.Buildings.Count == beforeBad);
 
             sb.Append(fails == 0 ? "BuildingSystemsSelfTest: OK" : $"BuildingSystemsSelfTest: FAIL ({fails})");
             return sb.ToString();

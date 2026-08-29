@@ -15,7 +15,6 @@ namespace Asterra.Core.World
 
         private readonly WorldTerrainGrid _grid;
         private readonly TraversalGraph _traversal;
-        private readonly DirectSteerPathfindingService _fallback;
 
         private readonly float[] _gScore;
         private readonly float[] _fScore;
@@ -30,7 +29,6 @@ namespace Asterra.Core.World
         {
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));
             _traversal = traversal;
-            _fallback = new DirectSteerPathfindingService(grid, traversal);
             int n = grid.Width * grid.Height;
             _gScore = new float[n];
             _fScore = new float[n];
@@ -57,7 +55,7 @@ namespace Asterra.Core.World
 
             if (!_grid.TryWorldToCell(fromX, fromZ, out int sx, out int sz)
                 || !_grid.TryWorldToCell(toX, toZ, out int gx, out int gz))
-                return _fallback.TryGetPath(fromX, fromZ, toX, toZ, capabilities, pathOut);
+                return false;
 
             int start = Index(sx, sz);
             int goal = Index(gx, gz);
@@ -71,29 +69,47 @@ namespace Asterra.Core.World
             float goalCost = _grid.GetPathCost(toX, toZ, capabilities);
             if (startCost >= TerrainDefData.PathCostBlocked || goalCost >= TerrainDefData.PathCostBlocked)
             {
-                // Destination blocked — try traversal link bridge via fallback.
-                return _fallback.TryGetPath(fromX, fromZ, toX, toZ, capabilities, pathOut);
+                // Blocked endpoints: only succeed via an explicit traversal link (no straight cheat).
+                if (_traversal != null
+                    && _traversal.TryFindLinkForPath(fromX, fromZ, toX, toZ, capabilities, out var link, out bool forward))
+                {
+                    if (forward)
+                    {
+                        pathOut.Add((link.StartX, link.StartZ));
+                        pathOut.Add((link.EndX, link.EndZ));
+                    }
+                    else
+                    {
+                        pathOut.Add((link.EndX, link.EndZ));
+                        pathOut.Add((link.StartX, link.StartZ));
+                    }
+
+                    if (goalCost < TerrainDefData.PathCostBlocked)
+                        pathOut.Add((toX, toZ));
+                    return pathOut.Count > 0;
+                }
+
+                return false;
             }
 
             if (!RunAStar(start, goal, sx, sz, gx, gz, capabilities))
-                return _fallback.TryGetPath(fromX, fromZ, toX, toZ, capabilities, pathOut);
+                return false;
 
             Reconstruct(goal, pathOut, toX, toZ);
             if (_traversal != null
                 && LooksLineBlocked(fromX, fromZ, toX, toZ, capabilities)
-                && _traversal.TryFindLinkForPath(fromX, fromZ, toX, toZ, capabilities, out var link, out bool forward))
+                && _traversal.TryFindLinkForPath(fromX, fromZ, toX, toZ, capabilities, out var bridge, out bool bridgeForward))
             {
-                // Prefer explicit link if A* still crossed a gap poorly — prepend link then goal.
                 pathOut.Clear();
-                if (forward)
+                if (bridgeForward)
                 {
-                    pathOut.Add((link.StartX, link.StartZ));
-                    pathOut.Add((link.EndX, link.EndZ));
+                    pathOut.Add((bridge.StartX, bridge.StartZ));
+                    pathOut.Add((bridge.EndX, bridge.EndZ));
                 }
                 else
                 {
-                    pathOut.Add((link.EndX, link.EndZ));
-                    pathOut.Add((link.StartX, link.StartZ));
+                    pathOut.Add((bridge.EndX, bridge.EndZ));
+                    pathOut.Add((bridge.StartX, bridge.StartZ));
                 }
 
                 pathOut.Add((toX, toZ));

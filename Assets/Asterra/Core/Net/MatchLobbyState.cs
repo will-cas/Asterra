@@ -67,7 +67,7 @@ namespace Asterra.Core
                 {
                     if (!pair.Value.IsReady)
                         return false;
-                    if (pair.Value.FactionIndex > 2)
+                    if (pair.Value.FactionIndex > 5)
                         return false;
                 }
 
@@ -86,7 +86,7 @@ namespace Asterra.Core
                 slot = new PlayerSlotState
                 {
                     Player = player,
-                    FactionIndex = (byte)(player.Value % 3),
+                    FactionIndex = (byte)(player.Value % 6),
                     DisplayName = string.IsNullOrEmpty(displayName) ? $"Player {player.Value}" : displayName,
                 };
                 _slots[player.Value] = slot;
@@ -105,7 +105,7 @@ namespace Asterra.Core
                 return;
             if (!_slots.TryGetValue(player.Value, out var slot))
                 slot = ClaimSlot(player);
-            slot.FactionIndex = (byte)Math.Min(factionIndex, (byte)2);
+            slot.FactionIndex = (byte)Math.Min(factionIndex, (byte)5);
             slot.IsReady = false;
         }
 

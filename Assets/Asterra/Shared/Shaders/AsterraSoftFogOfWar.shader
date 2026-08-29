@@ -3,12 +3,12 @@ Shader "Asterra/SoftFogOfWar"
     Properties
     {
         _ExploredTex ("Explored", 2D) = "black" {}
-        _FogColor ("Fog Color", Color) = (0.04, 0.06, 0.1, 1)
-        _UnexploredAlpha ("Unexplored Alpha", Range(0,1)) = 0.78
-        _ExploredAlpha ("Explored Alpha", Range(0,1)) = 0.32
+        _FogColor ("Fog Color", Color) = (0.22, 0.28, 0.36, 1)
+        _UnexploredAlpha ("Unexplored Alpha", Range(0,1)) = 0.52
+        _ExploredAlpha ("Explored Alpha", Range(0,1)) = 0.22
         _MapOrigin ("Map Origin XZ", Vector) = (-450, -450, 0, 0)
         _MapSize ("Map Size", Float) = 900
-        _EdgeSoftness ("Edge Softness", Range(0.05, 0.6)) = 0.35
+        _EdgeSoftness ("Edge Softness", Range(0.05, 0.6)) = 0.4
     }
     SubShader
     {
@@ -31,12 +31,11 @@ Shader "Asterra/SoftFogOfWar"
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            #define MAX_VISION 48
+            #define MAX_VISION 64
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
-                float2 uv : TEXCOORD0;
             };
 
             struct Varyings
@@ -57,7 +56,6 @@ Shader "Asterra/SoftFogOfWar"
                 float _EdgeSoftness;
             CBUFFER_END
 
-            // Arrays must live outside UnityPerMaterial for Material.SetVectorArray.
             int _VisionCount;
             float4 _VisionData[MAX_VISION];
 
@@ -97,11 +95,12 @@ Shader "Asterra/SoftFogOfWar"
                 float vision = SoftVision(xz);
                 float shroud = 1.0 - vision;
                 float baseAlpha = lerp(_UnexploredAlpha, _ExploredAlpha, saturate(explored));
-                // Soft dissolve near vision edge instead of hard cell cut.
                 float alpha = baseAlpha * shroud;
-                alpha *= smoothstep(0.0, 0.2, shroud);
+                alpha *= smoothstep(0.0, 0.25, shroud);
 
-                return half4(_FogColor.rgb, alpha);
+                // Slate mist — never opaque black.
+                float3 mist = _FogColor.rgb;
+                return half4(mist, saturate(alpha));
             }
             ENDHLSL
         }

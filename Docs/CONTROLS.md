@@ -1,12 +1,15 @@
 # Asterra controls
 
+**Play:** open `Assets/Asterra/Shared/Scenes/Skirmish.unity` → Press Play → pick factions/map in the offline menu → Start. Rebuild scene anytime via **Asterra → Build Skirmish Scene**.
+
 Local offline / skirmish input (keyboard + mouse).
 
 ## Selection & camera
 
 - LMB click / drag: select units (Shift/Cmd additive)
-- RMB: move / attack / gather / set rally (context)
+- RMB: move / attack / gather / chop trees & break props / set rally (context)
 - Middle-mouse / edge pan via camera rig
+- WASD + arrow keys also pan (A/S suppressed while attack-move / place / patrol armed)
 - Minimap click: pan camera
 - Minimap cyan view box + yellow crosshair: current camera focus / approximate view
 
@@ -23,15 +26,24 @@ Local offline / skirmish input (keyboard + mouse).
 | B | Place producer (barracks / grove / forge) — requires builder selected |
 | N | Place watchtower — requires builder selected |
 | M | Place palisade wall — requires builder selected |
-| O | Place outpost (gold income + vision) — requires builder selected |
-| Esc | Cancel armed order / place mode |
+| O | Place gold mine (passive gold income + vision) — requires builder selected |
+| V | Place timber bridge (shore, yaw across water) — requires builder |
+| J | Dig trench works — requires builder |
+| , | Place barricade — requires builder |
+| . | Place ferry dock (shore) — requires builder |
+| Y / K / L | Fill / berm / moat — ghost preview, click/drag, Q/E rotate, costs + build time |
+| ; / ' / \ | Clear forest / burn brush / quarry rock — click ground |
+| [ / ] | While placing: rotate ghost 90°. Otherwise: spike pits / clear debris |
+| = | Repair nearest collapsed bridge |
+| Q / E / scroll | Rotate building ghost 90° while placing (scroll zoom disabled) |
+| Esc | Cancel armed order / place mode; otherwise open pause (Options / Main Menu). Profile is lobby-only. |
 | Shift while placing | Keep place mode after one building |
 | . or I | Select idle workers |
 | T | Train from selected / auto-pick keep or producer |
 | X | Cancel production (when building is producing/queued) |
 | C | Capture nearest territory order |
 | U | Buy faction upgrade |
-| Q | Iron Wall (Aurelian / Lucien Vale) |
+| Q | Iron Wall (Aurelian / Lucien Vale) — outside place mode |
 | R | Reselect all owned units |
 
 ## Control groups
@@ -43,23 +55,23 @@ Local offline / skirmish input (keyboard + mouse).
 ## Production
 
 - Select a producer / keep, then use train buttons
-- Keep → train builders; producer → train combat units
+- Keep → train builders; producer → train Infantry / Ranged / Cavalry / Elite (faction) / Siege / Scout / Sapper
 - Repeated train (or Shift while training) queues units
 - Queue portraits jump the camera to that building
 - Cancel appears only while a building has active/queued production
 
 ## Contextual HUD
 
-The bottom panel only shows actions valid for the current selection:
+Bottom command dock (classic RTS):
 
 | Context | What appears |
 | --- | --- |
-| Always | Idle workers button |
-| Builder(s) selected (or place mode) | Barracks / Tower / Wall / Outpost (or Cancel Build) |
-| Combat unit(s) selected | Stop, Aggro / Defend / Hold |
-| Keep selected | Builder train |
-| Producer selected | Soldier / Archer / Cavalry / Siege train |
-| Building producing / queued | Production queue + Cancel |
+| Always | Idle workers |
+| Combat selected | Stop / stances; Gear submenu for equipment |
+| Builder selected | Barracks, Tower, Wall, Trench, Bridge, Barrier, Ferry, Mine, Berm, Fill, Moat, Clear, Burn, Quarry, Spikes, Debris, Repair (one dock) |
+| More submenu | Barricade, ferry, gold mine |
+| Producer / keep | Train cards + research; **More** for demolish / turrets |
+| Esc pause | Resume · Save/Load · Options · **Controls** · Main Menu |
 
-Context line (top-left) summarizes selection, e.g. “Builder selected — B/N/M/O build”, “Keep selected — train”, “N combat units selected”.
-Hotkey hints on the next line also switch with context.
+Resources top-left; commander powers as compact icons top-right; minimap bottom-right.
+Builder dock shows build/earthwork costs. Keyboard shortcuts that are not labeled on dock cards live in the in-game **Controls** menu: lobby chip, **Esc → Controls**, or **Options → Controls**. F5/F9 save/load.

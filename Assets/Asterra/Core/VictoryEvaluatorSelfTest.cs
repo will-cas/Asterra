@@ -34,6 +34,28 @@ namespace Asterra.Core
             if (!holdWin.IsOver || holdWin.Reason != MatchEndReason.TerritoryHeld)
                 throw new System.InvalidOperationException("Territory hold victory failed.");
 
+            // Both keeps gone → no living keep holder → no KeepDestroyed winner from remaining side.
+            var mutual = new VictoryEvaluator(keeps, requiredHoldSeconds: 90f);
+            world = new FakeWorld();
+            var mutualResult = mutual.Evaluate(world, 1f, players);
+            if (mutualResult.IsOver && mutualResult.Reason == MatchEndReason.KeepDestroyed)
+                throw new System.InvalidOperationException("Empty world should not award keep victory.");
+
+            // Hold resets when control flips.
+            var holdReset = new VictoryEvaluator(keeps, requiredHoldSeconds: 3f);
+            world = new FakeWorld();
+            world.AddBuilding(new PlayerId(0), "building_iron_keep");
+            world.AddBuilding(new PlayerId(1), "building_heartwood");
+            world.SetTerritory(new PlayerId(0));
+            holdReset.Evaluate(world, 2f, players);
+            world.SetTerritory(new PlayerId(1));
+            var afterFlip = holdReset.Evaluate(world, 1f, players);
+            if (afterFlip.IsOver)
+                throw new System.InvalidOperationException("Hold should reset on controller change.");
+            var p1Hold = holdReset.Evaluate(world, 2.5f, players);
+            if (!p1Hold.IsOver || p1Hold.Winner.Value != 1)
+                throw new System.InvalidOperationException("P1 hold victory failed after flip.");
+
             var sb = new StringBuilder();
             sb.AppendLine("[Asterra Victory]");
             sb.AppendLine("status=ok");
@@ -60,12 +82,23 @@ namespace Asterra.Core
 
             public bool HasUpgrade(PlayerId player, string upgradeDefId) => false;
 
+            public bool HasPower(PlayerId player, string powerDefId) => false;
+
+            public bool TryGetCommanderAbilityStatus(PlayerId player, string powerDefId, out float cooldownRemaining, out float buffRemaining)
+            {
+                cooldownRemaining = 0f;
+                buffRemaining = 0f;
+                return false;
+            }
+
             public bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining)
             {
                 cooldownRemaining = 0f;
                 buffRemaining = 0f;
                 return false;
             }
+
+            public bool IsVisibleTo(PlayerId player, float x, float z) => true;
 
             public void AddBuilding(PlayerId owner, string def)
             {

@@ -52,6 +52,8 @@ namespace Asterra.Gameplay
 
         public void SetBridge(LockstepNetworkBridge networkBridge) => bridge = networkBridge;
 
+        private readonly List<PlayerId> _participantList = new();
+
         public void Initialize(
             IWorldSim world,
             CommandBus commandBus,
@@ -68,21 +70,48 @@ namespace Asterra.Gameplay
             _replay = replay ?? new ReplayBuffer();
             _clock = new LockstepClock(1f / Mathf.Max(1f, tickHz), commandDelayTicks);
             _gate = new LockstepFrameGate();
-            _gate.SetExpectedPlayers(participants);
+            _participantList.Clear();
+            if (participants != null)
+            {
+                foreach (var p in participants)
+                    _participantList.Add(p);
+            }
+
+            _gate.SetExpectedPlayers(_participantList);
             if (networkBridge != null)
                 bridge = networkBridge;
             if (bridge != null)
                 bridge.Bind(commandBus, localPlayer, _replay, _gate);
 
-            foreach (var player in participants)
+            for (int i = 0; i < _participantList.Count; i++)
             {
                 for (uint t = 0; t < (uint)commandDelayTicks; t++)
-                    _gate.SubmitEmpty(new Tick(t), player);
+                    _gate.SubmitEmpty(new Tick(t), _participantList[i]);
             }
 
             _lastSubmittedTarget = null;
             _accum = 0f;
+            _contributors.Clear();
             IsRunning = true;
+        }
+
+        /// <summary>Jump the lockstep clock after a save load and re-prime empty frames.</summary>
+        public void SeekTick(Tick tick)
+        {
+            if (_clock == null || _gate == null)
+                return;
+            _clock.Seek(tick);
+            _gate = new LockstepFrameGate();
+            _gate.SetExpectedPlayers(_participantList);
+            uint start = tick.Value;
+            for (int i = 0; i < _participantList.Count; i++)
+            {
+                for (uint t = start; t < start + (uint)commandDelayTicks; t++)
+                    _gate.SubmitEmpty(new Tick(t), _participantList[i]);
+            }
+
+            _lastSubmittedTarget = null;
+            _accum = 0f;
         }
 
         public void AddContributor(IFrameContributor contributor)
@@ -90,6 +119,11 @@ namespace Asterra.Gameplay
             if (contributor == null)
                 return;
             _contributors.Add(contributor);
+        }
+
+        public void ClearContributors()
+        {
+            _contributors.Clear();
         }
 
         public void Stop()

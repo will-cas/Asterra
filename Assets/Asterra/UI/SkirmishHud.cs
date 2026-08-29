@@ -46,15 +46,16 @@ namespace Asterra.UI
 
         private void OnGUI()
         {
+            // MatchHud owns in-match chrome; keep this component for status strings only.
+            if (FindFirstObjectByType<MatchHud>() != null)
+                return;
+
             if (match == null)
                 return;
 
             const float pad = 12f;
             GUI.Label(new Rect(pad, pad, 800f, 24f), lastResourceLine ?? string.Empty);
             GUI.Label(new Rect(pad, pad + 22f, 900f, 24f), lastStatusLine ?? string.Empty);
-            GUI.Label(
-                new Rect(pad, pad + 44f, 900f, 24f),
-                "LMB select  |  RMB move/attack  |  B build  |  T train  |  C capture  |  U upgrade");
 
             if (match.Result.IsOver)
             {

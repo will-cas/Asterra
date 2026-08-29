@@ -19,6 +19,7 @@ namespace Asterra.Gameplay
                 weather.Current.Kind == WeatherKind.Clear || weather.Current.Kind == WeatherKind.Sunny);
             Expect(ref fails, sb, "visibility sane", weather.EffectiveVisibility() > 0.2f);
             Expect(ref fails, sb, "movement ~1 at start", System.Math.Abs(weather.EffectiveMovement() - 1f) < 0.15f);
+            Expect(ref fails, sb, "forecast queued", weather.TryGetForecast(out _, out _));
 
             weather.ForceTransitionTo(WeatherKind.Rain);
             Expect(ref fails, sb, "transition started event", HasEvent(weather, WeatherEventKind.TransitionStarted));

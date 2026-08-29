@@ -1,3 +1,4 @@
+using Asterra.Gameplay.Player;
 using UnityEngine;
 
 namespace Asterra.Gameplay
@@ -68,13 +69,29 @@ namespace Asterra.Gameplay
             Vector3 flatRight = Vector3.right;
             Vector3 move = Vector3.zero;
 
+            var orders = FindFirstObjectByType<LocalOrderController>();
+            bool suppressAs = orders != null && (orders.IsAttackMoveArmed || orders.IsPlaceMode || orders.IsPatrolArmed);
+
+            // Middle-mouse drag pan (RTS standard).
+            if (UnityEngine.Input.GetMouseButton(2))
+            {
+                float mx = UnityEngine.Input.GetAxis("Mouse X");
+                float my = UnityEngine.Input.GetAxis("Mouse Y");
+                lookAt -= flatRight * mx * panSpeed * 0.08f;
+                lookAt -= flatForward * my * panSpeed * 0.08f;
+                lookAt.x = Mathf.Clamp(lookAt.x, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+                lookAt.z = Mathf.Clamp(lookAt.z, -MapBounds.PlayableHalfExtent, MapBounds.PlayableHalfExtent);
+            }
+
             bool panNorth = UnityEngine.Input.GetKey(KeyCode.W) || UnityEngine.Input.GetKey(KeyCode.UpArrow)
                             || UnityEngine.Input.mousePosition.y >= Screen.height - edgePanPixels;
-            bool panSouth = UnityEngine.Input.GetKey(KeyCode.S) || UnityEngine.Input.GetKey(KeyCode.DownArrow)
+            bool panSouth = (!suppressAs && UnityEngine.Input.GetKey(KeyCode.S))
+                            || UnityEngine.Input.GetKey(KeyCode.DownArrow)
                             || UnityEngine.Input.mousePosition.y <= edgePanPixels;
             bool panEast = UnityEngine.Input.GetKey(KeyCode.D) || UnityEngine.Input.GetKey(KeyCode.RightArrow)
                            || UnityEngine.Input.mousePosition.x >= Screen.width - edgePanPixels;
-            bool panWest = UnityEngine.Input.GetKey(KeyCode.A) || UnityEngine.Input.GetKey(KeyCode.LeftArrow)
+            bool panWest = (!suppressAs && UnityEngine.Input.GetKey(KeyCode.A))
+                           || UnityEngine.Input.GetKey(KeyCode.LeftArrow)
                            || UnityEngine.Input.mousePosition.x <= edgePanPixels;
 
             if (panNorth) move += flatForward;
@@ -92,7 +109,8 @@ namespace Asterra.Gameplay
 
             float height = t.position.y;
             float scroll = UnityEngine.Input.mouseScrollDelta.y;
-            if (Mathf.Abs(scroll) > 0.01f)
+            bool placeMode = orders != null && orders.IsPlaceMode;
+            if (!placeMode && Mathf.Abs(scroll) > 0.01f)
                 height = Mathf.Clamp(height - scroll * zoomSpeed * Time.deltaTime, minHeight, maxHeight);
 
             float back = Mathf.Max(18f, height * 0.175f);

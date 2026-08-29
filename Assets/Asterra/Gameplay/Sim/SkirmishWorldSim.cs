@@ -17,6 +17,7 @@ namespace Asterra.Gameplay
         private readonly IIdFactory _ids;
         private readonly DefinitionRegistry _defs;
         private readonly UpgradeState _upgrades;
+        private readonly PowerState _powers;
         private readonly WorldEnvironmentSim _environment;
 
         private readonly List<SimUnit> _units = new();
@@ -33,6 +34,17 @@ namespace Asterra.Gameplay
         private readonly List<ProjectileSnapshot> _projectileSnapshots = new();
         private readonly List<DestructibleSnapshot> _destructibleSnapshots = new();
         private readonly List<SimProjectile> _projectiles = new();
+        private readonly Dictionary<long, ushort> _terrainMutations = new();
+        private readonly List<PendingTerrainWork> _pendingTerrainWork = new();
+
+        private struct PendingTerrainWork
+        {
+            public PlayerId Issuer;
+            public TerrainWorkKind Kind;
+            public float X;
+            public float Z;
+            public float HalfExtent;
+        }
 
         private readonly Dictionary<uint, SimUnit> _unitsById = new();
         private readonly Dictionary<uint, SimBuilding> _buildingsById = new();
@@ -47,12 +59,30 @@ namespace Asterra.Gameplay
 
         private sealed class CommanderAbilityRuntime
         {
+            public string PowerDefId;
             public float CooldownRemaining;
             public float BuffRemaining;
             public float ArmorBonus;
+            public float MoveBonus;
+            public float DamageBonus;
+            public float BuildingMitigation;
+            public PowerEffectKind Effect;
+            public float PercentBonus;
         }
 
-        private readonly Dictionary<byte, CommanderAbilityRuntime> _commanderAbilities = new();
+        private readonly Dictionary<string, CommanderAbilityRuntime> _commanderAbilities = new();
+        private readonly List<FloodPatch> _floodPatches = new();
+        private float _rollingFogAcc;
+
+        private sealed class FloodPatch
+        {
+            public int CellX;
+            public int CellZ;
+            public TerrainCell Original;
+            public float Remaining;
+        }
+
+        private static string AbilityKey(byte player, string powerId) => player + ":" + (powerId ?? string.Empty);
 
         private sealed class SimProjectile
         {
@@ -74,6 +104,7 @@ namespace Asterra.Gameplay
             _ids = ids;
             _defs = defs;
             _upgrades = new UpgradeState(wallet, defs);
+            _powers = new PowerState(wallet);
             _environment = environment ?? new WorldEnvironmentSim();
         }
 
@@ -90,9 +121,38 @@ namespace Asterra.Gameplay
 
         public bool HasUpgrade(PlayerId player, string upgradeDefId) => _upgrades.Has(player, upgradeDefId);
 
+        public bool HasPower(PlayerId player, string powerDefId) => _powers.Has(player, powerDefId);
+
         public bool TryGetCommanderAbilityStatus(PlayerId player, out float cooldownRemaining, out float buffRemaining)
         {
-            if (_commanderAbilities.TryGetValue(player.Value, out var state))
+            if (!TryResolvePlayerFaction(player, out var faction))
+            {
+                cooldownRemaining = 0f;
+                buffRemaining = 0f;
+                return false;
+            }
+
+            var roster = FactionDefaultContent.Get(faction);
+            string primary = roster.PowerIds != null && roster.PowerIds.Length > 0
+                ? roster.PowerIds[0]
+                : roster.PowerId;
+            return TryGetCommanderAbilityStatus(player, primary, out cooldownRemaining, out buffRemaining);
+        }
+
+        public bool TryGetCommanderAbilityStatus(
+            PlayerId player,
+            string powerDefId,
+            out float cooldownRemaining,
+            out float buffRemaining)
+        {
+            if (string.IsNullOrEmpty(powerDefId))
+            {
+                cooldownRemaining = 0f;
+                buffRemaining = 0f;
+                return false;
+            }
+
+            if (_commanderAbilities.TryGetValue(AbilityKey(player.Value, powerDefId), out var state))
             {
                 cooldownRemaining = state.CooldownRemaining;
                 buffRemaining = state.BuffRemaining;
@@ -110,13 +170,12 @@ namespace Asterra.Gameplay
                 throw new InvalidOperationException($"Unknown unit def '{unitDefId}'.");
 
             var unit = new SimUnit(id, owner, faction, def, x, z);
-            unit.AttackDamage *= _upgrades.UnitDamageMultiplier(owner);
-            if (_commanderAbilities.TryGetValue(owner.Value, out var ability)
-                && ability.BuffRemaining > 0f
-                && ability.ArmorBonus > 0f)
+            foreach (var pair in _commanderAbilities)
             {
-                unit.Armor += ability.ArmorBonus;
-                unit.CommanderArmorBonus = ability.ArmorBonus;
+                if (!pair.Key.StartsWith(owner.Value + ":", StringComparison.Ordinal))
+                    continue;
+                if (pair.Value.BuffRemaining > 0f)
+                    ApplyPowerBuffToUnit(unit, pair.Value);
             }
 
             _units.Add(unit);
@@ -142,6 +201,7 @@ namespace Asterra.Gameplay
             building.RallyZ = z;
             _buildings.Add(building);
             _buildingsById[id.Value] = building;
+            SetBuildingBlocked(building, blocked: true);
             RebuildSnapshots();
             return building;
         }
@@ -235,11 +295,35 @@ namespace Asterra.Gameplay
                     case ActivateCommanderAbilityCommand ability:
                         ApplyCommanderAbility(ability);
                         break;
+                    case ApplyUnitUpgradeCommand applyUnitUpgrade:
+                        ApplyUnitUpgrade(applyUnitUpgrade);
+                        break;
+                    case UnlockPowerCommand unlockPower:
+                        ApplyUnlockPower(unlockPower);
+                        break;
+                    case AttachBuildingCommand attach:
+                        ApplyAttachBuilding(attach);
+                        break;
                     case EnterGarrisonCommand enter:
                         ApplyEnterGarrison(enter);
                         break;
                     case ExitGarrisonCommand exit:
                         ApplyExitGarrison(exit);
+                        break;
+                    case DigTrenchCommand dig:
+                        ApplyDigTrench(dig);
+                        break;
+                    case DemolishBuildingCommand demolish:
+                        ApplyDemolishBuilding(demolish);
+                        break;
+                    case TerrainWorkCommand terrainWork:
+                        ApplyTerrainWork(terrainWork);
+                        break;
+                    case RepairBridgeCommand repairBridge:
+                        ApplyRepairBridge(repairBridge);
+                        break;
+                    case UpgradeBuildingCommand upgradeBuilding:
+                        ApplyUpgradeBuilding(upgradeBuilding);
                         break;
                     default:
                         break;
@@ -254,8 +338,20 @@ namespace Asterra.Gameplay
             _combatEvents.Clear();
             _environment.Tick(deltaSeconds);
             TickCommanderAbilities(deltaSeconds);
+            TickShadowedGates(deltaSeconds);
+            TickMindControl(deltaSeconds);
+            TickStun(deltaSeconds);
+            TickPortals(deltaSeconds);
+            TickPriestWeather(deltaSeconds);
+            TickWeatherRods(deltaSeconds);
+            TickRollingFog(deltaSeconds);
+            TickFloods(deltaSeconds);
+            TickFlightAndLifetimes(deltaSeconds);
+            TickPowderCarts(deltaSeconds);
             TickConstruction(deltaSeconds);
+            TickPendingTerrainWork();
             TickProduction(deltaSeconds);
+            TickResearch(deltaSeconds);
             TickGather(deltaSeconds);
             TickMovement(deltaSeconds);
             TickCombat(deltaSeconds);
@@ -263,10 +359,63 @@ namespace Asterra.Gameplay
             TickProjectiles(deltaSeconds);
             TickTerritory(deltaSeconds);
             TickTerritoryIncome(deltaSeconds);
+            TickTerrainHazards(deltaSeconds);
             CullDead();
-            // Dirty regions are applied immediately on destroy; clear the queue for listeners/pathfinding.
+            RepathUnitsForDirtyRegions();
             _environment.PathDirty.Clear();
             RebuildSnapshots();
+        }
+
+        private void RepathUnitsForDirtyRegions()
+        {
+            var dirty = _environment.PathDirty;
+            if (dirty == null || dirty.Count == 0)
+                return;
+
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.IsGarrisoned || !unit.MoveTargetX.HasValue)
+                    continue;
+
+                bool intersects = false;
+                for (int r = 0; r < dirty.Regions.Count; r++)
+                {
+                    var region = dirty.Regions[r];
+                    if (UnitPathIntersectsDirty(unit, region))
+                    {
+                        intersects = true;
+                        break;
+                    }
+                }
+
+                if (!intersects)
+                    continue;
+
+                AssignUnitPath(unit, unit.MoveTargetX.Value, unit.MoveTargetZ ?? unit.Z);
+            }
+        }
+
+        private static bool UnitPathIntersectsDirty(SimUnit unit, PathDirtyRegion region)
+        {
+            if (PointInDirty(unit.X, unit.Z, region))
+                return true;
+            if (unit.MoveTargetX.HasValue && PointInDirty(unit.MoveTargetX.Value, unit.MoveTargetZ ?? unit.Z, region))
+                return true;
+            for (int i = unit.PathIndex; i < unit.PathCount; i++)
+            {
+                if (PointInDirty(unit.PathPointsX[i], unit.PathPointsZ[i], region))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool PointInDirty(float x, float z, PathDirtyRegion region)
+        {
+            const float pad = 8f;
+            return x >= region.MinX - pad && x <= region.MaxX + pad
+                   && z >= region.MinZ - pad && z <= region.MaxZ + pad;
         }
 
         public ulong ComputeWorldHash()
@@ -315,6 +464,7 @@ namespace Asterra.Gameplay
                 if (unit.Owner != move.Issuer || !unit.IsAlive)
                     continue;
                 FormationOffset(move.TargetX, move.TargetZ, index, count, out float tx, out float tz);
+                ClampFormationSlot(unit, ref tx, ref tz);
                 index++;
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
@@ -337,13 +487,35 @@ namespace Asterra.Gameplay
                 if (unit.Owner != attack.Issuer || !unit.IsAlive)
                     continue;
                 unit.AttackTargetId = attack.TargetId;
-                unit.MoveTargetX = null;
-                unit.MoveTargetZ = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = false;
                 unit.Patrolling = false;
-                unit.ClearPath();
+                if (TryGetAttackTargetPosition(attack.TargetId, out float tx, out float tz))
+                {
+                    float engage = GetEngagementRange(unit, attack.TargetId);
+                    float approach = MathF.Max(2f, engage * 0.85f);
+                    float dx = tx - unit.X;
+                    float dz = tz - unit.Z;
+                    float dist = MathF.Sqrt(dx * dx + dz * dz);
+                    if (dist > engage)
+                    {
+                        float scale = (dist - approach) / dist;
+                        AssignUnitPath(unit, unit.X + dx * scale, unit.Z + dz * scale);
+                    }
+                    else
+                    {
+                        unit.MoveTargetX = null;
+                        unit.MoveTargetZ = null;
+                        unit.ClearPath();
+                    }
+                }
+                else
+                {
+                    unit.MoveTargetX = null;
+                    unit.MoveTargetZ = null;
+                    unit.ClearPath();
+                }
                 _mutationCounter ^= unit.Id.Value * 733ul;
             }
         }
@@ -371,6 +543,7 @@ namespace Asterra.Gameplay
                 if (unit.Role == UnitRole.Builder || unit.AttackDamage <= 0f)
                     continue;
                 FormationOffset(attackMove.TargetX, attackMove.TargetZ, index, count, out float tx, out float tz);
+                ClampFormationSlot(unit, ref tx, ref tz);
                 index++;
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
@@ -417,6 +590,7 @@ namespace Asterra.Gameplay
                 if (unit.Owner != patrol.Issuer || !unit.IsAlive)
                     continue;
                 FormationOffset(patrol.TargetX, patrol.TargetZ, index, count, out float bx, out float bz);
+                ClampFormationSlot(unit, ref bx, ref bz);
                 index++;
                 unit.PatrolAX = unit.X;
                 unit.PatrolAZ = unit.Z;
@@ -424,12 +598,11 @@ namespace Asterra.Gameplay
                 unit.PatrolBZ = bz;
                 unit.PatrolToB = true;
                 unit.Patrolling = true;
-                unit.MoveTargetX = bx;
-                unit.MoveTargetZ = bz;
                 unit.AttackTargetId = null;
                 unit.GatherTargetId = null;
                 unit.ReturningToDeposit = false;
                 unit.AttackMoving = false;
+                AssignUnitPath(unit, bx, bz);
                 _mutationCounter ^= unit.Id.Value * 19ul;
             }
         }
@@ -502,6 +675,9 @@ namespace Asterra.Gameplay
         {
             if (!_defs.TryGetBuilding(place.BuildingDefId, out var def))
                 return;
+            // Keep turrets are attach-only (pad slots on the keep).
+            if (place.BuildingDefId == FactionDefaultContent.KeepTurretId)
+                return;
 
             float x = place.X;
             float z = place.Z;
@@ -512,12 +688,41 @@ namespace Asterra.Gameplay
             if (!IsInsidePlayable(x, z))
                 return;
 
-            if (!_environment.CanPlaceBuilding(x, z))
+            if (place.BuildingDefId == FactionDefaultContent.BridgeId)
+            {
+                if (!CanPlayerPlaceBridge(place.Issuer))
+                    return;
+                if (!CanPlaceFactionBridge(x, z, NormalizeYaw90(place.YawDegrees)))
+                    return;
+            }
+            else if (place.BuildingDefId == FactionDefaultContent.FerryDockId)
+            {
+                if (!CanPlaceFerryDock(x, z, NormalizeYaw90(place.YawDegrees)))
+                    return;
+            }
+            else if (FactionDefaultContent.TryGetEarthworkKind(place.BuildingDefId, out var earthKind))
+            {
+                float half = MathF.Max(4f, MathF.Max(def.FootprintX, def.FootprintZ) * 0.5f);
+                if (!CanPreviewTerrainWork(earthKind, x, z, half))
+                    return;
+            }
+            else if (!_environment.CanPlaceBuilding(x, z))
                 return;
 
-            if (!HasNearbyBuilder(place.Issuer, x, z, builderPlaceRadius: 55f))
+            if (FactionDefaultContent.IsPortalGateId(place.BuildingDefId)
+                && !IsVisibleTo(place.Issuer, x, z))
                 return;
 
+            // Earthwork scaffolds may sit close together for drag-paint lines.
+            if (!FactionDefaultContent.IsEarthworkBuildingId(place.BuildingDefId)
+                && OverlapsAnyBuilding(x, z, MathF.Max(def.FootprintX, def.FootprintZ) * 0.5f))
+                return;
+            if (FactionDefaultContent.IsEarthworkBuildingId(place.BuildingDefId)
+                && OverlapsNonEarthworkBuilding(x, z, MathF.Max(def.FootprintX, def.FootprintZ) * 0.35f))
+                return;
+
+            // Foundations may be placed without a builder on site; construction only
+            // advances while a builder is within ConstructionWorkRadius.
             if (!_wallet.TrySpend(place.Issuer, ResourceType.Gold, def.GoldCost))
                 return;
             if (!_wallet.TrySpend(place.Issuer, ResourceType.Timber, def.TimberCost))
@@ -528,17 +733,1123 @@ namespace Asterra.Gameplay
 
             var faction = ResolveFaction(place.Issuer);
             var building = SpawnBuilding(_ids.Next(), place.Issuer, faction, def.Id, x, z, startActive: false);
+            building.YawDegrees = NormalizeYaw90(place.YawDegrees);
+            ApplyBuildingYawToFootprint(building);
             if (snapWall)
                 RefreshWallConnectionsAround(building);
+            AttractBuildersToSite(place.Issuer, x, z, BuilderAttractSearchRadius);
+            if (FactionDefaultContent.IsPortalGateId(def.Id))
+                TryLinkUnpairedPortal(building);
             _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        private void ApplyDigTrench(DigTrenchCommand dig)
+        {
+            float half = dig.HalfExtent > 1f ? dig.HalfExtent : 8f;
+            if (!IsInsidePlayable(dig.X, dig.Z))
+                return;
+            if (!HasNearbyBuilder(dig.Issuer, dig.X, dig.Z, ConstructionWorkRadius))
+            {
+                float pendingHalf = dig.HalfExtent > 1f ? dig.HalfExtent : 8f;
+                EnqueuePendingTerrainWork(dig.Issuer, TerrainWorkKind.DigTrench, dig.X, dig.Z, pendingHalf);
+                AttractBuildersToSite(dig.Issuer, dig.X, dig.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            if (!_wallet.TrySpend(dig.Issuer, ResourceType.Gold, 25))
+                return;
+            if (!_wallet.TrySpend(dig.Issuer, ResourceType.Timber, 10))
+            {
+                _wallet.Add(dig.Issuer, ResourceType.Gold, 25);
+                return;
+            }
+
+            if (!DigTrenchAt(dig.X, dig.Z, half))
+            {
+                _wallet.Add(dig.Issuer, ResourceType.Gold, 25);
+                _wallet.Add(dig.Issuer, ResourceType.Timber, 10);
+                return;
+            }
+
+            _mutationCounter ^= 0x7E11CFul ^ (ulong)(dig.Issuer.Value + 1) * 41ul;
+        }
+
+        private void ApplyDemolishBuilding(DemolishBuildingCommand cmd)
+        {
+            if (!_buildingsById.TryGetValue(cmd.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != cmd.Issuer || building.State == BuildingState.Destroyed)
+                return;
+            if (building.Kind == BuildingKind.Keep)
+                return;
+
+            // Partial refund — raze walls for full timber, otherwise half resources.
+            if (_defs.TryGetBuilding(building.DefinitionId, out var def)
+                && (building.State == BuildingState.Active || building.State == BuildingState.Constructing))
+            {
+                if (cmd.RazeForMaterials
+                    && (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Gate))
+                {
+                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost);
+                }
+                else if (building.State == BuildingState.Active)
+                {
+                    _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost / 2);
+                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost / 2);
+                }
+            }
+
+            TearDownFactionBridgeLinks(building);
+            building.Health = 0f;
+            building.State = BuildingState.Destroyed;
+            _combatEvents.Add(new CombatEvent(CombatEventKind.Death, building.Id, building.X, building.Z, true));
+            OnBuildingDestroyed(building);
+            _mutationCounter ^= building.Id.Value * 1607ul;
+        }
+
+        private void OnConstructionComplete(SimBuilding building)
+        {
+            if (FactionDefaultContent.TryGetEarthworkKind(building.DefinitionId, out var earthKind))
+            {
+                float half = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+                TryExecuteTerrainWork(building.Owner, earthKind, building.X, building.Z, half, spend: false);
+                // Earthworks leave no lasting structure — remove the scaffold.
+                TearDownCompletedEarthwork(building);
+                return;
+            }
+
+            if (building.DefinitionId == FactionDefaultContent.BridgeId)
+                ActivateFactionBridge(building);
+            else if (building.DefinitionId == FactionDefaultContent.UniversityMoatId)
+            {
+                float half = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+                DigMoatAt(building.X, building.Z, half);
+            }
+            else if (building.DefinitionId == FactionDefaultContent.FerryDockId)
+                ActivateFerryDock(building);
+        }
+
+        private void ApplyTerrainWork(TerrainWorkCommand work)
+        {
+            float half = work.HalfExtent > 1f ? work.HalfExtent : 8f;
+            if (!IsInsidePlayable(work.X, work.Z))
+                return;
+            if (!HasNearbyBuilder(work.Issuer, work.X, work.Z, ConstructionWorkRadius))
+            {
+                EnqueuePendingTerrainWork(work.Issuer, work.Kind, work.X, work.Z, half);
+                AttractBuildersToSite(work.Issuer, work.X, work.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            TryExecuteTerrainWork(work.Issuer, work.Kind, work.X, work.Z, half);
+        }
+
+        private void EnqueuePendingTerrainWork(
+            PlayerId issuer,
+            TerrainWorkKind kind,
+            float x,
+            float z,
+            float half)
+        {
+            // Merge near-duplicate paint stamps so drag doesn't queue a hundred jobs.
+            const float mergeR2 = 6f * 6f;
+            for (int i = 0; i < _pendingTerrainWork.Count; i++)
+            {
+                var p = _pendingTerrainWork[i];
+                if (p.Issuer != issuer || p.Kind != kind)
+                    continue;
+                float dx = p.X - x;
+                float dz = p.Z - z;
+                if (dx * dx + dz * dz <= mergeR2)
+                    return;
+            }
+
+            _pendingTerrainWork.Add(new PendingTerrainWork
+            {
+                Issuer = issuer,
+                Kind = kind,
+                X = x,
+                Z = z,
+                HalfExtent = half,
+            });
+        }
+
+        private void TickPendingTerrainWork()
+        {
+            if (_pendingTerrainWork.Count == 0)
+                return;
+
+            for (int i = _pendingTerrainWork.Count - 1; i >= 0; i--)
+            {
+                var job = _pendingTerrainWork[i];
+                if (!HasNearbyBuilder(job.Issuer, job.X, job.Z, ConstructionWorkRadius))
+                    continue;
+                _pendingTerrainWork.RemoveAt(i);
+                TryExecuteTerrainWork(job.Issuer, job.Kind, job.X, job.Z, job.HalfExtent);
+            }
+
+            // Keep builders walking toward the oldest unfinished stamp.
+            if (_pendingTerrainWork.Count > 0)
+            {
+                var oldest = _pendingTerrainWork[0];
+                AttractBuildersToSite(oldest.Issuer, oldest.X, oldest.Z, BuilderAttractSearchRadius);
+            }
+        }
+
+        private bool TryExecuteTerrainWork(
+            PlayerId issuer,
+            TerrainWorkKind kind,
+            float x,
+            float z,
+            float half,
+            bool spend = true)
+        {
+            if (spend)
+            {
+                TerrainWorkCost(kind, out int gold, out int timber);
+                if (!_wallet.TrySpend(issuer, ResourceType.Gold, gold))
+                    return false;
+                if (timber > 0 && !_wallet.TrySpend(issuer, ResourceType.Timber, timber))
+                {
+                    _wallet.Add(issuer, ResourceType.Gold, gold);
+                    return false;
+                }
+
+                if (!ApplyTerrainWorkMutation(kind, x, z, half))
+                {
+                    _wallet.Add(issuer, ResourceType.Gold, gold);
+                    if (timber > 0)
+                        _wallet.Add(issuer, ResourceType.Timber, timber);
+                    return false;
+                }
+            }
+            else if (!ApplyTerrainWorkMutation(kind, x, z, half))
+            {
+                return false;
+            }
+
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(x, z, half + 4f, PathDirtyReason.DestructibleCleared);
+            _mutationCounter ^= 0x7E11AAul ^ ((ulong)kind << 8) ^ (ulong)(issuer.Value + 1);
+            return true;
+        }
+
+        private bool ApplyTerrainWorkMutation(TerrainWorkKind kind, float x, float z, float half)
+        {
+            switch (kind)
+            {
+                case TerrainWorkKind.DigTrench:
+                    return DigTrenchAt(x, z, half);
+                case TerrainWorkKind.FillTrench:
+                    return ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Trench, DefaultTerrainCatalog.GrassShort);
+                case TerrainWorkKind.FlattenHill:
+                    return ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Hill, DefaultTerrainCatalog.GrassShort);
+                case TerrainWorkKind.RaiseBerm:
+                    FillTerrainRect(x - half, z - half, x + half, z + half, DefaultTerrainCatalog.Berm);
+                    return true;
+                case TerrainWorkKind.DigMoat:
+                    return DigMoatAt(x, z, half);
+                case TerrainWorkKind.ClearForest:
+                    return ClearVegetationAt(x, z, half, burn: false);
+                case TerrainWorkKind.QuarryRock:
+                    return QuarryRockAt(x, z, half);
+                case TerrainWorkKind.BurnBrush:
+                    return ClearVegetationAt(x, z, half, burn: true);
+                case TerrainWorkKind.PlaceSpikes:
+                    FillTerrainRect(
+                        x - half * 0.6f, z - half * 0.6f,
+                        x + half * 0.6f, z + half * 0.6f,
+                        DefaultTerrainCatalog.SpikePit);
+                    MarkCellFlags(x, z, half * 0.6f, TerrainCell.FlagSpikes, set: true);
+                    return true;
+                case TerrainWorkKind.ClearDebris:
+                    return ReplaceTerrainDefsAt(
+                        x, z, half,
+                        DefaultTerrainCatalog.Debris, DefaultTerrainCatalog.Crater,
+                        DefaultTerrainCatalog.GrassShort);
+                default:
+                    return false;
+            }
+        }
+
+        private static void TerrainWorkCost(TerrainWorkKind kind, out int gold, out int timber)
+        {
+            gold = 20;
+            timber = 5;
+            switch (kind)
+            {
+                case TerrainWorkKind.RaiseBerm:
+                case TerrainWorkKind.DigMoat:
+                    gold = 35;
+                    timber = 8;
+                    break;
+                case TerrainWorkKind.ClearForest:
+                case TerrainWorkKind.BurnBrush:
+                    gold = 15;
+                    timber = 0;
+                    break;
+                case TerrainWorkKind.QuarryRock:
+                    gold = 10;
+                    timber = 5;
+                    break;
+                case TerrainWorkKind.PlaceSpikes:
+                    gold = 40;
+                    timber = 25;
+                    break;
+                case TerrainWorkKind.ClearDebris:
+                    gold = 5;
+                    timber = 0;
+                    break;
+            }
+        }
+
+        /// <summary>Client ghost / cursor: can this terrain tool stamp here?</summary>
+        public bool CanPreviewTerrainWork(TerrainWorkKind kind, float x, float z, float halfExtent = 8f)
+        {
+            if (!IsInsidePlayable(x, z))
+                return false;
+            float half = MathF.Max(4f, halfExtent);
+            switch (kind)
+            {
+                case TerrainWorkKind.DigTrench:
+                case TerrainWorkKind.DigMoat:
+                case TerrainWorkKind.RaiseBerm:
+                case TerrainWorkKind.PlaceSpikes:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half, IsDiggableDef) >= 2;
+                case TerrainWorkKind.FillTrench:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half,
+                        d => d != null && d.Category == TerrainCategory.Trench) >= 1;
+                case TerrainWorkKind.FlattenHill:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half,
+                        d => d != null && d.Category == TerrainCategory.Hill) >= 1;
+                case TerrainWorkKind.ClearForest:
+                case TerrainWorkKind.BurnBrush:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half, d =>
+                               d != null
+                               && (d.Category == TerrainCategory.Forest
+                                   || d.Category == TerrainCategory.Tree
+                                   || d.Category == TerrainCategory.GrassLong)) >= 1;
+                case TerrainWorkKind.QuarryRock:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half,
+                        d => d != null && d.Category == TerrainCategory.Rock) >= 1;
+                case TerrainWorkKind.ClearDebris:
+                    return CountCellsWhere(x - half, z - half, x + half, z + half, IsDebrisOrCraterDef) >= 1;
+                default:
+                    return true;
+            }
+        }
+
+        private static bool IsDebrisOrCraterDef(TerrainDefData def)
+        {
+            if (def == null)
+                return false;
+            return def.Id == "terrain_debris" || def.Id == "terrain_crater";
+        }
+
+        private void ApplyRepairBridge(RepairBridgeCommand cmd)
+        {
+            if (!HasNearbyBuilder(cmd.Issuer, cmd.X, cmd.Z, ConstructionWorkRadius * 1.5f))
+            {
+                AttractBuildersToSite(cmd.Issuer, cmd.X, cmd.Z, BuilderAttractSearchRadius);
+                return;
+            }
+
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, 60))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Timber, 100))
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, 60);
+                return;
+            }
+
+            int best = -1;
+            float bestD2 = 40f * 40f;
+            var links = _environment.TraversalGraph.Links;
+            for (int i = 0; i < links.Count; i++)
+            {
+                var L = links[i];
+                if (L.Type != TraversalLinkType.Bridge || L.Enabled)
+                    continue;
+                float mx = (L.StartX + L.EndX) * 0.5f;
+                float mz = (L.StartZ + L.EndZ) * 0.5f;
+                float dx = mx - cmd.X;
+                float dz = mz - cmd.Z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < bestD2)
+                {
+                    bestD2 = d2;
+                    best = L.Id;
+                }
+            }
+
+            if (best < 0)
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, 60);
+                _wallet.Add(cmd.Issuer, ResourceType.Timber, 100);
+                return;
+            }
+
+            _environment.TraversalGraph.SetLinkEnabled(best, true);
+            if (!_environment.TraversalGraph.TryGetLink(best, out var link))
+                return;
+            float cx = (link.StartX + link.EndX) * 0.5f;
+            float cz = (link.StartZ + link.EndZ) * 0.5f;
+            FillTerrainRect(cx - 5f, cz - 5f, cx + 5f, cz + 5f, DefaultTerrainCatalog.Beach);
+            SpawnDestructible(_ids.Next(), DefaultDestructibleCatalog.Bridge(), cx, cz, best);
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(cx, cz, 24f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= (ulong)(best + 1) * 1637ul;
+        }
+
+        private void ApplyUpgradeBuilding(UpgradeBuildingCommand cmd)
+        {
+            if (!_buildingsById.TryGetValue(cmd.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != cmd.Issuer || building.State != BuildingState.Active)
+                return;
+            if (cmd.UpgradeDefId != FactionDefaultContent.StoneWallsUpgradeId)
+                return;
+            if (!_upgrades.Has(cmd.Issuer, FactionDefaultContent.StoneWallsUpgradeId))
+                return;
+            if (building.DefinitionId != FactionDefaultContent.PalisadeId
+                && building.DefinitionId != FactionDefaultContent.BarricadeId)
+                return;
+            if (!_defs.TryGetBuilding(FactionDefaultContent.StoneWallId, out var stone))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, Math.Max(40, stone.GoldCost / 2)))
+                return;
+
+            SetBuildingBlocked(building, false);
+            building.DefinitionId = FactionDefaultContent.StoneWallId;
+            building.MaxHealth = stone.MaxHealth;
+            building.Health = stone.MaxHealth;
+            building.FootprintHalfX = stone.FootprintX * 0.5f;
+            building.FootprintHalfZ = stone.FootprintZ * 0.5f;
+            building.FootprintRadius = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+            building.Kind = BuildingKind.Wall;
+            building.WallSegmentLength = stone.WallSegmentLength;
+            ApplyBuildingYawToFootprint(building);
+            SetBuildingBlocked(building, true);
+            RefreshWallConnectionsAround(building);
+            _mutationCounter ^= building.Id.Value * 1643ul;
+        }
+
+        private void ActivateFerryDock(SimBuilding building)
+        {
+            float yaw = building.YawDegrees;
+            float rad = yaw * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            float shoreX = building.X;
+            float shoreZ = building.Z;
+            float waterX = building.X + fx * 16f;
+            float waterZ = building.Z + fz * 16f;
+            if (!IsWaterWorld(waterX, waterZ))
+            {
+                waterX = building.X - fx * 16f;
+                waterZ = building.Z - fz * 16f;
+            }
+
+            FillTerrainRect(shoreX - 4f, shoreZ - 4f, shoreX + 4f, shoreZ + 4f, DefaultTerrainCatalog.Beach);
+            int linkId = _environment.TraversalGraph.AddLink(
+                shoreX, shoreZ, waterX, waterZ,
+                TraversalLinkType.ShoreTransition,
+                TraversalCapability.Land | TraversalCapability.Water,
+                durationSeconds: 1.4f,
+                allowsCombat: false,
+                enabled: true,
+                isDestructible: false);
+            building.LinkedTraversalLinkId = linkId;
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(building.X, building.Z, 20f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= building.Id.Value * 1651ul;
+        }
+
+        private bool DigMoatAt(float x, float z, float half)
+        {
+            // Dig a shallow water channel on diggable ground (fortify inland keeps, not only riverbanks).
+            float h = MathF.Max(4f, half);
+            int painted = FillTerrainRectWhere(
+                x - h, z - h, x + h, z + h,
+                DefaultTerrainCatalog.WaterShallow,
+                IsDiggableDef);
+            return painted > 0;
+        }
+
+        private bool ClearVegetationAt(float x, float z, float half, bool burn)
+        {
+            ushort to = burn ? DefaultTerrainCatalog.Scorched : DefaultTerrainCatalog.GrassShort;
+            bool any = ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Forest, to)
+                       | ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Tree, to)
+                       | ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.GrassLong, to);
+            if (burn && any)
+                MarkCellFlags(x, z, half, TerrainCell.FlagOnFire, set: true);
+            if (any && !burn)
+            {
+                // Timber salvage from cleared stands.
+                AddResourceNode(_ids.Next(), ResourceType.Timber, 40, x + 2f, z + 2f);
+            }
+
+            return any;
+        }
+
+        private bool QuarryRockAt(float x, float z, float half)
+        {
+            if (!ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Rock, DefaultTerrainCatalog.GrassBare))
+                return false;
+            AddResourceNode(_ids.Next(), ResourceType.Gold, 35, x, z);
+            return true;
+        }
+
+        private bool ReplaceTerrainCategoryAt(float x, float z, float half, TerrainCategory category, ushort toDef)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return false;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            bool any = false;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var def = grid.GetDef(cell.TerrainDefIndex);
+                    if (def == null || def.Category != category)
+                        continue;
+                    grid.SetCellDef(cx, cz, toDef);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = toDef;
+                    any = true;
+                }
+            }
+
+            return any;
+        }
+
+        private bool ReplaceTerrainDefsAt(float x, float z, float half, ushort a, ushort b, ushort toDef)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return false;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            bool any = false;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if (cell.TerrainDefIndex != a && cell.TerrainDefIndex != b)
+                        continue;
+                    grid.SetCellDef(cx, cz, toDef);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = toDef;
+                    any = true;
+                }
+            }
+
+            return any;
+        }
+
+        private void MarkCellFlags(float x, float z, float half, byte flag, bool set)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(x - half, z - half, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(x + half, z + half, out int maxCx, out int maxCz))
+                return;
+            if (minCx > maxCx) (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz) (minCz, maxCz) = (maxCz, minCz);
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if (set)
+                        cell.Flags = (byte)(cell.Flags | flag);
+                    else
+                        cell.Flags = (byte)(cell.Flags & ~flag);
+                    grid.SetCell(cx, cz, cell);
+                }
+            }
+        }
+
+        private void TickTerrainHazards(float dt)
+        {
+            // Spike pits + burning ruins: light DoT on standing units.
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.IsGarrisoned)
+                    continue;
+                if (!_environment.Grid.TryGetCell(u.X, u.Z, out var cell))
+                    continue;
+                float dps = 0f;
+                if ((cell.Flags & TerrainCell.FlagSpikes) != 0
+                    || cell.TerrainDefIndex == DefaultTerrainCatalog.SpikePit)
+                    dps += 8f;
+                if ((cell.Flags & (TerrainCell.FlagOnFire | TerrainCell.FlagBurningRuin)) != 0)
+                    dps += 6f;
+                if (dps <= 0f)
+                    continue;
+                u.Health -= dps * dt;
+                if (u.Health <= 0f)
+                {
+                    u.Health = 0f;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.Death, u.Id, u.X, u.Z, false));
+                }
+            }
+
+            // Slowly extinguish brush fires → scorched stays, flag clears.
+            _burnTimer += dt;
+            if (_burnTimer < 1f)
+                return;
+            _burnTimer = 0f;
+            DecayFireFlags(step: 1);
+        }
+
+        private float _burnTimer;
+
+        private void DecayFireFlags(int step)
+        {
+            // Sample a sparse grid each second to avoid O(cells) every tick.
+            var grid = _environment.Grid;
+            int w = grid.Width;
+            int h = grid.Height;
+            int stride = 3;
+            int offset = (int)(_mutationCounter % (uint)stride);
+            for (int cz = offset; cz < h; cz += stride)
+            {
+                for (int cx = offset; cx < w; cx += stride)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    if ((cell.Flags & TerrainCell.FlagOnFire) == 0
+                        && (cell.Flags & TerrainCell.FlagBurningRuin) == 0)
+                        continue;
+                    // Probabilistic clear over ~12s.
+                    if (((cx * 17 + cz * 31 + step) & 7) != 0)
+                        continue;
+                    cell.Flags = (byte)(cell.Flags & ~(TerrainCell.FlagOnFire | TerrainCell.FlagBurningRuin));
+                    grid.SetCell(cx, cz, cell);
+                }
+            }
+        }
+
+        private void TearDownCompletedEarthwork(SimBuilding building)
+        {
+            SetBuildingBlocked(building, blocked: false);
+            building.State = BuildingState.Destroyed;
+            building.Health = 0f;
+            _mutationCounter ^= building.Id.Value * 1613ul;
+        }
+
+        private bool DigTrenchAt(float x, float z, float halfExtent)
+        {
+            float half = MathF.Max(4f, halfExtent);
+            int painted = FillTerrainRectWhere(
+                x - half, z - half, x + half, z + half,
+                DefaultTerrainCatalog.Trench,
+                IsDiggableDef);
+            if (painted <= 0)
+                return false;
+
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(x, z, half + 4f, PathDirtyReason.DestructibleCleared);
+            return true;
+        }
+
+        /// <summary>Client ghost / cursor: same placement rules the sim will enforce.</summary>
+        public bool CanPreviewPlaceBuilding(string buildingDefId, float x, float z, float yawDegrees)
+        {
+            return CanPreviewPlaceBuilding(buildingDefId, x, z, yawDegrees, null);
+        }
+
+        public bool CanPreviewPlaceBuilding(string buildingDefId, float x, float z, float yawDegrees, PlayerId? issuer)
+        {
+            if (string.IsNullOrEmpty(buildingDefId) || !IsInsidePlayable(x, z))
+                return false;
+
+            float yaw = NormalizeYaw90(yawDegrees);
+            if (buildingDefId == FactionDefaultContent.BridgeId)
+            {
+                if (issuer.HasValue && !CanPlayerPlaceBridge(issuer.Value))
+                    return false;
+                return CanPlaceFactionBridge(x, z, yaw);
+            }
+            if (buildingDefId == FactionDefaultContent.FerryDockId)
+                return CanPlaceFerryDock(x, z, yaw);
+            if (FactionDefaultContent.TryGetEarthworkKind(buildingDefId, out var earthKind))
+            {
+                float half = 6f;
+                if (_defs.TryGetBuilding(buildingDefId, out var earthDef))
+                    half = MathF.Max(4f, MathF.Max(earthDef.FootprintX, earthDef.FootprintZ) * 0.5f);
+                return CanPreviewTerrainWork(earthKind, x, z, half);
+            }
+
+            return _environment.CanPlaceBuilding(x, z);
+        }
+
+        private bool CanPlayerPlaceBridge(PlayerId issuer)
+        {
+            if (!TryResolvePlayerFaction(issuer, out var faction))
+                return true;
+            var roster = FactionDefaultContent.Get(faction);
+            if (roster.DefinitionId != FactionDefaultContent.UniversityId)
+                return true;
+            return _upgrades.Has(issuer, FactionDefaultContent.AdvancedConstructionUpgradeId);
+        }
+
+        private void RelocateFarGlass(PlayerId owner, FactionId faction, float x, float z)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != owner || b.State == BuildingState.Destroyed)
+                    continue;
+                if (b.DefinitionId != FactionDefaultContent.UniversityFarGlassId)
+                    continue;
+                b.Health = 0f;
+            }
+
+            SpawnPowerBuilding(owner, faction, FactionDefaultContent.UniversityFarGlassId, x, z);
+        }
+
+        private void TickStun(float dt)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.StunRemaining <= 0f)
+                    continue;
+                unit.StunRemaining -= dt;
+                if (unit.StunRemaining < 0f)
+                    unit.StunRemaining = 0f;
+            }
+        }
+
+        private void ApplyDayOfTheSun(float seconds)
+        {
+            _environment.WeatherSim.HoldSunny(seconds > 1f ? seconds : 22f);
+            _environment.TimeOfDaySim.SetTime01(0.32f);
+        }
+
+        private void ApplySunRay(PlayerId caster, float x, float z, PowerDefData power)
+        {
+            float radius = 12f;
+            float dmg = power.EffectMagnitude > 1f ? power.EffectMagnitude : 55f;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.Owner == caster)
+                    continue;
+                if (Distance(u.X, u.Z, x, z) > radius)
+                    continue;
+                float hit = dmg;
+                if (FactionDefaultContent.IsNonHumanUnitId(u.DefinitionId))
+                    hit *= 1.5f;
+                u.Health -= hit;
+            }
+
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed || b.Owner == caster)
+                    continue;
+                if (Distance(b.X, b.Z, x, z) > radius)
+                    continue;
+                b.Health -= MitigateBuildingDamage(b.Owner, dmg * 0.45f);
+            }
+
+            _combatEvents.Add(new CombatEvent(CombatEventKind.PowerActivated, default, x, z, false, caster.Value));
+        }
+
+        private void ApplyBlind(PlayerId caster, float x, float z, PowerDefData power)
+        {
+            float radius = power.EffectMagnitude > 4f ? power.EffectMagnitude : 18f;
+            float stun = power.DurationSeconds > 0.5f ? power.DurationSeconds : 4f;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.Owner == caster)
+                    continue;
+                if (Distance(u.X, u.Z, x, z) > radius)
+                    continue;
+                if (u.StunRemaining < stun)
+                    u.StunRemaining = stun;
+            }
+
+            _combatEvents.Add(new CombatEvent(CombatEventKind.PowerActivated, default, x, z, false, caster.Value));
+        }
+
+        private void TickWeatherRods(float dt)
+        {
+            _ = dt;
+            var grid = _environment.Grid;
+            if (grid == null)
+                return;
+            const float radius = 40f;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State != BuildingState.Active || b.DefinitionId != FactionDefaultContent.UniversityWeatherRodsId)
+                    continue;
+                DrainWeatherInRadius(grid, b.X, b.Z, radius);
+            }
+        }
+
+        private static void DrainWeatherInRadius(WorldTerrainGrid grid, float x, float z, float radius)
+        {
+            if (!grid.TryWorldToCell(x, z, out int cx, out int cz))
+                return;
+            int reach = Math.Max(1, (int)(radius / Math.Max(4f, grid.CellSize)));
+            for (int dz = -reach; dz <= reach; dz++)
+            {
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    if (dx * dx + dz * dz > reach * reach)
+                        continue;
+                    if (!grid.TryGetCellAt(cx + dx, cz + dz, out var cell))
+                        continue;
+                    bool changed = false;
+                    if (cell.Waterlog01 > 0)
+                    {
+                        int next = cell.Waterlog01 - 40;
+                        cell.Waterlog01 = (byte)(next < 0 ? 0 : next);
+                        if (cell.Waterlog01 < 80)
+                            cell.Flags = (byte)(cell.Flags & ~TerrainCell.FlagMuddy);
+                        changed = true;
+                    }
+
+                    if (cell.SnowDepth01 > 0)
+                    {
+                        int next = cell.SnowDepth01 - 50;
+                        cell.SnowDepth01 = (byte)(next < 0 ? 0 : next);
+                        changed = true;
+                    }
+
+                    if (cell.Ice != IceState.None)
+                    {
+                        cell.Ice = IceState.None;
+                        changed = true;
+                    }
+
+                    if (changed)
+                        grid.SetCell(cx + dx, cz + dz, cell);
+                }
+            }
+        }
+
+        private bool InWeatherRodZone(float x, float z)
+        {
+            const float r2 = 40f * 40f;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State != BuildingState.Active || b.DefinitionId != FactionDefaultContent.UniversityWeatherRodsId)
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                if (dx * dx + dz * dz <= r2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool InFriendlyWeatherRod(PlayerId player, float x, float z)
+        {
+            const float r2 = 40f * 40f;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != player || b.State != BuildingState.Active)
+                    continue;
+                if (b.DefinitionId != FactionDefaultContent.UniversityWeatherRodsId)
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                if (dx * dx + dz * dz <= r2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public bool CanDigTrenchAt(float x, float z, float halfExtent)
+        {
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float half = MathF.Max(4f, halfExtent);
+            return CountCellsWhere(x - half, z - half, x + half, z + half, IsDiggableDef) >= 2;
+        }
+
+        private void ActivateFactionBridge(SimBuilding building)
+        {
+            float yaw = building.YawDegrees;
+            float rad = yaw * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            float halfSpan = 18f;
+            float startX = building.X - fx * halfSpan;
+            float startZ = building.Z - fz * halfSpan;
+            float endX = building.X + fx * halfSpan;
+            float endZ = building.Z + fz * halfSpan;
+
+            // Deck planks along the span.
+            float deckHalf = 5f;
+            FillTerrainRect(
+                MathF.Min(startX, endX) - deckHalf,
+                MathF.Min(startZ, endZ) - deckHalf,
+                MathF.Max(startX, endX) + deckHalf,
+                MathF.Max(startZ, endZ) + deckHalf,
+                DefaultTerrainCatalog.Beach);
+
+            int linkId = _environment.TraversalGraph.AddLink(
+                startX,
+                startZ,
+                endX,
+                endZ,
+                TraversalLinkType.Bridge,
+                TraversalCapability.Land,
+                durationSeconds: 1.1f,
+                allowsCombat: true,
+                enabled: true,
+                isDestructible: true);
+
+            var prop = SpawnDestructible(
+                _ids.Next(),
+                DefaultDestructibleCatalog.Bridge(),
+                building.X,
+                building.Z,
+                linkId);
+            building.LinkedDestructibleId = prop.Id.Value;
+            building.LinkedTraversalLinkId = linkId;
+            _environment.RebuildFeatureIndex();
+            _environment.PathDirty.MarkRadius(building.X, building.Z, halfSpan + 8f, PathDirtyReason.BridgeDisabled);
+            _mutationCounter ^= prop.Id.Value * 1621ul;
+        }
+
+        private void TearDownFactionBridgeLinks(SimBuilding building)
+        {
+            if (building.LinkedDestructibleId != 0
+                && _destructiblesById.TryGetValue(building.LinkedDestructibleId, out var prop)
+                && prop.IsAlive)
+            {
+                prop.Health = 0f;
+                prop.State = DestructibleState.Destroyed;
+                FinalizeDestructible(prop);
+            }
+            else if (building.LinkedTraversalLinkId >= 0)
+            {
+                _environment.TraversalGraph.SetLinkEnabled(building.LinkedTraversalLinkId, false);
+                _environment.PathDirty.MarkRadius(building.X, building.Z, 24f, PathDirtyReason.BridgeDisabled);
+            }
+
+            building.LinkedDestructibleId = 0;
+            building.LinkedTraversalLinkId = -1;
+        }
+
+        private bool CanPlaceFactionBridge(float x, float z, float yawDegrees)
+        {
+            // Foundation sits on buildable shore; span must cross water or a gap.
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float rad = yawDegrees * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            for (int i = 1; i <= 5; i++)
+            {
+                float d = i * 6f;
+                if (IsBridgeSpanObstacle(x + fx * d, z + fz * d)
+                    || IsBridgeSpanObstacle(x - fx * d, z - fz * d))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool CanPlaceFerryDock(float x, float z, float yawDegrees)
+        {
+            if (!_environment.CanPlaceBuilding(x, z))
+                return false;
+            float rad = yawDegrees * (MathF.PI / 180f);
+            float fx = MathF.Sin(rad);
+            float fz = MathF.Cos(rad);
+            return IsWaterWorld(x + fx * 14f, z + fz * 14f) || IsWaterWorld(x - fx * 14f, z - fz * 14f);
+        }
+
+        private bool IsWaterWorld(float x, float z)
+        {
+            if (!_environment.Grid.TryGetCell(x, z, out var cell))
+                return false;
+            var def = _environment.Grid.GetDef(cell.TerrainDefIndex);
+            if (def == null)
+                return false;
+            return IsWaterCategory(def.Category);
+        }
+
+        private bool IsBridgeSpanObstacle(float x, float z)
+        {
+            if (!_environment.Grid.TryGetCell(x, z, out var cell))
+                return true;
+            var def = _environment.Grid.GetDef(cell.TerrainDefIndex);
+            if (def == null)
+                return true;
+            if (IsWaterCategory(def.Category) || def.Category == TerrainCategory.Gap)
+                return true;
+            if (def.Category == TerrainCategory.NoEntry)
+                return true;
+            if (def.PathfindingCost >= TerrainDefData.PathCostBlocked
+                && (def.RequiredCapabilities & TraversalCapability.Land) == 0)
+                return true;
+            return false;
+        }
+
+        private static bool IsWaterCategory(TerrainCategory category)
+        {
+            return category == TerrainCategory.WaterRiver
+                   || category == TerrainCategory.WaterLake
+                   || category == TerrainCategory.WaterOcean
+                   || category == TerrainCategory.WaterWaterfall;
+        }
+
+        private static bool IsDiggableDef(TerrainDefData def)
+        {
+            if (def == null || !def.CanChangeAtRuntime)
+                return false;
+            switch (def.Category)
+            {
+                case TerrainCategory.GrassBare:
+                case TerrainCategory.GrassShort:
+                case TerrainCategory.GrassLong:
+                case TerrainCategory.Forest:
+                case TerrainCategory.Beach:
+                case TerrainCategory.Hill:
+                case TerrainCategory.Swamp:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void FillTerrainRect(float minX, float minZ, float maxX, float maxZ, ushort defIndex)
+        {
+            FillTerrainRectWhere(minX, minZ, maxX, maxZ, defIndex, _ => true);
+        }
+
+        private int FillTerrainRectWhere(
+            float minX,
+            float minZ,
+            float maxX,
+            float maxZ,
+            ushort defIndex,
+            System.Func<TerrainDefData, bool> predicate)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(minX, minZ, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(maxX, maxZ, out int maxCx, out int maxCz))
+            {
+                // Fallback: paint whole rect without filter.
+                grid.FillWorldRect(minX, minZ, maxX, maxZ, defIndex);
+                return 1;
+            }
+
+            if (minCx > maxCx)
+                (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz)
+                (minCz, maxCz) = (maxCz, minCz);
+
+            int painted = 0;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var cur = grid.GetDef(cell.TerrainDefIndex);
+                    if (predicate != null && !predicate(cur))
+                        continue;
+                    grid.SetCellDef(cx, cz, defIndex);
+                    long key = ((long)cx << 32) ^ (uint)cz;
+                    _terrainMutations[key] = defIndex;
+                    painted++;
+                }
+            }
+
+            return painted;
+        }
+
+        private int CountCellsWhere(
+            float minX,
+            float minZ,
+            float maxX,
+            float maxZ,
+            System.Func<TerrainDefData, bool> predicate)
+        {
+            var grid = _environment.Grid;
+            if (!grid.TryWorldToCell(minX, minZ, out int minCx, out int minCz)
+                || !grid.TryWorldToCell(maxX, maxZ, out int maxCx, out int maxCz))
+                return 0;
+
+            if (minCx > maxCx)
+                (minCx, maxCx) = (maxCx, minCx);
+            if (minCz > maxCz)
+                (minCz, maxCz) = (maxCz, minCz);
+
+            int n = 0;
+            for (int cz = minCz; cz <= maxCz; cz++)
+            {
+                for (int cx = minCx; cx <= maxCx; cx++)
+                {
+                    if (!grid.TryGetCellAt(cx, cz, out var cell))
+                        continue;
+                    var cur = grid.GetDef(cell.TerrainDefIndex);
+                    if (predicate != null && predicate(cur))
+                        n++;
+                }
+            }
+
+            return n;
+        }
+
+        private static float NormalizeYaw90(float yaw)
+        {
+            float y = yaw % 360f;
+            if (y < 0f)
+                y += 360f;
+            int quarter = (int)MathF.Round(y / 90f) & 3;
+            return quarter * 90f;
+        }
+
+        private static void ApplyBuildingYawToFootprint(SimBuilding building)
+        {
+            float yaw = building.YawDegrees;
+            bool swap = MathF.Abs(yaw - 90f) < 1f || MathF.Abs(yaw - 270f) < 1f;
+            if (!swap)
+                return;
+
+            float hx = building.FootprintHalfX;
+            building.FootprintHalfX = building.FootprintHalfZ;
+            building.FootprintHalfZ = hx;
+            building.FootprintRadius = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+            if (building.Kind == BuildingKind.Wall)
+                building.FootprintRadius = MathF.Max(building.FootprintRadius, MathF.Min(building.FootprintHalfX, building.FootprintHalfZ) + 1f);
         }
 
         /// <summary>Recompute cardinal wall neighbour bits around a segment (placement / tests).</summary>
         public void RefreshWallConnectionsAround(SimBuilding hub)
         {
+            // Fully rebuild links for hub and every nearby wall so demolish/place can't leave stale bits
+            // (stale N+E bits were flipping segment yaw when a neighbour connected).
             float seg = hub.WallSegmentLength > 1f ? hub.WallSegmentLength : WallPlacement.DefaultSegment;
-            float tol = seg * 0.35f;
-            hub.WallLinks = 0;
+            float search = seg * 1.6f;
+            var touched = new List<SimBuilding>(8) { hub };
             for (int i = 0; i < _buildings.Count; i++)
             {
                 var other = _buildings[i];
@@ -548,16 +1859,35 @@ namespace Asterra.Gameplay
                     continue;
                 float dx = other.X - hub.X;
                 float dz = other.Z - hub.Z;
+                if (dx * dx + dz * dz <= search * search)
+                    touched.Add(other);
+            }
+
+            for (int t = 0; t < touched.Count; t++)
+                RecomputeWallLinks(touched[t], seg);
+        }
+
+        private void RecomputeWallLinks(SimBuilding wall, float seg)
+        {
+            float tol = seg * 0.35f;
+            wall.WallLinks = 0;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var other = _buildings[i];
+                if (other.Id.Value == wall.Id.Value || other.State == BuildingState.Destroyed)
+                    continue;
+                if (other.Kind != BuildingKind.Wall && other.Kind != BuildingKind.Gate)
+                    continue;
+                float dx = other.X - wall.X;
+                float dz = other.Z - wall.Z;
                 float dist = MathF.Sqrt(dx * dx + dz * dz);
                 if (dist < seg * 0.55f || dist > seg * 1.45f)
                     continue;
                 if (MathF.Abs(dist - seg) > tol && MathF.Min(MathF.Abs(dx), MathF.Abs(dz)) > tol)
                     continue;
 
-                int dir = WallPlacement.CardinalIndex(hub.X, hub.Z, other.X, other.Z);
-                hub.WallLinks |= (byte)(1 << dir);
-                int opp = (dir + 2) % 4;
-                other.WallLinks |= (byte)(1 << opp);
+                int dir = WallPlacement.CardinalIndex(wall.X, wall.Z, other.X, other.Z);
+                wall.WallLinks |= (byte)(1 << dir);
             }
         }
 
@@ -597,17 +1927,38 @@ namespace Asterra.Gameplay
         {
             if (!_territoriesById.TryGetValue(capture.TerritoryNodeId.Value, out var node))
                 return;
-            for (int i = 0; i < _units.Count; i++)
+
+            bool filterUnits = capture.UnitIds != null && capture.UnitIds.Length > 0;
+            if (filterUnits)
             {
-                var unit = _units[i];
-                if (unit.Owner != capture.Issuer || !unit.IsAlive)
-                    continue;
-                if (unit.Role == UnitRole.Builder)
-                    continue;
-                unit.MoveTargetX = node.X;
-                unit.MoveTargetZ = node.Z;
-                unit.AttackTargetId = null;
-                unit.GatherTargetId = null;
+                for (int i = 0; i < capture.UnitIds.Length; i++)
+                {
+                    if (!_unitsById.TryGetValue(capture.UnitIds[i].Value, out var unit))
+                        continue;
+                    if (unit.Owner != capture.Issuer || !unit.IsAlive || unit.IsGarrisoned)
+                        continue;
+                    if (unit.Role == UnitRole.Builder)
+                        continue;
+                    unit.AttackTargetId = null;
+                    unit.GatherTargetId = null;
+                    unit.AttackMoving = true;
+                    AssignUnitPath(unit, node.X, node.Z);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _units.Count; i++)
+                {
+                    var unit = _units[i];
+                    if (unit.Owner != capture.Issuer || !unit.IsAlive || unit.IsGarrisoned)
+                        continue;
+                    if (unit.Role == UnitRole.Builder)
+                        continue;
+                    unit.AttackTargetId = null;
+                    unit.GatherTargetId = null;
+                    unit.AttackMoving = true;
+                    AssignUnitPath(unit, node.X, node.Z);
+                }
             }
 
             _mutationCounter ^= capture.TerritoryNodeId.Value * 541ul;
@@ -617,48 +1968,992 @@ namespace Asterra.Gameplay
         {
             if (!_defs.TryGetUpgrade(upgrade.UpgradeDefId, out var def))
                 return;
-            if (!_upgrades.TryUnlock(upgrade.Issuer, def.Id, def.GoldCost))
+            if (_upgrades.Has(upgrade.Issuer, def.Id))
+                return;
+            if (!_buildingsById.TryGetValue(upgrade.BuildingId.Value, out var building))
+                return;
+            if (building.Owner != upgrade.Issuer || building.State != BuildingState.Active)
+                return;
+            if (building.IsResearching)
                 return;
 
-            float dmgMult = _upgrades.UnitDamageMultiplier(upgrade.Issuer);
-            for (int i = 0; i < _units.Count; i++)
+            bool keepTech = def.Kind == UpgradeKind.Keep || def.Kind == UpgradeKind.Fortification;
+            bool atKeep = building.Kind == BuildingKind.Keep;
+            bool atProducer = building.Kind == BuildingKind.Producer;
+            if (keepTech && !atKeep)
+                return;
+            // Equipment: barracks preferred; keep allowed so research is never soft-locked.
+            if (!keepTech && !atProducer && !atKeep)
+                return;
+
+            if (!_wallet.TrySpend(upgrade.Issuer, ResourceType.Gold, def.GoldCost))
+                return;
+
+            float seconds = def.ResearchSeconds > 0.1f ? def.ResearchSeconds : 0.1f;
+            building.ResearchUpgradeDefId = def.Id;
+            building.ResearchSecondsTotal = seconds;
+            building.ResearchSecondsRemaining = seconds;
+            _mutationCounter ^= building.Id.Value * 773ul;
+        }
+
+        private void CompleteResearch(SimBuilding building, UpgradeDefData def)
+        {
+            if (!_upgrades.MarkUnlocked(building.Owner, def.Id))
+                return;
+
+            if (def.KeepHealthBonus > 0f)
+                ApplyKeepHealthBonus(building.Owner, def.KeepHealthBonus);
+            if (def.KeepSightBonus > 0f)
+                ApplyKeepSightBonus(building.Owner, def.KeepSightBonus);
+
+            // Equipment research only unlocks the upgrade — units must Equip for gold.
+
+            _combatEvents.Add(new CombatEvent(CombatEventKind.ResearchComplete, building.Id, building.X, building.Z, true));
+            _mutationCounter ^= (ulong)def.Id.GetHashCode();
+        }
+
+        private void ApplyKeepHealthBonus(PlayerId owner, float bonus)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
             {
-                var unit = _units[i];
-                if (unit.Owner != upgrade.Issuer || !unit.IsAlive)
+                var b = _buildings[i];
+                if (b.Owner != owner || b.State == BuildingState.Destroyed || b.Kind != BuildingKind.Keep)
                     continue;
-                if (!_defs.TryGetUnit(unit.DefinitionId, out var baseDef))
+                b.MaxHealth += bonus;
+                b.Health += bonus;
+            }
+        }
+
+        private void ApplyKeepSightBonus(PlayerId owner, float bonus)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != owner || b.State == BuildingState.Destroyed || b.Kind != BuildingKind.Keep)
                     continue;
-                unit.AttackDamage = baseDef.AttackDamage * dmgMult;
+                b.SightRadius += bonus;
+            }
+        }
+
+        private void ApplyUnitUpgrade(ApplyUnitUpgradeCommand cmd)
+        {
+            if (cmd.UnitIds == null || cmd.UnitIds.Length == 0)
+                return;
+            if (!_defs.TryGetUpgrade(cmd.UpgradeDefId, out var def))
+                return;
+            if (def.Kind != UpgradeKind.Equipment)
+                return;
+            if (!_upgrades.Has(cmd.Issuer, def.Id))
+                return;
+
+            int equipCost = def.ResolvedEquipGoldCost;
+            for (int i = 0; i < cmd.UnitIds.Length; i++)
+            {
+                if (!_unitsById.TryGetValue(cmd.UnitIds[i].Value, out var unit))
+                    continue;
+                if (unit.Owner != cmd.Issuer || !unit.IsAlive)
+                    continue;
+                if (!def.FitsUnit(unit.DefinitionId, unit.Role))
+                    continue;
+                if (unit.HasAppliedEquipment(def.Id))
+                    continue;
+                if (equipCost > 0 && !_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, equipCost))
+                    break;
+                if (!ApplyEquipmentToUnit(unit, def))
+                {
+                    // Refund if record/apply failed after spend.
+                    if (equipCost > 0)
+                        _wallet.Add(cmd.Issuer, ResourceType.Gold, equipCost);
+                    continue;
+                }
+
+                _combatEvents.Add(new CombatEvent(CombatEventKind.UpgradeApplied, unit.Id, unit.X, unit.Z, false));
+            }
+        }
+
+        private bool ApplyEquipmentToUnit(SimUnit unit, UpgradeDefData def)
+        {
+            if (!def.FitsUnit(unit.DefinitionId, unit.Role))
+                return false;
+            if (!unit.TryRecordEquipment(def.Id))
+                return false;
+            if (!_defs.TryGetUnit(unit.DefinitionId, out var baseDef))
+                return false;
+
+            unit.Armor += def.ArmorBonus;
+            unit.SightRadius += def.SightBonus;
+            float dmg = baseDef.AttackDamage;
+            for (int i = 0; i < unit.AppliedEquipmentCount; i++)
+            {
+                if (!_defs.TryGetUpgrade(unit.AppliedEquipmentIds[i], out var applied))
+                    continue;
+                dmg = dmg * applied.UnitDamageMultiplier + applied.AttackDamageBonus;
             }
 
-            _mutationCounter ^= (ulong)def.Id.GetHashCode();
+            unit.AttackDamage = dmg + unit.CommanderDamageBonus;
+            _mutationCounter ^= unit.Id.Value * 911ul;
+            return true;
+        }
+
+        private void ApplyResearchedEquipmentToNewUnit(SimUnit unit)
+        {
+            // Intentionally empty: researched equipment must be equipped for gold per unit.
+        }
+
+        private void ApplyUnlockPower(UnlockPowerCommand cmd)
+        {
+            if (!_defs.TryGetPower(cmd.PowerDefId, out var def))
+                return;
+            if (!TryResolvePlayerFaction(cmd.Issuer, out var faction))
+                return;
+            if (!RosterContainsPower(FactionDefaultContent.Get(faction), def.Id))
+                return;
+            if (!_powers.TryUnlock(cmd.Issuer, def.Id, def.UnlockGoldCost))
+                return;
+
+            // Passives apply permanently on unlock (commander kit).
+            if (def.IsPassive)
+                ApplyPermanentPassive(cmd.Issuer, def);
+
+            _mutationCounter ^= (ulong)def.Id.GetHashCode() * 17ul;
+        }
+
+        private void ApplyPermanentPassive(PlayerId owner, PowerDefData power)
+        {
+            string key = AbilityKey(owner.Value, power.Id);
+            if (_commanderAbilities.TryGetValue(key, out var existing))
+            {
+                if (existing.BuffRemaining > 1e6f)
+                    return;
+                if (existing.BuffRemaining > 0f)
+                    ClearPowerBuff(owner, existing);
+            }
+
+            var state = new CommanderAbilityRuntime
+            {
+                PowerDefId = power.Id,
+                Effect = power.Effect,
+                ArmorBonus = power.Effect == PowerEffectKind.ArmorAura ? power.EffectMagnitude : 0f,
+                MoveBonus = power.Effect == PowerEffectKind.MoveSpeedAura ? power.EffectMagnitude : 0f,
+                DamageBonus = power.Effect == PowerEffectKind.DamageAura ? power.EffectMagnitude : 0f,
+                BuildingMitigation = power.BuildingMitigation,
+                BuffRemaining = 1e9f,
+                CooldownRemaining = 0f,
+            };
+            _commanderAbilities[key] = state;
+            ApplyPowerBuff(owner, state);
+        }
+
+        private static bool RosterContainsPower(FactionRoster roster, string powerId)
+        {
+            if (roster.PowerIds != null)
+            {
+                for (int i = 0; i < roster.PowerIds.Length; i++)
+                {
+                    if (roster.PowerIds[i] == powerId)
+                        return true;
+                }
+            }
+
+            return roster.PowerId == powerId;
+        }
+
+        private void ApplyAttachBuilding(AttachBuildingCommand cmd)
+        {
+            if (!_buildingsById.TryGetValue(cmd.ParentBuildingId.Value, out var parent))
+                return;
+            if (parent.Owner != cmd.Issuer || parent.State == BuildingState.Destroyed)
+                return;
+            if (parent.Kind != BuildingKind.Keep || parent.AttachmentSlotCount <= 0)
+                return;
+            if (cmd.SlotIndex >= parent.AttachmentSlotCount)
+                return;
+            if (parent.AttachmentOccupantIds[cmd.SlotIndex] != 0)
+                return;
+            if (!_defs.TryGetBuilding(cmd.BuildingDefId, out var def))
+                return;
+            if (!Contains(parent.AttachmentAllowedBuildingIds, cmd.BuildingDefId))
+                return;
+
+            GetAttachmentWorldPos(parent, cmd.SlotIndex, out float x, out float z);
+            if (!IsInsidePlayable(x, z))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, def.GoldCost))
+                return;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Timber, def.TimberCost))
+            {
+                _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost);
+                return;
+            }
+
+            var child = SpawnBuilding(_ids.Next(), cmd.Issuer, parent.Faction, def.Id, x, z, startActive: false);
+            child.ParentBuildingId = parent.Id;
+            child.AttachmentSlotIndex = cmd.SlotIndex;
+            parent.AttachmentOccupantIds[cmd.SlotIndex] = child.Id.Value;
+            AttractBuildersToSite(cmd.Issuer, x, z, BuilderAttractSearchRadius);
+            _mutationCounter ^= child.Id.Value * 1601ul;
+        }
+
+        private static void GetAttachmentWorldPos(SimBuilding parent, byte slot, out float x, out float z)
+        {
+            float r = parent.AttachmentRadius > 1f ? parent.AttachmentRadius : 22f;
+            switch (slot % 4)
+            {
+                case 0: x = parent.X; z = parent.Z + r; break;
+                case 1: x = parent.X + r; z = parent.Z; break;
+                case 2: x = parent.X; z = parent.Z - r; break;
+                default: x = parent.X - r; z = parent.Z; break;
+            }
         }
 
         private void ApplyCommanderAbility(ActivateCommanderAbilityCommand cmd)
         {
+            if (string.IsNullOrEmpty(cmd.PowerDefId))
+                return;
             if (!TryResolvePlayerFaction(cmd.Issuer, out var faction))
                 return;
-            if (faction != FactionDefaultContent.IronCovenant.Id)
+            var roster = FactionDefaultContent.Get(faction);
+            if (!RosterContainsPower(roster, cmd.PowerDefId))
+                return;
+            if (!_defs.TryGetPower(cmd.PowerDefId, out var power))
+                return;
+            if (power.IsPassive)
+                return;
+            if (!_powers.Has(cmd.Issuer, power.Id))
                 return;
 
-            if (!_commanderAbilities.TryGetValue(cmd.Issuer.Value, out var state))
+            string key = AbilityKey(cmd.Issuer.Value, power.Id);
+            if (!_commanderAbilities.TryGetValue(key, out var state))
             {
-                state = new CommanderAbilityRuntime();
-                _commanderAbilities[cmd.Issuer.Value] = state;
+                state = new CommanderAbilityRuntime { PowerDefId = power.Id };
+                _commanderAbilities[key] = state;
             }
 
             if (state.CooldownRemaining > 0f)
                 return;
 
-            // Clear any leftover buff before re-applying.
-            if (state.BuffRemaining > 0f)
-                ClearCommanderArmorBuff(cmd.Issuer, state.ArmorBonus);
+            if (power.Effect == PowerEffectKind.PlaceGate
+                && !CanPlaceTwinGatePair(cmd.TargetX, cmd.TargetZ, cmd.SecondaryX, cmd.SecondaryZ))
+                return;
+            if (power.Effect == PowerEffectKind.ExplosiveStrip
+                && !CanPlaceTwinGatePair(cmd.TargetX, cmd.TargetZ, cmd.SecondaryX, cmd.SecondaryZ))
+                return;
+            if (power.Effect == PowerEffectKind.BlindRadius
+                && !IsInsidePlayable(cmd.TargetX, cmd.TargetZ))
+                return;
+            if (power.Effect == PowerEffectKind.SunRay
+                && !IsInsidePlayable(cmd.TargetX, cmd.TargetZ))
+                return;
+            if (power.Effect == PowerEffectKind.MindControl
+                && !TryBeginMindControl(cmd.Issuer, cmd.TargetId, power.DurationSeconds))
+                return;
 
-            state.ArmorBonus = FactionDefaultContent.LucienIronWallArmorBonus;
-            state.BuffRemaining = FactionDefaultContent.LucienIronWallDurationSeconds;
-            state.CooldownRemaining = FactionDefaultContent.LucienIronWallCooldownSeconds;
-            ApplyCommanderArmorBuff(cmd.Issuer, state.ArmorBonus);
+            if (state.BuffRemaining > 0f)
+                ClearPowerBuff(cmd.Issuer, state);
+
+            state.PowerDefId = power.Id;
+            state.Effect = power.Effect;
+            state.ArmorBonus = power.Effect == PowerEffectKind.ArmorAura ? power.EffectMagnitude : 0f;
+            state.MoveBonus = power.Effect == PowerEffectKind.MoveSpeedAura ? power.EffectMagnitude : 0f;
+            state.DamageBonus = power.Effect == PowerEffectKind.DamageAura ? power.EffectMagnitude : 0f;
+            state.PercentBonus = power.Effect == PowerEffectKind.DayOfTheSun ? power.EffectMagnitude : 0f;
+            state.BuildingMitigation = power.BuildingMitigation;
+            state.BuffRemaining = power.DurationSeconds;
+            state.CooldownRemaining = power.CooldownSeconds;
+            ApplyPowerBuff(cmd.Issuer, state);
+            // Presentation cue at keep / army center.
+            float fx = 0f;
+            float fz = 0f;
+            int n = 0;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != cmd.Issuer || b.State == BuildingState.Destroyed)
+                    continue;
+                if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                    continue;
+                fx = b.X;
+                fz = b.Z;
+                n = 1;
+                break;
+            }
+
+            if (n == 0)
+            {
+                for (int i = 0; i < _units.Count; i++)
+                {
+                    var u = _units[i];
+                    if (!u.IsAlive || u.Owner != cmd.Issuer)
+                        continue;
+                    fx += u.X;
+                    fz += u.Z;
+                    n++;
+                }
+
+                if (n > 0)
+                {
+                    fx /= n;
+                    fz /= n;
+                }
+            }
+
+            ApplySpecialPowerEffects(cmd, power, fx, fz);
+            _combatEvents.Add(new CombatEvent(CombatEventKind.PowerActivated, default, fx, fz, false, cmd.Issuer.Value));
             _mutationCounter ^= 0xA11CEUL ^ (ulong)(cmd.Issuer.Value + 1) * 97ul;
+        }
+
+        private void ApplySpecialPowerEffects(ActivateCommanderAbilityCommand cmd, PowerDefData power, float x, float z)
+        {
+            if (!TryResolvePlayerFaction(cmd.Issuer, out var faction))
+                return;
+            switch (power.Effect)
+            {
+                case PowerEffectKind.ForceWeather:
+                    ForceWrathWeather();
+                    break;
+                case PowerEffectKind.SpawnSwarm:
+                    SpawnPowerBuilding(cmd.Issuer, faction, FactionDefaultContent.ShadowedGateBuildingId, x + 16f, z + 12f);
+                    break;
+                case PowerEffectKind.PlaceGate:
+                    var gateA = SpawnPowerBuilding(cmd.Issuer, faction, FactionDefaultContent.PortalGateId, cmd.TargetX, cmd.TargetZ);
+                    var gateB = SpawnPowerBuilding(cmd.Issuer, faction, FactionDefaultContent.PortalGateId, cmd.SecondaryX, cmd.SecondaryZ);
+                    if (gateA != null && gateB != null)
+                    {
+                        gateA.LinkedPortalId = gateB.Id.Value;
+                        gateB.LinkedPortalId = gateA.Id.Value;
+                    }
+
+                    break;
+                case PowerEffectKind.SpawnScouts:
+                    int spies = power.EffectMagnitude > 1f ? (int)power.EffectMagnitude : 6;
+                    string spyId = string.IsNullOrEmpty(power.SpawnUnitDefinitionId)
+                        ? FactionDefaultContent.VeiledDarkSpyId
+                        : power.SpawnUnitDefinitionId;
+                    for (int i = 0; i < spies; i++)
+                    {
+                        float ang = (i / (float)spies) * 6.2831853f;
+                        SpawnPowerUnit(
+                            cmd.Issuer,
+                            faction,
+                            spyId,
+                            x + MathF.Cos(ang) * 10f,
+                            z + MathF.Sin(ang) * 10f);
+                    }
+
+                    break;
+                case PowerEffectKind.SpawnRandomBeasts:
+                    SpawnNaturesAid(cmd.Issuer, faction, cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetX : x,
+                        cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetZ : z, power);
+                    break;
+                case PowerEffectKind.FloodArea:
+                    BeginFlood(
+                        cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetX : x,
+                        cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetZ : z,
+                        power.EffectMagnitude > 4f ? power.EffectMagnitude : 24f,
+                        power.DurationSeconds > 1f ? power.DurationSeconds : 20f);
+                    break;
+                case PowerEffectKind.EyesInSky:
+                    SpawnEyesInSky(
+                        cmd.Issuer,
+                        faction,
+                        cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetX : x,
+                        cmd.TargetX != 0f || cmd.TargetZ != 0f ? cmd.TargetZ : z,
+                        power);
+                    break;
+                case PowerEffectKind.ExplosiveStrip:
+                    SpawnPowderCarts(cmd.Issuer, faction, cmd.TargetX, cmd.TargetZ, cmd.SecondaryX, cmd.SecondaryZ, power);
+                    break;
+                case PowerEffectKind.RelocateSight:
+                    RelocateFarGlass(cmd.Issuer, faction, cmd.TargetX, cmd.TargetZ);
+                    break;
+                case PowerEffectKind.SunRay:
+                    ApplySunRay(cmd.Issuer, cmd.TargetX, cmd.TargetZ, power);
+                    break;
+                case PowerEffectKind.DayOfTheSun:
+                    ApplyDayOfTheSun(power.DurationSeconds);
+                    break;
+                case PowerEffectKind.BlindRadius:
+                    ApplyBlind(cmd.Issuer, cmd.TargetX, cmd.TargetZ, power);
+                    break;
+            }
+        }
+
+        private bool CanPlaceTwinGatePair(float ax, float az, float bx, float bz)
+        {
+            float dx = ax - bx;
+            float dz = az - bz;
+            if (dx * dx + dz * dz < 14f * 14f)
+                return false;
+            if (!IsInsidePlayable(ax, az) || !IsInsidePlayable(bx, bz))
+                return false;
+            if (!_environment.CanPlaceBuilding(ax, az) || !_environment.CanPlaceBuilding(bx, bz))
+                return false;
+            if (OverlapsAnyBuilding(ax, az, 5f) || OverlapsAnyBuilding(bx, bz, 5f))
+                return false;
+            return true;
+        }
+
+        private bool TryBeginMindControl(PlayerId caster, SimEntityId targetId, float duration)
+        {
+            if (!_unitsById.TryGetValue(targetId.Value, out var unit) || !unit.IsAlive)
+                return false;
+            if (unit.Owner == caster)
+                return false;
+            if (!_defs.TryGetUnit(unit.DefinitionId, out var def))
+                return false;
+            if (def.IsLeader || def.IsBuilder || def.Role == UnitRole.Builder)
+                return false;
+            if (unit.HasMindControlOriginal)
+                return false;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (u.IsAlive && u.HasMindControlOriginal && u.Owner == caster)
+                    return false;
+            }
+
+            unit.HasMindControlOriginal = true;
+            unit.MindControlOriginalOwner = unit.Owner;
+            unit.MindControlRemaining = duration > 1f ? duration : 30f;
+            unit.Owner = caster;
+            unit.AttackTargetId = null;
+            unit.ClearPath();
+            return true;
+        }
+
+        private void TickMindControl(float dt)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.HasMindControlOriginal)
+                    continue;
+                if (!unit.IsAlive)
+                {
+                    unit.HasMindControlOriginal = false;
+                    unit.MindControlRemaining = 0f;
+                    continue;
+                }
+
+                unit.MindControlRemaining -= dt;
+                if (unit.MindControlRemaining > 0f)
+                    continue;
+                unit.Owner = unit.MindControlOriginalOwner;
+                unit.HasMindControlOriginal = false;
+                unit.MindControlRemaining = 0f;
+                unit.AttackTargetId = null;
+                unit.ClearPath();
+            }
+        }
+
+        private void ForceWrathWeather()
+        {
+            WeatherKind[] kinds = { WeatherKind.Storm, WeatherKind.Fog, WeatherKind.Rain, WeatherKind.Snow };
+            int pick = (int)(_mutationCounter % (ulong)kinds.Length);
+            _environment.WeatherSim.ForceTransitionTo(kinds[pick]);
+        }
+
+        private SimBuilding SpawnPowerBuilding(PlayerId owner, FactionId faction, string buildingId, float x, float z)
+        {
+            if (!_defs.TryGetBuilding(buildingId, out _))
+                return null;
+            if (!IsInsidePlayable(x, z))
+                return null;
+            return SpawnBuilding(_ids.Next(), owner, faction, buildingId, x, z, startActive: true);
+        }
+
+        private void SpawnPowerUnit(PlayerId owner, FactionId faction, string unitId, float x, float z)
+        {
+            if (!_defs.TryGetUnit(unitId, out _))
+                return;
+            SpawnUnit(_ids.Next(), owner, faction, unitId, x, z);
+        }
+
+        private void SpawnNaturesAid(PlayerId owner, FactionId faction, float x, float z, PowerDefData power)
+        {
+            string[] pool =
+            {
+                FactionDefaultContent.OutcastSpriteId,
+                FactionDefaultContent.OutcastNatureCubId,
+                FactionDefaultContent.OutcastHunterId,
+            };
+            if (power != null && power.Id == FactionDefaultContent.MercenariesAbilityId)
+            {
+                pool = new[]
+                {
+                    FactionDefaultContent.FreetownDrunkId,
+                    FactionDefaultContent.FreetownHighwaymanId,
+                    FactionDefaultContent.FreetownHoundId,
+                    FactionDefaultContent.FreetownFodderId,
+                };
+            }
+            if (power != null && power.Id == FactionDefaultContent.FieldExerciseAbilityId)
+            {
+                pool = new[]
+                {
+                    FactionDefaultContent.UniversityFellowId,
+                    FactionDefaultContent.UniversityPoisonId,
+                    FactionDefaultContent.UniversitySpiderId,
+                };
+            }
+            int n = power.EffectMagnitude > 1f ? (int)power.EffectMagnitude : 8;
+            for (int i = 0; i < n; i++)
+            {
+                int pick = (int)((_mutationCounter + (ulong)i * 17ul) % (ulong)pool.Length);
+                float ang = (i / (float)n) * 6.2831853f;
+                SpawnPowerUnit(owner, faction, pool[pick], x + MathF.Cos(ang) * 8f, z + MathF.Sin(ang) * 8f);
+            }
+        }
+
+        private void SpawnEyesInSky(PlayerId owner, FactionId faction, float x, float z, PowerDefData power)
+        {
+            int n = power.EffectMagnitude > 1f ? (int)power.EffectMagnitude : 4;
+            float life = power.DurationSeconds > 1f ? power.DurationSeconds : 20f;
+            for (int i = 0; i < n; i++)
+            {
+                float ang = (i / (float)n) * 6.2831853f;
+                var bird = SpawnUnit(
+                    _ids.Next(),
+                    owner,
+                    faction,
+                    FactionDefaultContent.OutcastSkyEyeId,
+                    x + MathF.Cos(ang) * 6f,
+                    z + MathF.Sin(ang) * 6f);
+                if (bird == null)
+                    continue;
+                bird.Airborne = true;
+                bird.LifetimeRemaining = life;
+            }
+        }
+
+        private void SpawnPowderCarts(PlayerId owner, FactionId faction, float ax, float az, float bx, float bz, PowerDefData power)
+        {
+            int n = power.EffectMagnitude > 1f ? (int)power.EffectMagnitude : 3;
+            for (int i = 0; i < n; i++)
+            {
+                float t = n == 1 ? 0f : i / (float)(n - 1);
+                float sx = ax + (bx - ax) * t * 0.15f;
+                float sz = az + (bz - az) * t * 0.15f;
+                var cart = SpawnUnit(_ids.Next(), owner, faction, FactionDefaultContent.FreetownPowderCartId, sx, sz);
+                if (cart == null)
+                    continue;
+                cart.ExplosiveCart = true;
+                cart.CartEndX = bx;
+                cart.CartEndZ = bz;
+                AssignUnitPath(cart, bx, bz);
+            }
+        }
+
+        private void TickPowderCarts(float dt)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || !unit.ExplosiveCart)
+                    continue;
+                if (Distance(unit.X, unit.Z, unit.CartEndX, unit.CartEndZ) > 5f)
+                    continue;
+                DetonateCart(unit);
+            }
+        }
+
+        private void DetonateCart(SimUnit cart)
+        {
+            const float radius = 16f;
+            float dmg = cart.AttackDamage > 1f ? cart.AttackDamage : 40f;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive || u.Owner == cart.Owner)
+                    continue;
+                if (Distance(u.X, u.Z, cart.X, cart.Z) > radius)
+                    continue;
+                u.Health -= dmg;
+            }
+
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed || b.Owner == cart.Owner)
+                    continue;
+                if (Distance(b.X, b.Z, cart.X, cart.Z) > radius)
+                    continue;
+                b.Health -= MitigateBuildingDamage(b.Owner, dmg * cart.BuildingDamageMultiplier);
+            }
+
+            cart.Health = 0f;
+            cart.ExplosiveCart = false;
+            _combatEvents.Add(new CombatEvent(CombatEventKind.PowerActivated, cart.Id, cart.X, cart.Z, false, cart.Owner.Value));
+        }
+
+        private void BeginFlood(float x, float z, float radius, float duration)
+        {
+            var grid = _environment.Grid;
+            if (grid == null || !grid.TryWorldToCell(x, z, out int cx, out int cz))
+                return;
+            int reach = Math.Max(1, (int)(radius / Math.Max(4f, grid.CellSize)));
+            ushort water = 0;
+            bool hasWater = grid.TryGetDefIndex("terrain_water_lake", out int idx) && idx >= 0;
+            if (hasWater)
+                water = (ushort)idx;
+            for (int dz = -reach; dz <= reach; dz++)
+            {
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    if (dx * dx + dz * dz > reach * reach)
+                        continue;
+                    if (!grid.TryGetCellAt(cx + dx, cz + dz, out var cell))
+                        continue;
+                    _floodPatches.Add(new FloodPatch
+                    {
+                        CellX = cx + dx,
+                        CellZ = cz + dz,
+                        Original = cell,
+                        Remaining = duration,
+                    });
+                    cell.Waterlog01 = 255;
+                    cell.Flags |= TerrainCell.FlagMuddy;
+                    if (hasWater)
+                        cell.TerrainDefIndex = water;
+                    grid.SetCell(cx + dx, cz + dz, cell);
+                }
+            }
+        }
+
+        private void TickFloods(float dt)
+        {
+            var grid = _environment.Grid;
+            for (int i = _floodPatches.Count - 1; i >= 0; i--)
+            {
+                var patch = _floodPatches[i];
+                patch.Remaining -= dt;
+                if (patch.Remaining > 0f)
+                    continue;
+                if (grid != null)
+                    grid.SetCell(patch.CellX, patch.CellZ, patch.Original);
+                _floodPatches.RemoveAt(i);
+            }
+        }
+
+        private void TickRollingFog(float dt)
+        {
+            _rollingFogAcc += dt;
+            if (_rollingFogAcc < 0.45f)
+                return;
+            _rollingFogAcc = 0f;
+            var grid = _environment.Grid;
+            if (grid == null)
+                return;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State != BuildingState.Active || !FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                    continue;
+                if (!_upgrades.Has(b.Owner, FactionDefaultContent.RollingFogUpgradeId))
+                    continue;
+                PaintLocalWeather(grid, b.X, b.Z, WeatherKind.Fog);
+            }
+        }
+
+        private void TickFlightAndLifetimes(float dt)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive)
+                    continue;
+                if (unit.LifetimeRemaining > 0f)
+                {
+                    unit.LifetimeRemaining -= dt;
+                    if (unit.LifetimeRemaining <= 0f)
+                    {
+                        unit.Health = 0f;
+                        continue;
+                    }
+                }
+
+                if (!unit.Airborne)
+                    continue;
+                if (unit.FlightRemaining <= 0f)
+                    continue;
+                unit.FlightRemaining -= dt;
+                if (unit.FlightRemaining <= 0f)
+                    unit.Airborne = false;
+            }
+        }
+
+        private TraversalCapability PathCaps(SimUnit unit)
+        {
+            var caps = unit.TraversalCapabilities;
+            if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.RequiresHeightLaunch)
+                return caps;
+            if (unit.Airborne)
+                return TraversalCapability.Flying;
+            return TraversalCapability.Land;
+        }
+
+        private bool CanLaunchWindRider(SimUnit unit)
+        {
+            var grid = _environment.Grid;
+            if (grid != null && grid.TryGetCell(unit.X, unit.Z, out var cell))
+            {
+                var tdef = grid.GetDef(cell.TerrainDefIndex);
+                if (tdef.Category == TerrainCategory.Hill || tdef.Category == TerrainCategory.Mountain)
+                    return true;
+            }
+
+            bool perch = _upgrades.Has(unit.Owner, FactionDefaultContent.GreatPerchUpgradeId);
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != unit.Owner || b.State == BuildingState.Destroyed)
+                    continue;
+                float r = Distance(unit.X, unit.Z, b.X, b.Z);
+                if (b.DefinitionId == FactionDefaultContent.OutcastAerieId && r < 24f)
+                    return true;
+                if (perch && FactionDefaultContent.IsKeepBuildingId(b.DefinitionId) && r < 36f)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void TickShadowedGates(float dt)
+        {
+            const float interval = 3f;
+            const int cap = 12;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State != BuildingState.Active || b.DefinitionId != FactionDefaultContent.ShadowedGateBuildingId)
+                    continue;
+                b.AttackCooldownRemaining += dt;
+                if (b.AttackCooldownRemaining < interval)
+                    continue;
+                b.AttackCooldownRemaining = 0f;
+                int living = 0;
+                for (int u = 0; u < _units.Count; u++)
+                {
+                    var unit = _units[u];
+                    if (unit.IsAlive
+                        && unit.Owner == b.Owner
+                        && unit.DefinitionId == FactionDefaultContent.VeiledShadeId)
+                        living++;
+                }
+
+                if (living >= cap)
+                    continue;
+                SpawnUnit(_ids.Next(), b.Owner, b.Faction, FactionDefaultContent.VeiledShadeId, b.X + 3f, b.Z);
+            }
+        }
+
+        private void TryLinkUnpairedPortal(SimBuilding placed)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var other = _buildings[i];
+                if (other.Id.Value == placed.Id.Value)
+                    continue;
+                if (other.Owner != placed.Owner || other.State == BuildingState.Destroyed)
+                    continue;
+                if (!FactionDefaultContent.IsPortalGateId(other.DefinitionId))
+                    continue;
+                if (other.LinkedPortalId != 0)
+                    continue;
+                placed.LinkedPortalId = other.Id.Value;
+                other.LinkedPortalId = placed.Id.Value;
+                return;
+            }
+        }
+
+        private void UnlinkPortal(SimBuilding building)
+        {
+            if (building.LinkedPortalId == 0)
+                return;
+            if (_buildingsById.TryGetValue(building.LinkedPortalId, out var other))
+                other.LinkedPortalId = 0;
+            building.LinkedPortalId = 0;
+        }
+
+        private void TickPortals(float dt)
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.IsGarrisoned)
+                    continue;
+                if (unit.PortalCooldownRemaining > 0f)
+                    unit.PortalCooldownRemaining -= dt;
+            }
+
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.IsGarrisoned || unit.PortalCooldownRemaining > 0f)
+                    continue;
+                if (unit.Role == UnitRole.Siege)
+                    continue;
+                TryTeleportUnitThroughPortal(unit);
+            }
+        }
+
+        private void TryTeleportUnitThroughPortal(SimUnit unit)
+        {
+            const float enterR = 9f;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var gate = _buildings[i];
+                if (gate.State != BuildingState.Active || gate.Owner != unit.Owner)
+                    continue;
+                if (!FactionDefaultContent.IsPortalGateId(gate.DefinitionId) || gate.LinkedPortalId == 0)
+                    continue;
+                float dx = unit.X - gate.X;
+                float dz = unit.Z - gate.Z;
+                if (dx * dx + dz * dz > enterR * enterR)
+                    continue;
+                if (!_buildingsById.TryGetValue(gate.LinkedPortalId, out var dest)
+                    || dest.State != BuildingState.Active)
+                    continue;
+                float ox = dest.X - gate.X;
+                float oz = dest.Z - gate.Z;
+                float len = MathF.Sqrt(ox * ox + oz * oz);
+                if (len < 0.1f)
+                    len = 1f;
+                float nx = dest.X + ox / len * 12f;
+                float nz = dest.Z + oz / len * 12f;
+                if (!IsInsidePlayable(nx, nz))
+                {
+                    nx = dest.X + 10f;
+                    nz = dest.Z;
+                }
+
+                unit.X = nx;
+                unit.Z = nz;
+                unit.ClearPath();
+                unit.PortalCooldownRemaining = 1.8f;
+                _mutationCounter ^= unit.Id.Value * 1301ul;
+                return;
+            }
+        }
+
+        private float _priestWeatherAcc;
+
+        private void TickPriestWeather(float dt)
+        {
+            _priestWeatherAcc += dt;
+            bool pulse = _priestWeatherAcc >= 0.45f;
+            if (pulse)
+                _priestWeatherAcc = 0f;
+            if (!pulse)
+                return;
+
+            var grid = _environment.Grid;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || !FactionDefaultContent.IsPriestUnitId(unit.DefinitionId))
+                    continue;
+                if (_upgrades.Has(unit.Owner, FactionDefaultContent.DesertStormUpgradeId))
+                    PaintLocalWeather(grid, unit.X, unit.Z, WeatherKind.Storm);
+                if (_upgrades.Has(unit.Owner, FactionDefaultContent.RainfallUpgradeId))
+                    PaintLocalWeather(grid, unit.X, unit.Z, WeatherKind.Rain);
+                if (_upgrades.Has(unit.Owner, FactionDefaultContent.IceFormationUpgradeId))
+                    PaintLocalWeather(grid, unit.X, unit.Z, WeatherKind.Snow);
+                if (_upgrades.Has(unit.Owner, FactionDefaultContent.FogOfWarUpgradeId))
+                    PaintLocalWeather(grid, unit.X, unit.Z, WeatherKind.Fog);
+            }
+        }
+
+        private static void PaintLocalWeather(WorldTerrainGrid grid, float x, float z, WeatherKind kind)
+        {
+            if (grid == null || !grid.TryWorldToCell(x, z, out int cx, out int cz))
+                return;
+            int reach = kind == WeatherKind.Fog ? 2 : 1;
+            for (int dz = -reach; dz <= reach; dz++)
+            {
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    if (!grid.TryGetCellAt(cx + dx, cz + dz, out var cell))
+                        continue;
+                    if (kind == WeatherKind.Rain || kind == WeatherKind.Storm)
+                    {
+                        int next = cell.Waterlog01 + (kind == WeatherKind.Storm ? 28 : 18);
+                        cell.Waterlog01 = (byte)Math.Min(255, next);
+                        if (kind == WeatherKind.Storm)
+                            cell.Flags |= TerrainCell.FlagMuddy;
+                    }
+                    else if (kind == WeatherKind.Snow)
+                    {
+                        cell.Ice = IceState.Thick;
+                        int snow = cell.SnowDepth01 + 20;
+                        cell.SnowDepth01 = (byte)Math.Min(255, snow);
+                    }
+
+                    grid.SetCell(cx + dx, cz + dz, cell);
+                }
+            }
+        }
+
+        private float LocalWeatherMoveMod(float x, float z)
+        {
+            if (InWeatherRodZone(x, z))
+                return 1f;
+            float mod = 1f;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var priest = _units[i];
+                if (!priest.IsAlive || !FactionDefaultContent.IsPriestUnitId(priest.DefinitionId))
+                    continue;
+                float dx = x - priest.X;
+                float dz = z - priest.Z;
+                if (dx * dx + dz * dz > 32f * 32f)
+                    continue;
+                if (_upgrades.Has(priest.Owner, FactionDefaultContent.DesertStormUpgradeId))
+                    mod *= 0.84f;
+                if (_upgrades.Has(priest.Owner, FactionDefaultContent.RainfallUpgradeId))
+                    mod *= 0.9f;
+                if (_upgrades.Has(priest.Owner, FactionDefaultContent.IceFormationUpgradeId))
+                    mod *= 0.78f;
+            }
+
+            return mod;
+        }
+
+        private bool InHostilePriestFog(PlayerId viewer, float x, float z)
+        {
+            if (InFriendlyWeatherRod(viewer, x, z))
+                return false;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var priest = _units[i];
+                if (!priest.IsAlive || priest.Owner == viewer)
+                    continue;
+                if (!FactionDefaultContent.IsPriestUnitId(priest.DefinitionId))
+                    continue;
+                if (!_upgrades.Has(priest.Owner, FactionDefaultContent.FogOfWarUpgradeId))
+                    continue;
+                float dx = x - priest.X;
+                float dz = z - priest.Z;
+                if (dx * dx + dz * dz <= 34f * 34f)
+                    return true;
+            }
+
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var keep = _buildings[i];
+                if (keep.State != BuildingState.Active || keep.Owner == viewer)
+                    continue;
+                if (!FactionDefaultContent.IsKeepBuildingId(keep.DefinitionId))
+                    continue;
+                if (!_upgrades.Has(keep.Owner, FactionDefaultContent.RollingFogUpgradeId))
+                    continue;
+                float dx = x - keep.X;
+                float dz = z - keep.Z;
+                if (dx * dx + dz * dz <= 48f * 48f)
+                    return true;
+            }
+
+            return false;
         }
 
         private void TickCommanderAbilities(float dt)
@@ -668,7 +2963,6 @@ namespace Asterra.Gameplay
 
             foreach (var pair in _commanderAbilities)
             {
-                byte key = pair.Key;
                 var state = pair.Value;
                 bool changed = false;
                 if (state.CooldownRemaining > 0f)
@@ -677,50 +2971,106 @@ namespace Asterra.Gameplay
                     changed = true;
                 }
 
-                if (state.BuffRemaining > 0f)
+                if (state.BuffRemaining > 0f && state.BuffRemaining < 1e6f)
                 {
                     state.BuffRemaining -= dt;
                     if (state.BuffRemaining <= 0f)
                     {
                         state.BuffRemaining = 0f;
-                        ClearCommanderArmorBuff(new PlayerId(key), state.ArmorBonus);
+                        byte player = 0;
+                        int colon = pair.Key.IndexOf(':');
+                        if (colon > 0 && byte.TryParse(pair.Key.Substring(0, colon), out var p))
+                            player = p;
+                        ClearPowerBuff(new PlayerId(player), state);
                         state.ArmorBonus = 0f;
+                        state.MoveBonus = 0f;
+                        state.DamageBonus = 0f;
+                        state.BuildingMitigation = 0f;
                     }
 
                     changed = true;
                 }
 
                 if (changed)
-                    _mutationCounter ^= (ulong)(key + 1) * 13ul;
+                    _mutationCounter ^= (ulong)pair.Key.GetHashCode();
             }
         }
 
-        private void ApplyCommanderArmorBuff(PlayerId owner, float bonus)
+        private void ApplyPowerBuff(PlayerId owner, CommanderAbilityRuntime state)
         {
-            if (bonus <= 0f)
-                return;
             for (int i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
                 if (unit.Owner != owner || !unit.IsAlive)
                     continue;
-                if (unit.CommanderArmorBonus > 0f)
-                    continue;
-                unit.Armor += bonus;
-                unit.CommanderArmorBonus = bonus;
+                ApplyPowerBuffToUnit(unit, state);
             }
         }
 
-        private void ClearCommanderArmorBuff(PlayerId owner, float bonus)
+        private static void ApplyPowerBuffToUnit(SimUnit unit, CommanderAbilityRuntime state)
+        {
+            if (state.ArmorBonus > 0f && unit.CommanderArmorBonus <= 0f)
+            {
+                unit.Armor += state.ArmorBonus;
+                unit.CommanderArmorBonus = state.ArmorBonus;
+            }
+
+            if (state.MoveBonus > 0f && unit.CommanderMoveBonus <= 0f)
+            {
+                unit.MoveSpeed += state.MoveBonus;
+                unit.CommanderMoveBonus = state.MoveBonus;
+            }
+
+            if (state.DamageBonus > 0f && unit.CommanderDamageBonus <= 0f)
+            {
+                unit.AttackDamage += state.DamageBonus;
+                unit.CommanderDamageBonus = state.DamageBonus;
+            }
+
+            if (state.PercentBonus > 0.001f && unit.DaySunPercent <= 0f)
+            {
+                float mul = 1f + state.PercentBonus;
+                unit.AttackDamage *= mul;
+                unit.MoveSpeed *= mul;
+                unit.DaySunPercent = state.PercentBonus;
+            }
+        }
+
+        private void ClearPowerBuff(PlayerId owner, CommanderAbilityRuntime state)
         {
             for (int i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
-                if (unit.Owner != owner || unit.CommanderArmorBonus <= 0f)
+                if (unit.Owner != owner)
                     continue;
-                float remove = bonus > 0f ? bonus : unit.CommanderArmorBonus;
-                unit.Armor = Math.Max(0f, unit.Armor - remove);
-                unit.CommanderArmorBonus = 0f;
+                if (unit.CommanderArmorBonus > 0f)
+                {
+                    float remove = state.ArmorBonus > 0f ? state.ArmorBonus : unit.CommanderArmorBonus;
+                    unit.Armor = Math.Max(0f, unit.Armor - remove);
+                    unit.CommanderArmorBonus = 0f;
+                }
+
+                if (unit.CommanderMoveBonus > 0f)
+                {
+                    float remove = state.MoveBonus > 0f ? state.MoveBonus : unit.CommanderMoveBonus;
+                    unit.MoveSpeed = Math.Max(0.5f, unit.MoveSpeed - remove);
+                    unit.CommanderMoveBonus = 0f;
+                }
+
+                if (unit.CommanderDamageBonus > 0f)
+                {
+                    float remove = state.DamageBonus > 0f ? state.DamageBonus : unit.CommanderDamageBonus;
+                    unit.AttackDamage = Math.Max(0f, unit.AttackDamage - remove);
+                    unit.CommanderDamageBonus = 0f;
+                }
+
+                if (unit.DaySunPercent > 0.001f)
+                {
+                    float mul = 1f + unit.DaySunPercent;
+                    unit.AttackDamage /= mul;
+                    unit.MoveSpeed /= mul;
+                    unit.DaySunPercent = 0f;
+                }
             }
         }
 
@@ -752,14 +3102,31 @@ namespace Asterra.Gameplay
 
         private bool IsIronWallActive(PlayerId owner)
         {
-            return _commanderAbilities.TryGetValue(owner.Value, out var state) && state.BuffRemaining > 0f;
+            foreach (var pair in _commanderAbilities)
+            {
+                if (!pair.Key.StartsWith(owner.Value + ":", StringComparison.Ordinal))
+                    continue;
+                if (pair.Value.BuffRemaining > 0f && pair.Value.BuildingMitigation > 0f)
+                    return true;
+            }
+
+            return false;
         }
 
         private float MitigateBuildingDamage(PlayerId owner, float damage)
         {
-            if (!IsIronWallActive(owner))
+            float mitigation = 0f;
+            foreach (var pair in _commanderAbilities)
+            {
+                if (!pair.Key.StartsWith(owner.Value + ":", StringComparison.Ordinal))
+                    continue;
+                if (pair.Value.BuffRemaining > 0f && pair.Value.BuildingMitigation > mitigation)
+                    mitigation = pair.Value.BuildingMitigation;
+            }
+
+            if (mitigation <= 0f)
                 return damage;
-            return CombatMath.ApplyArmor(damage, FactionDefaultContent.LucienIronWallBuildingMitigation);
+            return CombatMath.ApplyArmor(damage, mitigation);
         }
 
         private void ApplyStance(SetStanceCommand stance)
@@ -778,6 +3145,12 @@ namespace Asterra.Gameplay
             _mutationCounter ^= (ulong)stance.Stance;
         }
 
+        /// <summary>Max distance from building center for a builder to advance construction.</summary>
+        public const float ConstructionWorkRadius = 16f;
+
+        /// <summary>Search range used when auto-pulling idle/gathering builders to a site.</summary>
+        public const float BuilderAttractSearchRadius = 220f;
+
         private void TickConstruction(float dt)
         {
             for (int i = 0; i < _buildings.Count; i++)
@@ -785,13 +3158,57 @@ namespace Asterra.Gameplay
                 var b = _buildings[i];
                 if (b.State != BuildingState.Constructing)
                     continue;
+
+                // Construction only advances while a builder is on site.
+                if (!HasNearbyBuilder(b.Owner, b.X, b.Z, ConstructionWorkRadius))
+                {
+                    AttractBuildersToSite(b.Owner, b.X, b.Z, BuilderAttractSearchRadius);
+                    continue;
+                }
+
                 b.BuildSecondsRemaining -= dt;
                 if (b.BuildSecondsRemaining <= 0f)
                 {
                     b.State = BuildingState.Active;
+                    SetBuildingBlocked(b, true);
                     _combatEvents.Add(new CombatEvent(CombatEventKind.BuildComplete, b.Id, b.X, b.Z, true));
+                    OnConstructionComplete(b);
                     AutoGatherNearbyBuilders(b.Owner, b.X, b.Z);
                 }
+            }
+        }
+
+        /// <summary>Send builders toward a constructing site so they can work.</summary>
+        private void AttractBuildersToSite(PlayerId owner, float x, float z, float searchRadius)
+        {
+            float r2 = searchRadius * searchRadius;
+            float workR2 = ConstructionWorkRadius * ConstructionWorkRadius;
+            int sent = 0;
+            for (int i = 0; i < _units.Count && sent < 2; i++)
+            {
+                var unit = _units[i];
+                if (!unit.IsAlive || unit.Owner != owner || unit.IsGarrisoned)
+                    continue;
+                if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.IsBuilder)
+                    continue;
+                if (unit.AttackTargetId.HasValue)
+                    continue;
+                float dx = unit.X - x;
+                float dz = unit.Z - z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 > r2)
+                    continue;
+                if (d2 <= workR2)
+                    continue; // already on site and working
+
+                // Pull off gather / idle so foundations do not stall forever.
+                unit.GatherTargetId = null;
+                unit.ReturningToDeposit = false;
+                unit.AttackTargetId = null;
+                unit.AttackMoving = false;
+                unit.Patrolling = false;
+                AssignUnitPath(unit, x, z);
+                sent++;
             }
         }
 
@@ -811,18 +3228,46 @@ namespace Asterra.Gameplay
                 b.ProductionSecondsRemaining = 0f;
                 b.ProductionSecondsTotal = 0f;
 
-                float sx = b.RallyX ?? (b.X + 3f);
+                float sx = b.RallyX ?? (b.X + b.FootprintRadius + 8f);
                 float sz = b.RallyZ ?? b.Z;
-                SpawnUnit(_ids.Next(), b.Owner, b.Faction, unitDefId, b.X + 3f, b.Z);
+                if (!TryFindSpawnNearBuilding(b, 2.2f, out float spawnX, out float spawnZ))
+                {
+                    spawnX = b.X + b.FootprintRadius + 6f;
+                    spawnZ = b.Z;
+                }
+
+                SpawnUnit(_ids.Next(), b.Owner, b.Faction, unitDefId, spawnX, spawnZ);
                 // New unit immediately marches to rally.
                 if (_units.Count > 0)
                 {
                     var spawned = _units[_units.Count - 1];
+                    ApplyResearchedEquipmentToNewUnit(spawned);
                     spawned.MoveTargetX = sx;
                     spawned.MoveTargetZ = sz;
+                    _combatEvents.Add(new CombatEvent(CombatEventKind.TrainComplete, b.Id, spawnX, spawnZ, false));
                 }
 
                 TryStartNextQueued(b);
+            }
+        }
+
+        private void TickResearch(float dt)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (!b.IsResearching)
+                    continue;
+                b.ResearchSecondsRemaining -= dt;
+                if (b.ResearchSecondsRemaining > 0f)
+                    continue;
+
+                string upId = b.ResearchUpgradeDefId;
+                b.ResearchUpgradeDefId = null;
+                b.ResearchSecondsRemaining = 0f;
+                b.ResearchSecondsTotal = 0f;
+                if (_defs.TryGetUpgrade(upId, out var def))
+                    CompleteResearch(b, def);
             }
         }
 
@@ -834,6 +3279,7 @@ namespace Asterra.Gameplay
             ShiftQueue(building);
             if (!_defs.TryGetUnit(next, out var unitDef))
                 return;
+
             float trainMult = _upgrades.TrainTimeMultiplier(building.Owner);
             building.ProductionUnitDefId = next;
             building.ProductionSecondsTotal = unitDef.TrainSeconds * trainMult;
@@ -859,15 +3305,23 @@ namespace Asterra.Gameplay
                 var unit = _units[i];
                 if (!unit.IsAlive || !unit.CanGather || !unit.GatherTargetId.HasValue)
                     continue;
+                if (unit.StunRemaining > 0f)
+                    continue;
 
                 if (unit.ReturningToDeposit || unit.CarryAmount >= unit.CarryCapacity)
                 {
                     unit.ReturningToDeposit = true;
-                    if (!TryFindDeposit(unit.Owner, out float dx, out float dz))
+                    if (!TryFindDeposit(unit.Owner, unit.X, unit.Z, out float dx, out float dz))
                         continue;
                     if (Distance(unit.X, unit.Z, dx, dz) > 10f)
                     {
-                        StepTowardAvoiding(unit, dx, dz, dt);
+                        if (!unit.MoveTargetX.HasValue
+                            || Distance(unit.MoveTargetX.Value, unit.MoveTargetZ ?? unit.Z, dx, dz) > 4f)
+                            AssignUnitPath(unit, dx, dz);
+                        else if (unit.PathCount > 0)
+                            StepAlongPathOrSteer(unit, dx, dz, dt);
+                        else
+                            StepTowardAvoiding(unit, dx, dz, dt);
                         continue;
                     }
 
@@ -882,6 +3336,9 @@ namespace Asterra.Gameplay
                     }
 
                     unit.ReturningToDeposit = false;
+                    unit.ClearPath();
+                    unit.MoveTargetX = null;
+                    unit.MoveTargetZ = null;
                     if (!_resourcesById.TryGetValue(unit.GatherTargetId.Value.Value, out var node) || node.IsDepleted)
                     {
                         unit.GatherTargetId = null;
@@ -899,11 +3356,24 @@ namespace Asterra.Gameplay
 
                 if (Distance(unit.X, unit.Z, resource.X, resource.Z) > 8f)
                 {
-                    StepTowardAvoiding(unit, resource.X, resource.Z, dt);
+                    if (!unit.MoveTargetX.HasValue
+                        || Distance(unit.MoveTargetX.Value, unit.MoveTargetZ ?? unit.Z, resource.X, resource.Z) > 4f)
+                        AssignUnitPath(unit, resource.X, resource.Z);
+                    else if (unit.PathCount > 0)
+                        StepAlongPathOrSteer(unit, resource.X, resource.Z, dt);
+                    else
+                        StepTowardAvoiding(unit, resource.X, resource.Z, dt);
                     continue;
                 }
 
-                int want = Math.Max(1, (int)(unit.GatherRate * dt + 0.999f));
+                unit.ClearPath();
+                unit.MoveTargetX = null;
+                unit.MoveTargetZ = null;
+                unit.GatherProgress += unit.GatherRate * dt;
+                int want = (int)unit.GatherProgress;
+                if (want <= 0)
+                    continue;
+                unit.GatherProgress -= want;
                 int space = unit.CarryCapacity - unit.CarryAmount;
                 if (space <= 0)
                 {
@@ -925,15 +3395,106 @@ namespace Asterra.Gameplay
             }
         }
 
-        private bool TryFindDeposit(PlayerId owner, out float x, out float z)
+        private void StepAlongPathOrSteer(SimUnit unit, float fallbackX, float fallbackZ, float dt)
         {
+            if (unit.PathCount > 0 && unit.PathIndex < unit.PathCount)
+            {
+                float wx = unit.PathPointsX[unit.PathIndex];
+                float wz = unit.PathPointsZ[unit.PathIndex];
+                if (Distance(unit.X, unit.Z, wx, wz) <= 0.6f)
+                {
+                    unit.PathIndex++;
+                    if (unit.PathIndex >= unit.PathCount)
+                    {
+                        unit.ClearPath();
+                        StepTowardAvoiding(unit, fallbackX, fallbackZ, dt);
+                        return;
+                    }
+
+                    wx = unit.PathPointsX[unit.PathIndex];
+                    wz = unit.PathPointsZ[unit.PathIndex];
+                }
+
+                // Skip waypoints that land inside blocked footprints (stale path after builds).
+                if (!CanUnitOccupy(unit, wx, wz)
+                    || OverlapsBuildingFootprint(wx, wz, unit.CollisionRadius * 0.4f,
+                        unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u))
+                {
+                    unit.PathIndex++;
+                    if (unit.PathIndex >= unit.PathCount)
+                    {
+                        unit.ClearPath();
+                        StepTowardAvoiding(unit, fallbackX, fallbackZ, dt);
+                    }
+
+                    return;
+                }
+
+                float ox = unit.X;
+                float oz = unit.Z;
+                StepTowardAvoiding(unit, wx, wz, dt);
+                float moved2 = (unit.X - ox) * (unit.X - ox) + (unit.Z - oz) * (unit.Z - oz);
+                // Frozen against an obstacle — abandon this waypoint so the unit can recover.
+                if (moved2 < 0.00035f && Distance(unit.X, unit.Z, wx, wz) > 1.1f)
+                {
+                    unit.PathIndex++;
+                    if (unit.PathIndex >= unit.PathCount)
+                        unit.ClearPath();
+                }
+
+                return;
+            }
+
+            StepTowardAvoiding(unit, fallbackX, fallbackZ, dt);
+        }
+
+        private bool TryFindDeposit(PlayerId owner, float fromX, float fromZ, out float x, out float z)
+        {
+            float bestKeep = float.MaxValue;
+            float bestAny = float.MaxValue;
+            float keepX = 0f, keepZ = 0f, anyX = 0f, anyZ = 0f;
+            bool foundKeep = false, foundAny = false;
+
             for (int i = 0; i < _buildings.Count; i++)
             {
                 var b = _buildings[i];
                 if (b.Owner != owner || b.State == BuildingState.Destroyed)
                     continue;
-                x = b.X;
-                z = b.Z;
+                // Walls/gates are not drop-offs.
+                if (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate)
+                    continue;
+                float d = Distance(fromX, fromZ, b.X, b.Z);
+                float d2 = d * d;
+                if (b.Kind == BuildingKind.Keep)
+                {
+                    if (d2 < bestKeep)
+                    {
+                        bestKeep = d2;
+                        keepX = b.X;
+                        keepZ = b.Z;
+                        foundKeep = true;
+                    }
+                }
+                else if (b.State == BuildingState.Active && d2 < bestAny)
+                {
+                    bestAny = d2;
+                    anyX = b.X;
+                    anyZ = b.Z;
+                    foundAny = true;
+                }
+            }
+
+            if (foundKeep)
+            {
+                x = keepX;
+                z = keepZ;
+                return true;
+            }
+
+            if (foundAny)
+            {
+                x = anyX;
+                z = anyZ;
                 return true;
             }
 
@@ -949,6 +3510,8 @@ namespace Asterra.Gameplay
                 var unit = _units[i];
                 if (!unit.IsAlive || unit.IsGarrisoned)
                     continue;
+                if (unit.StunRemaining > 0f)
+                    continue;
                 if (unit.GatherTargetId.HasValue)
                     continue;
 
@@ -959,8 +3522,9 @@ namespace Asterra.Gameplay
                 {
                     if (TryGetAttackTargetPosition(unit.AttackTargetId.Value, out float tx, out float tz))
                     {
+                        float engage = GetEngagementRange(unit, unit.AttackTargetId.Value);
                         float dist = Distance(unit.X, unit.Z, tx, tz);
-                        if (dist > unit.AttackRange)
+                        if (dist > engage)
                         {
                             if (unit.Stance != UnitStance.Hold)
                             {
@@ -971,8 +3535,26 @@ namespace Asterra.Gameplay
                                     continue;
                                 }
 
-                                StepTowardAvoiding(unit, tx, tz, dt);
+                                float approach = MathF.Max(2f, engage * 0.85f);
+                                float dx = tx - unit.X;
+                                float dz = tz - unit.Z;
+                                float scale = (dist - approach) / dist;
+                                float ax = unit.X + dx * scale;
+                                float az = unit.Z + dz * scale;
+                                if (!unit.MoveTargetX.HasValue
+                                    || Distance(unit.MoveTargetX.Value, unit.MoveTargetZ ?? unit.Z, ax, az) > 6f)
+                                    AssignUnitPath(unit, ax, az);
+                                else if (unit.PathCount > 0)
+                                    StepAlongPathOrSteer(unit, ax, az, dt);
+                                else
+                                    StepTowardAvoiding(unit, ax, az, dt);
                             }
+                        }
+                        else
+                        {
+                            unit.ClearPath();
+                            unit.MoveTargetX = null;
+                            unit.MoveTargetZ = null;
                         }
                     }
                     else
@@ -1070,25 +3652,30 @@ namespace Asterra.Gameplay
                 StepTowardAvoiding(unit, mx, mz, dt);
             }
 
-            // Soft unit separation.
+            // Soft unit separation using collision radii.
             for (int i = 0; i < _units.Count; i++)
             {
                 var a = _units[i];
-                if (!a.IsAlive || a.ActiveTraversalLinkId >= 0)
+                if (!a.IsAlive || a.ActiveTraversalLinkId >= 0 || a.IsGarrisoned)
                     continue;
                 for (int j = i + 1; j < _units.Count; j++)
                 {
                     var b = _units[j];
-                    if (!b.IsAlive)
+                    if (!b.IsAlive || b.IsGarrisoned)
+                        continue;
+                    // Don't shove attackers off their melee target.
+                    if (a.AttackTargetId.HasValue && a.AttackTargetId.Value.Value == b.Id.Value)
+                        continue;
+                    if (b.AttackTargetId.HasValue && b.AttackTargetId.Value.Value == a.Id.Value)
                         continue;
                     float dx = b.X - a.X;
                     float dz = b.Z - a.Z;
                     float d2 = dx * dx + dz * dz;
-                    const float minDist = 4.2f;
+                    float minDist = a.CollisionRadius + b.CollisionRadius;
                     if (d2 >= minDist * minDist || d2 < 0.0001f)
                         continue;
                     float d = MathF.Sqrt(d2);
-                    float push = (minDist - d) * 0.5f;
+                    float push = (minDist - d) * 0.55f;
                     float nx = dx / d;
                     float nz = dz / d;
                     TrySetUnitPosition(a, a.X - nx * push * 0.5f, a.Z - nz * push * 0.5f);
@@ -1103,6 +3690,8 @@ namespace Asterra.Gameplay
             {
                 var unit = _units[i];
                 if (!unit.IsAlive || unit.IsGarrisoned)
+                    continue;
+                if (unit.StunRemaining > 0f)
                     continue;
                 if (unit.AttackCooldownRemaining > 0f)
                     unit.AttackCooldownRemaining -= dt;
@@ -1126,7 +3715,7 @@ namespace Asterra.Gameplay
                     continue;
                 }
 
-                if (Distance(unit.X, unit.Z, tx, tz) > unit.AttackRange)
+                if (Distance(unit.X, unit.Z, tx, tz) > GetEngagementRange(unit, unit.AttackTargetId.Value))
                     continue;
                 if (unit.AttackCooldownRemaining > 0f)
                     continue;
@@ -1178,7 +3767,7 @@ namespace Asterra.Gameplay
                 for (int u = 0; u < _units.Count; u++)
                 {
                     var unit = _units[u];
-                    if (!unit.IsAlive || unit.Owner == b.Owner)
+                    if (!unit.IsAlive || unit.Owner == b.Owner || unit.IsGarrisoned)
                         continue;
                     float dx = unit.X - b.X;
                     float dz = unit.Z - b.Z;
@@ -1337,6 +3926,22 @@ namespace Asterra.Gameplay
                     continue;
                 _wallet.Add(b.Owner, ResourceType.Gold, b.GoldPerSecond);
             }
+
+            foreach (var pair in _commanderAbilities)
+            {
+                var state = pair.Value;
+                if (state.Effect != PowerEffectKind.EconomyBoost || state.BuffRemaining <= 0f)
+                    continue;
+                int colon = pair.Key.IndexOf(':');
+                if (colon <= 0 || !byte.TryParse(pair.Key.Substring(0, colon), out var player))
+                    continue;
+                int gold = state.DamageBonus > 0f
+                    ? (int)state.DamageBonus
+                    : 12;
+                if (_defs.TryGetPower(state.PowerDefId, out var eco) && eco.EffectMagnitude > 0f)
+                    gold = (int)eco.EffectMagnitude;
+                _wallet.Add(new PlayerId(player), ResourceType.Gold, gold);
+            }
         }
 
         private void CullDead()
@@ -1353,6 +3958,7 @@ namespace Asterra.Gameplay
             {
                 if (_buildings[i].State != BuildingState.Destroyed && _buildings[i].Health > 0f)
                     continue;
+                UnlinkPortal(_buildings[i]);
                 _buildings[i].State = BuildingState.Destroyed;
                 _buildingsById.Remove(_buildings[i].Id.Value);
                 _buildings.RemoveAt(i);
@@ -1376,7 +3982,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < _units.Count; i++)
             {
                 var other = _units[i];
-                if (!other.IsAlive || other.Owner == unit.Owner)
+                if (!other.IsAlive || other.Owner == unit.Owner || other.IsGarrisoned)
                     continue;
                 float dx = other.X - unit.X;
                 float dz = other.Z - unit.Z;
@@ -1442,6 +4048,12 @@ namespace Asterra.Gameplay
 
             if (_unitsById.TryGetValue(targetId.Value, out var targetUnit) && targetUnit.IsAlive)
             {
+                if (targetUnit.IsGarrisoned && targetUnit.GarrisonBuildingId.HasValue)
+                {
+                    DealDamage(targetUnit.GarrisonBuildingId.Value, damage, preferBuilding: true);
+                    return;
+                }
+
                 float applied = CombatMath.ApplyArmor(damage, targetUnit.Armor);
                 targetUnit.Health -= applied;
                 _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetUnit.Id, targetUnit.X, targetUnit.Z, false));
@@ -1533,13 +4145,54 @@ namespace Asterra.Gameplay
 
         private void OnBuildingDestroyed(SimBuilding building)
         {
-            if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Tower)
+            TearDownFactionBridgeLinks(building);
+            SetBuildingBlocked(building, blocked: false);
+
+            // Combat aftermath: debris ring + crater core + brief burning ruin.
+            float r = MathF.Max(4f, building.FootprintRadius);
+            FillTerrainRect(building.X - r * 0.7f, building.Z - r * 0.7f, building.X + r * 0.7f, building.Z + r * 0.7f, DefaultTerrainCatalog.Debris);
+            FillTerrainRect(building.X - r * 0.35f, building.Z - r * 0.35f, building.X + r * 0.35f, building.Z + r * 0.35f, DefaultTerrainCatalog.Crater);
+            MarkCellFlags(building.X, building.Z, r, TerrainCell.FlagBurningRuin, set: true);
+            _environment.RebuildFeatureIndex();
+
+            if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Gate)
+                RefreshWallConnectionsAround(building);
+
+            if (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Tower || building.Kind == BuildingKind.Keep)
             {
                 _environment.PathDirty.MarkRadius(
                     building.X,
                     building.Z,
                     building.FootprintRadius + 6f,
                     PathDirtyReason.WallRemoved);
+            }
+
+            // Clear parent slot if this was an attachment.
+            if (building.ParentBuildingId.HasValue
+                && _buildingsById.TryGetValue(building.ParentBuildingId.Value.Value, out var parent)
+                && building.AttachmentSlotIndex < parent.AttachmentSlotCount
+                && parent.AttachmentOccupantIds[building.AttachmentSlotIndex] == building.Id.Value)
+            {
+                parent.AttachmentOccupantIds[building.AttachmentSlotIndex] = 0;
+            }
+
+            // Destroy keep attachments with the keep.
+            if (building.AttachmentSlotCount > 0)
+            {
+                for (int i = 0; i < building.AttachmentSlotCount; i++)
+                {
+                    uint childId = building.AttachmentOccupantIds[i];
+                    if (childId == 0)
+                        continue;
+                    building.AttachmentOccupantIds[i] = 0;
+                    if (_buildingsById.TryGetValue(childId, out var child)
+                        && child.State != BuildingState.Destroyed)
+                    {
+                        child.State = BuildingState.Destroyed;
+                        child.Health = 0f;
+                        OnBuildingDestroyed(child);
+                    }
+                }
             }
 
             _mutationCounter ^= building.Id.Value * 1409ul;
@@ -1626,6 +4279,36 @@ namespace Asterra.Gameplay
             z = cz + oz;
         }
 
+        private void ClampFormationSlot(SimUnit unit, ref float x, ref float z)
+        {
+            if (CanUnitOccupy(unit, x, z) && IsInsidePlayable(x, z))
+                return;
+
+            float cx = x;
+            float cz = z;
+            for (int ring = 1; ring <= 8; ring++)
+            {
+                float step = 2.5f * ring;
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = i * (MathF.PI * 0.25f);
+                    float px = cx + MathF.Cos(a) * step;
+                    float pz = cz + MathF.Sin(a) * step;
+                    if (!IsInsidePlayable(px, pz))
+                        continue;
+                    if (!CanUnitOccupy(unit, px, pz))
+                        continue;
+                    x = px;
+                    z = pz;
+                    return;
+                }
+            }
+
+            // Fall back to center of click if no slot found.
+            x = cx;
+            z = cz;
+        }
+
         private bool TryGetAttackTargetPosition(SimEntityId id, out float x, out float z)
         {
             if (_unitsById.TryGetValue(id.Value, out var unit) && unit.IsAlive)
@@ -1652,6 +4335,30 @@ namespace Asterra.Gameplay
             x = 0f;
             z = 0f;
             return false;
+        }
+
+        /// <summary>
+        /// Center-to-center range that accounts for collision / footprints so melee
+        /// can actually fire after hard building blocks and unit separation.
+        /// </summary>
+        private float GetEngagementRange(SimUnit attacker, SimEntityId targetId)
+        {
+            float range = attacker.AttackRange + attacker.CollisionRadius * 0.5f;
+            if (_unitsById.TryGetValue(targetId.Value, out var targetUnit) && targetUnit.IsAlive)
+                return range + targetUnit.CollisionRadius * 0.5f + 0.75f;
+
+            if (_buildingsById.TryGetValue(targetId.Value, out var building)
+                && building.State != BuildingState.Destroyed)
+            {
+                // Stand at the AABB edge (half-extent + a short melee reach).
+                float edge = MathF.Max(building.FootprintHalfX, building.FootprintHalfZ);
+                return attacker.AttackRange + edge + 1.25f;
+            }
+
+            if (_destructiblesById.TryGetValue(targetId.Value, out var prop) && prop.IsAlive)
+                return range + prop.FootprintRadius + 1.0f;
+
+            return range;
         }
 
         private bool TryGetDamageable(
@@ -1749,7 +4456,7 @@ namespace Asterra.Gameplay
                     unit.Z,
                     destX,
                     destZ,
-                    unit.TraversalCapabilities,
+                    PathCaps(unit),
                     approachRadius: 0f,
                     out var link,
                     out bool forward))
@@ -1769,11 +4476,23 @@ namespace Asterra.Gameplay
 
         private void AssignUnitPath(SimUnit unit, float tx, float tz)
         {
+            if (_defs.TryGetUnit(unit.DefinitionId, out var def)
+                && def.RequiresHeightLaunch
+                && !unit.Airborne
+                && CanLaunchWindRider(unit))
+            {
+                unit.Airborne = true;
+                float dur = def.FlightDurationSeconds > 1f ? def.FlightDurationSeconds : 12f;
+                if (_upgrades.Has(unit.Owner, FactionDefaultContent.GreatPerchUpgradeId))
+                    dur += 10f;
+                unit.FlightRemaining = dur;
+            }
+
             unit.MoveTargetX = tx;
             unit.MoveTargetZ = tz;
             unit.ClearPath();
             _pathScratch.Clear();
-            if (_environment.Pathfinding.TryGetPath(unit.X, unit.Z, tx, tz, unit.TraversalCapabilities, _pathScratch))
+            if (_environment.Pathfinding.TryGetPath(unit.X, unit.Z, tx, tz, PathCaps(unit), _pathScratch))
                 unit.SetPath(_pathScratch);
         }
 
@@ -1836,7 +4555,26 @@ namespace Asterra.Gameplay
         /// <summary>Shared vision query for FoW / AI. Circles from owned units and buildings.</summary>
         public bool IsVisibleTo(PlayerId player, float x, float z)
         {
+            if (InHostilePriestFog(player, x, z))
+            {
+                const float close = 16f;
+                for (int i = 0; i < _units.Count; i++)
+                {
+                    var u = _units[i];
+                    if (!u.IsAlive || u.Owner != player || u.IsGarrisoned)
+                        continue;
+                    float dx = x - u.X;
+                    float dz = z - u.Z;
+                    if (dx * dx + dz * dz <= close * close)
+                        return true;
+                }
+
+                return false;
+            }
+
             float visScale = _environment.CombinedVisibility();
+            if (InFriendlyWeatherRod(player, x, z))
+                visScale = _environment.TimeOfDaySim.VisibilityModifier;
             for (int i = 0; i < _units.Count; i++)
             {
                 var u = _units[i];
@@ -1874,23 +4612,32 @@ namespace Asterra.Gameplay
             float nx = dx / len;
             float nz = dz / len;
 
-            // Steer away from building footprints.
             float steerX = 0f;
             float steerZ = 0f;
+            float unitR = unit.CollisionRadius;
+
+            // Soft push off impassable cell edges / corners before contact freeze.
+            AddBlockedTerrainRepulsion(unit, ref steerX, ref steerZ);
+
+            uint attackTarget = unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u;
+
             for (int i = 0; i < _buildings.Count; i++)
             {
                 var b = _buildings[i];
                 if (b.State == BuildingState.Destroyed)
                     continue;
+                // Don't steer away from the building we're trying to hit.
+                if (attackTarget != 0u && b.Id.Value == attackTarget)
+                    continue;
                 float bx = unit.X - b.X;
                 float bz = unit.Z - b.Z;
                 float dist = MathF.Sqrt(bx * bx + bz * bz);
-                float avoid = b.FootprintRadius + 4f;
+                float avoid = b.FootprintRadius + unitR + 2.5f;
                 if (dist < avoid && dist > 0.001f)
                 {
                     float strength = (avoid - dist) / avoid;
-                    steerX += (bx / dist) * strength;
-                    steerZ += (bz / dist) * strength;
+                    steerX += (bx / dist) * strength * 2.2f;
+                    steerZ += (bz / dist) * strength * 2.2f;
                 }
             }
 
@@ -1899,20 +4646,43 @@ namespace Asterra.Gameplay
                 var d = _destructibles[i];
                 if (!d.IsAlive || !d.BlocksMovement)
                     continue;
+                if (attackTarget != 0u && d.Id.Value == attackTarget)
+                    continue;
                 float bx = unit.X - d.X;
                 float bz = unit.Z - d.Z;
                 float dist = MathF.Sqrt(bx * bx + bz * bz);
-                float avoid = d.FootprintRadius + 3f;
+                float avoid = d.FootprintRadius + unitR + 1.5f;
                 if (dist < avoid && dist > 0.001f)
                 {
                     float strength = (avoid - dist) / avoid;
-                    steerX += (bx / dist) * strength;
-                    steerZ += (bz / dist) * strength;
+                    steerX += (bx / dist) * strength * 1.8f;
+                    steerZ += (bz / dist) * strength * 1.8f;
                 }
             }
 
-            nx += steerX * 1.25f;
-            nz += steerZ * 1.25f;
+            // Light unit–unit steering so stacks don't charge into each other.
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var other = _units[i];
+                if (other.Id.Value == unit.Id.Value || !other.IsAlive || other.IsGarrisoned)
+                    continue;
+                // Allow closing on the unit we're attacking (soft sep still applies in TickMovement).
+                if (attackTarget != 0u && other.Id.Value == attackTarget)
+                    continue;
+                float bx = unit.X - other.X;
+                float bz = unit.Z - other.Z;
+                float dist = MathF.Sqrt(bx * bx + bz * bz);
+                float avoid = unitR + other.CollisionRadius;
+                if (dist < avoid && dist > 0.001f)
+                {
+                    float strength = (avoid - dist) / avoid;
+                    steerX += (bx / dist) * strength * 1.1f;
+                    steerZ += (bz / dist) * strength * 1.1f;
+                }
+            }
+
+            nx += steerX;
+            nz += steerZ;
             float nlen = MathF.Sqrt(nx * nx + nz * nz);
             if (nlen > 0.0001f)
             {
@@ -1920,29 +4690,142 @@ namespace Asterra.Gameplay
                 nz /= nlen;
             }
 
-            float terrainMod = _environment.MovementModifier(unit.X, unit.Z, unit.TraversalCapabilities);
-            if (terrainMod <= 0.0001f)
-                return;
-
-            float step = unit.MoveSpeed * terrainMod * dt;
-            if (step >= len && steerX * steerX + steerZ * steerZ < 0.01f)
+            float terrainMod;
+            if (InWeatherRodZone(unit.X, unit.Z))
             {
-                TrySetUnitPosition(unit, tx, tz);
+                float night = _environment.TimeOfDaySim.IsNight ? 0.94f : 1f;
+                terrainMod = _environment.Grid.GetMovementModifier(unit.X, unit.Z, PathCaps(unit)) * night;
+            }
+            else
+            {
+                terrainMod = _environment.MovementModifier(unit.X, unit.Z, PathCaps(unit))
+                             * LocalWeatherMoveMod(unit.X, unit.Z);
+            }
+            if (terrainMod <= 0.0001f)
+            {
+                TryUnstickFromBlocked(unit);
                 return;
             }
 
-            TrySetUnitPosition(unit, unit.X + nx * step, unit.Z + nz * step);
+            float step = unit.MoveSpeed * terrainMod * dt;
+            if (step >= len && steerX * steerX + steerZ * steerZ < 0.04f)
+            {
+                if (TrySetUnitPosition(unit, tx, tz))
+                    return;
+                // Destination blocked (corner / footprint) — keep sliding toward it.
+            }
+
+            if (!TrySetUnitPosition(unit, unit.X + nx * step, unit.Z + nz * step))
+            {
+                // Axis slides first (walls), then angled slides to escape corners.
+                if (!TrySetUnitPosition(unit, unit.X + nx * step, unit.Z)
+                    && !TrySetUnitPosition(unit, unit.X, unit.Z + nz * step)
+                    && !TryCornerSlide(unit, nx, nz, step))
+                {
+                    TryUnstickFromBlocked(unit);
+                }
+            }
         }
 
         /// <summary>
-        /// Applies a position if the cell is traversable for the unit; otherwise leaves the unit in place.
-        /// Records snow footprints when depth is present (ring buffer — no GameObjects).
+        /// When both axis slides fail at an obstacle corner, try diagonal/side steps
+        /// so units don't freeze against impassable cell corners.
+        /// </summary>
+        private bool TryCornerSlide(SimUnit unit, float nx, float nz, float step)
+        {
+            // Rotate preferred direction by ±35°, ±70°, ±110°.
+            float[] angles =
+            {
+                0.61f, -0.61f, 1.22f, -1.22f, 1.92f, -1.92f,
+            };
+            for (int i = 0; i < angles.Length; i++)
+            {
+                float a = angles[i];
+                float ca = MathF.Cos(a);
+                float sa = MathF.Sin(a);
+                float sx = nx * ca - nz * sa;
+                float sz = nx * sa + nz * ca;
+                float len = MathF.Sqrt(sx * sx + sz * sz);
+                if (len < 0.0001f)
+                    continue;
+                sx /= len;
+                sz /= len;
+                if (TrySetUnitPosition(unit, unit.X + sx * step, unit.Z + sz * step))
+                    return true;
+            }
+
+            // Shorter axis nudges help when a full step still clips the blocked cell.
+            float half = step * 0.45f;
+            if (TrySetUnitPosition(unit, unit.X + nx * half, unit.Z)
+                || TrySetUnitPosition(unit, unit.X, unit.Z + nz * half))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>If somehow overlapping impassable terrain, push toward nearest open sample.</summary>
+        private void TryUnstickFromBlocked(SimUnit unit)
+        {
+            if (CanUnitOccupy(unit, unit.X, unit.Z)
+                && !OverlapsBuildingFootprint(unit.X, unit.Z, unit.CollisionRadius * 0.45f,
+                    unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u))
+                return;
+
+            float bestX = unit.X;
+            float bestZ = unit.Z;
+            float bestScore = float.MaxValue;
+            uint ignoreBuilding = unit.AttackTargetId.HasValue ? unit.AttackTargetId.Value.Value : 0u;
+            float[] rings = { 2.2f, 3.5f, 5.5f, 8f, 12f };
+            for (int r = 0; r < rings.Length; r++)
+            {
+                float ring = rings[r];
+                int samples = 12 + r * 4;
+                for (int i = 0; i < samples; i++)
+                {
+                    float a = i * (MathF.PI * 2f / samples);
+                    float px = unit.X + MathF.Cos(a) * ring;
+                    float pz = unit.Z + MathF.Sin(a) * ring;
+                    if (!CanUnitOccupy(unit, px, pz))
+                        continue;
+                    if (OverlapsBuildingFootprint(px, pz, unit.CollisionRadius * 0.45f, ignoreBuilding))
+                        continue;
+                    float dx = px - unit.X;
+                    float dz = pz - unit.Z;
+                    float score = dx * dx + dz * dz;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestX = px;
+                        bestZ = pz;
+                    }
+                }
+
+                if (bestScore < float.MaxValue)
+                    break;
+            }
+
+            if (bestScore < float.MaxValue)
+            {
+                unit.X = bestX;
+                unit.Z = bestZ;
+                unit.ClearPath();
+            }
+        }
+
+        /// <summary>
+        /// Applies a position if terrain and footprints allow it; otherwise leaves the unit in place.
         /// </summary>
         private bool TrySetUnitPosition(SimUnit unit, float x, float z)
         {
             if (!IsInsidePlayable(x, z))
                 return false;
-            if (!_environment.CanUnitEnter(x, z, unit.TraversalCapabilities))
+            if (!CanUnitOccupy(unit, x, z))
+                return false;
+
+            uint ignoreBuilding = 0;
+            if (unit.AttackTargetId.HasValue)
+                ignoreBuilding = unit.AttackTargetId.Value.Value;
+            if (OverlapsBuildingFootprint(x, z, unit.CollisionRadius * 0.5f, ignoreBuilding))
                 return false;
 
             float oldX = unit.X;
@@ -1960,13 +4843,170 @@ namespace Asterra.Gameplay
             return true;
         }
 
-        private bool HasNearbyBuilder(PlayerId owner, float x, float z, float builderPlaceRadius)
+        /// <summary>
+        /// Center + radius samples so bodies can't clip into blocked cell corners.
+        /// </summary>
+        private bool CanUnitOccupy(SimUnit unit, float x, float z)
         {
-            float r2 = builderPlaceRadius * builderPlaceRadius;
+            var caps = PathCaps(unit);
+            if (!_environment.CanUnitEnter(x, z, caps))
+                return false;
+
+            float r = unit.CollisionRadius * 0.4f;
+            if (r < 0.45f)
+                return true;
+
+            // Four diagonal probes catch cell-corner traps the center sample misses.
+            if (!_environment.CanUnitEnter(x + r, z + r, caps))
+                return false;
+            if (!_environment.CanUnitEnter(x + r, z - r, caps))
+                return false;
+            if (!_environment.CanUnitEnter(x - r, z + r, caps))
+                return false;
+            if (!_environment.CanUnitEnter(x - r, z - r, caps))
+                return false;
+            return true;
+        }
+
+        private void AddBlockedTerrainRepulsion(SimUnit unit, ref float steerX, ref float steerZ)
+        {
+            var caps = PathCaps(unit);
+            float probe = MathF.Max(2.2f, unit.CollisionRadius * 1.4f);
+            float pushX = 0f;
+            float pushZ = 0f;
+            int hits = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * (MathF.PI * 0.25f);
+                float px = unit.X + MathF.Cos(a) * probe;
+                float pz = unit.Z + MathF.Sin(a) * probe;
+                if (_environment.CanUnitEnter(px, pz, caps))
+                    continue;
+                // Repel opposite the blocked sample.
+                pushX -= MathF.Cos(a);
+                pushZ -= MathF.Sin(a);
+                hits++;
+            }
+
+            if (hits == 0)
+                return;
+            pushX /= hits;
+            pushZ /= hits;
+            float plen = MathF.Sqrt(pushX * pushX + pushZ * pushZ);
+            if (plen < 0.0001f)
+                return;
+            // Strong enough to bias slides off corners without fighting the move order.
+            float strength = 0.85f + hits * 0.12f;
+            steerX += (pushX / plen) * strength;
+            steerZ += (pushZ / plen) * strength;
+        }
+
+        private void SetBuildingBlocked(SimBuilding building, bool blocked)
+        {
+            float pad = 0.5f;
+            _environment.Grid.SetBlockedRect(
+                building.X - building.FootprintHalfX - pad,
+                building.Z - building.FootprintHalfZ - pad,
+                building.X + building.FootprintHalfX + pad,
+                building.Z + building.FootprintHalfZ + pad,
+                blocked);
+            _environment.PathDirty.MarkRadius(
+                building.X,
+                building.Z,
+                building.FootprintRadius + 8f,
+                blocked ? PathDirtyReason.WallAdded : PathDirtyReason.WallRemoved);
+        }
+
+        private bool OverlapsBuildingFootprint(float x, float z, float radius, uint ignoreBuildingId = 0)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed)
+                    continue;
+                if (ignoreBuildingId != 0 && b.Id.Value == ignoreBuildingId)
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                // Use AABB half-extents for walls/elongated footprints instead of fat circles.
+                float hx = b.FootprintHalfX + radius;
+                float hz = b.FootprintHalfZ + radius;
+                if (MathF.Abs(dx) < hx && MathF.Abs(dz) < hz)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool OverlapsAnyBuilding(float x, float z, float footprintRadius, SimEntityId? ignore = null)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed)
+                    continue;
+                if (ignore.HasValue && b.Id.Value == ignore.Value.Value)
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                float min = b.FootprintRadius + footprintRadius;
+                if (dx * dx + dz * dz < min * min)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool OverlapsNonEarthworkBuilding(float x, float z, float footprintRadius)
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed)
+                    continue;
+                if (FactionDefaultContent.IsEarthworkBuildingId(b.DefinitionId))
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                float min = b.FootprintRadius + footprintRadius;
+                if (dx * dx + dz * dz < min * min)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool TryFindSpawnNearBuilding(SimBuilding building, float unitRadius, out float x, out float z)
+        {
+            float dist = building.FootprintRadius + unitRadius + 3f;
+            for (int i = 0; i < 12; i++)
+            {
+                float ang = i * (MathF.PI / 6f);
+                float sx = building.X + MathF.Cos(ang) * dist;
+                float sz = building.Z + MathF.Sin(ang) * dist;
+                if (!IsInsidePlayable(sx, sz))
+                    continue;
+                if (!_environment.CanUnitEnter(sx, sz, TraversalCapability.Land))
+                    continue;
+                if (OverlapsBuildingFootprint(sx, sz, unitRadius))
+                    continue;
+                x = sx;
+                z = sz;
+                return true;
+            }
+
+            x = building.X + dist;
+            z = building.Z;
+            return false;
+        }
+
+        private bool HasNearbyBuilder(PlayerId owner, float x, float z, float radius)
+        {
+            float r2 = radius * radius;
             for (int i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
-                if (!unit.IsAlive || unit.Owner != owner)
+                if (!unit.IsAlive || unit.Owner != owner || unit.IsGarrisoned)
                     continue;
                 if (!_defs.TryGetUnit(unit.DefinitionId, out var def) || !def.IsBuilder)
                     continue;
@@ -2046,6 +5086,572 @@ namespace Asterra.Gameplay
 
                 _projectileSnapshots.Add(new ProjectileSnapshot(p.X, p.Z, tx, tz));
             }
+        }
+
+        // --- Offline save / load -------------------------------------------------
+
+        public void CaptureInto(Asterra.Gameplay.Save.MatchSaveData data)
+        {
+            if (data == null)
+                return;
+
+            data.timeOfDay01 = _environment.TimeOfDaySim.Time01;
+            data.weatherKind = (int)_environment.WeatherSim.Current.Kind;
+            data.weatherIntensity = _environment.WeatherSim.Current.Intensity;
+
+            var upgrades = new System.Collections.Generic.List<string>(16);
+            _upgrades.CaptureUnlocked(upgrades);
+            data.unlockedUpgrades = upgrades.ToArray();
+            var powers = new System.Collections.Generic.List<string>(8);
+            _powers.CaptureUnlocked(powers);
+            data.unlockedPowers = powers.ToArray();
+
+            var abilities = new System.Collections.Generic.List<Asterra.Gameplay.Save.AbilitySave>(_commanderAbilities.Count);
+            foreach (var pair in _commanderAbilities)
+            {
+                int sep = pair.Key.IndexOf(':');
+                byte player = sep > 0 ? byte.Parse(pair.Key.Substring(0, sep)) : (byte)0;
+                string powerId = sep >= 0 && sep + 1 < pair.Key.Length ? pair.Key.Substring(sep + 1) : pair.Value.PowerDefId;
+                var a = pair.Value;
+                abilities.Add(new Asterra.Gameplay.Save.AbilitySave
+                {
+                    player = player,
+                    powerId = powerId,
+                    cooldownRemaining = a.CooldownRemaining,
+                    buffRemaining = a.BuffRemaining,
+                    armorBonus = a.ArmorBonus,
+                    moveBonus = a.MoveBonus,
+                    damageBonus = a.DamageBonus,
+                    percentBonus = a.PercentBonus,
+                    buildingMitigation = a.BuildingMitigation,
+                    effect = (int)a.Effect,
+                });
+            }
+
+            data.abilities = abilities.ToArray();
+
+            var units = new System.Collections.Generic.List<Asterra.Gameplay.Save.UnitSave>(_units.Count);
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (!u.IsAlive)
+                    continue;
+                units.Add(new Asterra.Gameplay.Save.UnitSave
+                {
+                    id = u.Id.Value,
+                    owner = u.Owner.Value,
+                    faction = u.Faction.Value,
+                    definitionId = u.DefinitionId,
+                    x = u.X,
+                    z = u.Z,
+                    health = u.Health,
+                    maxHealth = u.MaxHealth,
+                    stance = (int)u.Stance,
+                    attackCooldownRemaining = u.AttackCooldownRemaining,
+                    armor = u.Armor,
+                    attackDamage = u.AttackDamage,
+                    equipment0 = u.AppliedEquipmentCount > 0 ? u.AppliedEquipmentIds[0] : null,
+                    equipment1 = u.AppliedEquipmentCount > 1 ? u.AppliedEquipmentIds[1] : null,
+                    equipment2 = u.AppliedEquipmentCount > 2 ? u.AppliedEquipmentIds[2] : null,
+                    equipment3 = u.AppliedEquipmentCount > 3 ? u.AppliedEquipmentIds[3] : null,
+                    equipmentCount = u.AppliedEquipmentCount,
+                    commanderArmorBonus = u.CommanderArmorBonus,
+                    commanderMoveBonus = u.CommanderMoveBonus,
+                    commanderDamageBonus = u.CommanderDamageBonus,
+                    carryAmount = u.CarryAmount,
+                    carryType = u.CarryType.HasValue ? (int)u.CarryType.Value : 0,
+                    hasCarry = u.CarryAmount > 0 && u.CarryType.HasValue,
+                    returningToDeposit = u.ReturningToDeposit,
+                    attackMoving = u.AttackMoving,
+                    patrolling = u.Patrolling,
+                    patrolAX = u.PatrolAX,
+                    patrolAZ = u.PatrolAZ,
+                    patrolBX = u.PatrolBX,
+                    patrolBZ = u.PatrolBZ,
+                    patrolToB = u.PatrolToB,
+                    hasMoveTarget = u.MoveTargetX.HasValue,
+                    moveTargetX = u.MoveTargetX ?? 0f,
+                    moveTargetZ = u.MoveTargetZ ?? 0f,
+                    hasAttackTarget = u.AttackTargetId.HasValue,
+                    attackTargetId = u.AttackTargetId.HasValue ? u.AttackTargetId.Value.Value : 0u,
+                    hasGatherTarget = u.GatherTargetId.HasValue,
+                    gatherTargetId = u.GatherTargetId.HasValue ? u.GatherTargetId.Value.Value : 0u,
+                    isGarrisoned = u.IsGarrisoned,
+                    garrisonBuildingId = u.GarrisonBuildingId.HasValue ? u.GarrisonBuildingId.Value.Value : 0u,
+                });
+            }
+
+            data.units = units.ToArray();
+
+            var buildings = new System.Collections.Generic.List<Asterra.Gameplay.Save.BuildingSave>(_buildings.Count);
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.State == BuildingState.Destroyed)
+                    continue;
+                buildings.Add(new Asterra.Gameplay.Save.BuildingSave
+                {
+                    id = b.Id.Value,
+                    owner = b.Owner.Value,
+                    faction = b.Faction.Value,
+                    definitionId = b.DefinitionId,
+                    x = b.X,
+                    z = b.Z,
+                    state = (int)b.State,
+                    health = b.Health,
+                    maxHealth = b.MaxHealth,
+                    yawDegrees = b.YawDegrees,
+                    buildSecondsRemaining = b.BuildSecondsRemaining,
+                    buildSecondsTotal = b.BuildSecondsTotal,
+                    productionUnitDefId = b.ProductionUnitDefId,
+                    productionSecondsRemaining = b.ProductionSecondsRemaining,
+                    productionSecondsTotal = b.ProductionSecondsTotal,
+                    researchUpgradeDefId = b.ResearchUpgradeDefId,
+                    researchSecondsRemaining = b.ResearchSecondsRemaining,
+                    researchSecondsTotal = b.ResearchSecondsTotal,
+                    queue0 = b.QueueCount > 0 ? b.Queue[0] : null,
+                    queue1 = b.QueueCount > 1 ? b.Queue[1] : null,
+                    queue2 = b.QueueCount > 2 ? b.Queue[2] : null,
+                    queue3 = b.QueueCount > 3 ? b.Queue[3] : null,
+                    queueCount = b.QueueCount,
+                    hasRally = b.RallyX.HasValue,
+                    rallyX = b.RallyX ?? b.X,
+                    rallyZ = b.RallyZ ?? b.Z,
+                    attackCooldownRemaining = b.AttackCooldownRemaining,
+                    wallLinks = b.WallLinks,
+                    linkedDestructibleId = b.LinkedDestructibleId,
+                    linkedTraversalLinkId = b.LinkedTraversalLinkId,
+                    hasParent = b.ParentBuildingId.HasValue,
+                    parentBuildingId = b.ParentBuildingId.HasValue ? b.ParentBuildingId.Value.Value : 0u,
+                    attachmentSlotIndex = b.AttachmentSlotIndex,
+                    attach0 = b.AttachmentOccupantIds[0],
+                    attach1 = b.AttachmentOccupantIds[1],
+                    attach2 = b.AttachmentOccupantIds[2],
+                    attach3 = b.AttachmentOccupantIds[3],
+                    garrison0 = b.GarrisonCount > 0 ? b.GarrisonUnitIds[0] : 0u,
+                    garrison1 = b.GarrisonCount > 1 ? b.GarrisonUnitIds[1] : 0u,
+                    garrison2 = b.GarrisonCount > 2 ? b.GarrisonUnitIds[2] : 0u,
+                    garrison3 = b.GarrisonCount > 3 ? b.GarrisonUnitIds[3] : 0u,
+                    garrison4 = b.GarrisonCount > 4 ? b.GarrisonUnitIds[4] : 0u,
+                    garrison5 = b.GarrisonCount > 5 ? b.GarrisonUnitIds[5] : 0u,
+                    garrison6 = b.GarrisonCount > 6 ? b.GarrisonUnitIds[6] : 0u,
+                    garrison7 = b.GarrisonCount > 7 ? b.GarrisonUnitIds[7] : 0u,
+                    garrisonCount = b.GarrisonCount,
+                });
+            }
+
+            data.buildings = buildings.ToArray();
+
+            var territories = new Asterra.Gameplay.Save.TerritorySave[_territories.Count];
+            for (int i = 0; i < _territories.Count; i++)
+            {
+                var t = _territories[i];
+                territories[i] = new Asterra.Gameplay.Save.TerritorySave
+                {
+                    id = t.Id.Value,
+                    x = t.X,
+                    z = t.Z,
+                    radius = t.Radius,
+                    goldPerSecond = t.GoldPerSecondWhenControlled,
+                    state = (int)t.State,
+                    hasController = t.Controller.HasValue,
+                    controller = t.Controller.HasValue ? t.Controller.Value.Value : (byte)0,
+                    captureProgress = t.CaptureProgress,
+                };
+            }
+
+            data.territories = territories;
+
+            var resources = new Asterra.Gameplay.Save.ResourceSave[_resources.Count];
+            for (int i = 0; i < _resources.Count; i++)
+            {
+                var r = _resources[i];
+                resources[i] = new Asterra.Gameplay.Save.ResourceSave
+                {
+                    id = r.Id.Value,
+                    type = (int)r.Type,
+                    amount = r.Remaining,
+                    x = r.X,
+                    z = r.Z,
+                };
+            }
+
+            data.resources = resources;
+
+            var destructibles = new System.Collections.Generic.List<Asterra.Gameplay.Save.DestructibleSave>(_destructibles.Count);
+            for (int i = 0; i < _destructibles.Count; i++)
+            {
+                var d = _destructibles[i];
+                destructibles.Add(new Asterra.Gameplay.Save.DestructibleSave
+                {
+                    id = d.Id.Value,
+                    definitionId = d.DefinitionId,
+                    x = d.X,
+                    z = d.Z,
+                    health = d.Health,
+                    state = (int)d.State,
+                    linkedTraversalLinkId = d.LinkedTraversalLinkId,
+                });
+            }
+
+            data.destructibles = destructibles.ToArray();
+
+            if (_terrainMutations.Count > 0)
+            {
+                var cells = new Asterra.Gameplay.Save.TerrainCellSave[_terrainMutations.Count];
+                int n = 0;
+                foreach (var pair in _terrainMutations)
+                {
+                    int cx = (int)(pair.Key >> 32);
+                    int cz = (int)(pair.Key & 0xffffffff);
+                    cells[n++] = new Asterra.Gameplay.Save.TerrainCellSave
+                    {
+                        cellX = cx,
+                        cellZ = cz,
+                        defIndex = pair.Value,
+                    };
+                }
+
+                data.terrainCells = cells;
+            }
+            else
+            {
+                data.terrainCells = System.Array.Empty<Asterra.Gameplay.Save.TerrainCellSave>();
+            }
+        }
+
+        public void RestoreFrom(Asterra.Gameplay.Save.MatchSaveData data)
+        {
+            if (data == null)
+                return;
+
+            ClearEntitiesForRestore();
+
+            if (data.terrainCells != null)
+            {
+                for (int i = 0; i < data.terrainCells.Length; i++)
+                {
+                    var cell = data.terrainCells[i];
+                    _environment.Grid.SetCellDef(cell.cellX, cell.cellZ, cell.defIndex);
+                    long key = ((long)cell.cellX << 32) ^ (uint)cell.cellZ;
+                    _terrainMutations[key] = cell.defIndex;
+                }
+
+                if (data.terrainCells.Length > 0)
+                    _environment.RebuildFeatureIndex();
+            }
+
+            if (data.unlockedUpgrades != null)
+            {
+                for (int i = 0; i < data.unlockedUpgrades.Length; i++)
+                {
+                    if (!TryParsePlayerKey(data.unlockedUpgrades[i], out byte p, out string id))
+                        continue;
+                    _upgrades.MarkUnlocked(new PlayerId(p), id);
+                }
+            }
+
+            if (data.unlockedPowers != null)
+            {
+                for (int i = 0; i < data.unlockedPowers.Length; i++)
+                {
+                    if (!TryParsePlayerKey(data.unlockedPowers[i], out byte p, out string id))
+                        continue;
+                    _powers.MarkUnlocked(new PlayerId(p), id);
+                }
+            }
+
+            _commanderAbilities.Clear();
+            if (data.abilities != null)
+            {
+                for (int i = 0; i < data.abilities.Length; i++)
+                {
+                    var a = data.abilities[i];
+                    if (string.IsNullOrEmpty(a.powerId))
+                        continue;
+                    _commanderAbilities[AbilityKey(a.player, a.powerId)] = new CommanderAbilityRuntime
+                    {
+                        PowerDefId = a.powerId,
+                        CooldownRemaining = a.cooldownRemaining,
+                        BuffRemaining = a.buffRemaining,
+                        ArmorBonus = a.armorBonus,
+                        MoveBonus = a.moveBonus,
+                        DamageBonus = a.damageBonus,
+                        PercentBonus = a.percentBonus,
+                        BuildingMitigation = a.buildingMitigation,
+                        Effect = (PowerEffectKind)a.effect,
+                    };
+                }
+            }
+
+            if (data.territories != null)
+            {
+                for (int i = 0; i < data.territories.Length; i++)
+                {
+                    var t = data.territories[i];
+                    AddTerritory(new SimEntityId(t.id), t.x, t.z, t.radius, t.goldPerSecond);
+                    if (_territoriesById.TryGetValue(t.id, out var node))
+                    {
+                        node.State = (TerritoryState)t.state;
+                        node.CaptureProgress = t.captureProgress;
+                        node.Controller = t.hasController ? new PlayerId(t.controller) : (PlayerId?)null;
+                    }
+                }
+            }
+
+            if (data.resources != null)
+            {
+                for (int i = 0; i < data.resources.Length; i++)
+                {
+                    var r = data.resources[i];
+                    AddResourceNode(new SimEntityId(r.id), (ResourceType)r.type, r.amount, r.x, r.z);
+                }
+            }
+
+            if (data.buildings != null)
+            {
+                for (int i = 0; i < data.buildings.Length; i++)
+                {
+                    var b = data.buildings[i];
+                    bool startActive = b.state == (int)BuildingState.Active;
+                    var building = SpawnBuilding(
+                        new SimEntityId(b.id),
+                        new PlayerId(b.owner),
+                        new FactionId(b.faction),
+                        b.definitionId,
+                        b.x,
+                        b.z,
+                        startActive);
+                    if (building == null)
+                        continue;
+                    building.State = (BuildingState)b.state;
+                    building.Health = b.health;
+                    building.MaxHealth = b.maxHealth > 0.1f ? b.maxHealth : building.MaxHealth;
+                    building.YawDegrees = b.yawDegrees;
+                    building.LinkedDestructibleId = b.linkedDestructibleId;
+                    building.LinkedTraversalLinkId = b.linkedTraversalLinkId;
+                    building.BuildSecondsRemaining = b.buildSecondsRemaining;
+                    building.BuildSecondsTotal = b.buildSecondsTotal > 0.1f ? b.buildSecondsTotal : building.BuildSecondsTotal;
+                    building.ProductionUnitDefId = b.productionUnitDefId;
+                    building.ProductionSecondsRemaining = b.productionSecondsRemaining;
+                    building.ProductionSecondsTotal = b.productionSecondsTotal;
+                    building.ResearchUpgradeDefId = b.researchUpgradeDefId;
+                    building.ResearchSecondsRemaining = b.researchSecondsRemaining;
+                    building.ResearchSecondsTotal = b.researchSecondsTotal;
+                    building.QueueCount = 0;
+                    void Enqueue(string q)
+                    {
+                        if (string.IsNullOrEmpty(q) || building.QueueCount >= SimBuilding.MaxQueue)
+                            return;
+                        building.Queue[building.QueueCount++] = q;
+                    }
+
+                    Enqueue(b.queue0);
+                    Enqueue(b.queue1);
+                    Enqueue(b.queue2);
+                    Enqueue(b.queue3);
+                    if (b.queueCount > 0 && building.QueueCount == 0)
+                    {
+                        // queueCount may be set without strings if empty slots — ignore
+                    }
+
+                    if (b.hasRally)
+                    {
+                        building.RallyX = b.rallyX;
+                        building.RallyZ = b.rallyZ;
+                    }
+
+                    building.AttackCooldownRemaining = b.attackCooldownRemaining;
+                    building.WallLinks = b.wallLinks;
+                    if (b.hasParent)
+                    {
+                        building.ParentBuildingId = new SimEntityId(b.parentBuildingId);
+                        building.AttachmentSlotIndex = b.attachmentSlotIndex;
+                    }
+
+                    building.AttachmentOccupantIds[0] = b.attach0;
+                    building.AttachmentOccupantIds[1] = b.attach1;
+                    building.AttachmentOccupantIds[2] = b.attach2;
+                    building.AttachmentOccupantIds[3] = b.attach3;
+                    building.GarrisonCount = 0;
+                    void AddGar(uint id)
+                    {
+                        if (id == 0 || building.GarrisonCount >= SimBuilding.MaxGarrison)
+                            return;
+                        building.GarrisonUnitIds[building.GarrisonCount++] = id;
+                    }
+
+                    AddGar(b.garrison0);
+                    AddGar(b.garrison1);
+                    AddGar(b.garrison2);
+                    AddGar(b.garrison3);
+                    AddGar(b.garrison4);
+                    AddGar(b.garrison5);
+                    AddGar(b.garrison6);
+                    AddGar(b.garrison7);
+                }
+            }
+
+            if (data.units != null)
+            {
+                for (int i = 0; i < data.units.Length; i++)
+                {
+                    var u = data.units[i];
+                    var unit = SpawnUnit(
+                        new SimEntityId(u.id),
+                        new PlayerId(u.owner),
+                        new FactionId(u.faction),
+                        u.definitionId,
+                        u.x,
+                        u.z);
+                    unit.Health = u.health;
+                    unit.Stance = (UnitStance)u.stance;
+                    unit.AttackCooldownRemaining = u.attackCooldownRemaining;
+                    unit.Armor = u.armor;
+                    unit.AttackDamage = u.attackDamage;
+                    unit.CommanderArmorBonus = u.commanderArmorBonus;
+                    unit.CommanderMoveBonus = u.commanderMoveBonus;
+                    unit.CommanderDamageBonus = u.commanderDamageBonus;
+                    unit.AppliedEquipmentCount = 0;
+                    void AddEq(string eq)
+                    {
+                        if (string.IsNullOrEmpty(eq) || unit.AppliedEquipmentCount >= SimUnit.MaxAppliedEquipment)
+                            return;
+                        unit.AppliedEquipmentIds[unit.AppliedEquipmentCount++] = eq;
+                        if (string.IsNullOrEmpty(unit.AppliedUpgradeId))
+                            unit.AppliedUpgradeId = eq;
+                    }
+
+                    AddEq(u.equipment0);
+                    AddEq(u.equipment1);
+                    AddEq(u.equipment2);
+                    AddEq(u.equipment3);
+                    if (u.hasCarry)
+                    {
+                        unit.CarryAmount = u.carryAmount;
+                        unit.CarryType = (ResourceType)u.carryType;
+                    }
+
+                    unit.ReturningToDeposit = u.returningToDeposit;
+                    unit.AttackMoving = u.attackMoving;
+                    unit.Patrolling = u.patrolling;
+                    unit.PatrolAX = u.patrolAX;
+                    unit.PatrolAZ = u.patrolAZ;
+                    unit.PatrolBX = u.patrolBX;
+                    unit.PatrolBZ = u.patrolBZ;
+                    unit.PatrolToB = u.patrolToB;
+                    if (u.hasMoveTarget)
+                    {
+                        unit.MoveTargetX = u.moveTargetX;
+                        unit.MoveTargetZ = u.moveTargetZ;
+                    }
+
+                    if (u.hasAttackTarget)
+                        unit.AttackTargetId = new SimEntityId(u.attackTargetId);
+                    if (u.hasGatherTarget)
+                        unit.GatherTargetId = new SimEntityId(u.gatherTargetId);
+                    if (u.isGarrisoned)
+                        unit.GarrisonBuildingId = new SimEntityId(u.garrisonBuildingId);
+                }
+            }
+
+            if (data.destructibles != null)
+            {
+                for (int i = 0; i < data.destructibles.Length; i++)
+                {
+                    var d = data.destructibles[i];
+                    var def = ResolveDestructibleDef(d.definitionId);
+                    if (def == null)
+                        continue;
+                    var prop = SpawnDestructible(
+                        new SimEntityId(d.id),
+                        def,
+                        d.x,
+                        d.z,
+                        d.linkedTraversalLinkId);
+                    prop.Health = d.health;
+                    prop.State = (DestructibleState)d.state;
+                    if (prop.State == DestructibleState.Destroyed)
+                        FinalizeDestructible(prop);
+                }
+            }
+
+            _environment.TimeOfDaySim.SetTime01(data.timeOfDay01);
+            if (data.weatherKind >= 0)
+                _environment.WeatherSim.ForceTransitionTo((WeatherKind)data.weatherKind);
+
+            RebuildFactionBridgesAfterRestore();
+            RebuildSnapshots();
+        }
+
+        private void RebuildFactionBridgesAfterRestore()
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.DefinitionId != FactionDefaultContent.BridgeId || b.State != BuildingState.Active)
+                    continue;
+
+                // Drop stale prop (link ids from prior graph are invalid after map reload).
+                if (b.LinkedDestructibleId != 0
+                    && _destructiblesById.TryGetValue(b.LinkedDestructibleId, out var prop))
+                {
+                    _destructibles.Remove(prop);
+                    _destructiblesById.Remove(prop.Id.Value);
+                }
+
+                b.LinkedDestructibleId = 0;
+                b.LinkedTraversalLinkId = -1;
+                ActivateFactionBridge(b);
+            }
+        }
+
+        private void ClearEntitiesForRestore()
+        {
+            for (int i = 0; i < _buildings.Count; i++)
+                SetBuildingBlocked(_buildings[i], blocked: false);
+
+            _units.Clear();
+            _unitsById.Clear();
+            _buildings.Clear();
+            _buildingsById.Clear();
+            _territories.Clear();
+            _territoriesById.Clear();
+            _resources.Clear();
+            _resourcesById.Clear();
+            _destructibles.Clear();
+            _destructiblesById.Clear();
+            _projectiles.Clear();
+            _combatEvents.Clear();
+            _commanderAbilities.Clear();
+            _terrainMutations.Clear();
+            RebuildSnapshots();
+        }
+
+        private static bool TryParsePlayerKey(string key, out byte player, out string id)
+        {
+            player = 0;
+            id = null;
+            if (string.IsNullOrEmpty(key))
+                return false;
+            int sep = key.IndexOf('|');
+            if (sep <= 0 || sep + 1 >= key.Length)
+                return false;
+            if (!byte.TryParse(key.Substring(0, sep), out player))
+                return false;
+            id = key.Substring(sep + 1);
+            return !string.IsNullOrEmpty(id);
+        }
+
+        private DestructibleDefData ResolveDestructibleDef(string definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId))
+                return DefaultDestructibleCatalog.Rock();
+            if (definitionId.Contains("tree"))
+                return DefaultDestructibleCatalog.Tree();
+            if (definitionId.Contains("bridge"))
+                return DefaultDestructibleCatalog.Bridge();
+            return DefaultDestructibleCatalog.Rock();
         }
     }
 }

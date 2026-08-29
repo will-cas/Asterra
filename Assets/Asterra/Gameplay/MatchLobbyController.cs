@@ -53,7 +53,7 @@ namespace Asterra.Gameplay
         public void SetLocalFaction(int factionIndex)
         {
             var player = new PlayerId(localPlayerIndex);
-            byte faction = (byte)Mathf.Clamp(factionIndex, 0, 2);
+            byte faction = (byte)Mathf.Clamp(factionIndex, 0, FactionDefaultContent.All.Length - 1);
             if (lobbyBridge != null)
                 lobbyBridge.BroadcastSetFaction(player, faction);
             else

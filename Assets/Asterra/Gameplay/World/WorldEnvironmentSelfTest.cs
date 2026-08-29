@@ -27,7 +27,7 @@ namespace Asterra.Gameplay
             wallet.Seed(player, ResourceType.Timber, 300);
 
             // Baseline: short grass, MoveSpeed from militia def.
-            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.MilitiaId, 0f, 0f);
+            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
             float baseSpeed = unit.MoveSpeed;
             unit.MoveTargetX = 100f;
             unit.MoveTargetZ = 0f;

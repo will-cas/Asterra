@@ -67,6 +67,7 @@ namespace Asterra.Core.World
         private bool _transitioning;
         private float _displayIntensity;
         private float _temperature = 0.15f; // -1 cold .. +1 hot, relative
+        private WeatherDefData _queuedNext;
 
         private float _windDirX = 1f;
         private float _windDirZ;
@@ -122,6 +123,7 @@ namespace Asterra.Core.World
             _transitionDuration = _currentDef.TransitionSeconds;
             RebuildState(remaining: _holdRemaining);
             PickNewWindTarget();
+            _queuedNext = PickNextDef(_currentDef.Kind);
         }
 
         public void ClearEvents() => _events.Clear();
@@ -152,6 +154,30 @@ namespace Asterra.Core.World
         public float EffectiveMovement()
         {
             return Current.MovementModifier;
+        }
+
+        /// <summary>
+        /// Upcoming weather for Forecast. Uses the queued next hold (stable), or the in-flight target.
+        /// </summary>
+        public bool TryGetForecast(out WeatherKind next, out float secondsUntil)
+        {
+            if (_transitioning && _targetDef != null)
+            {
+                next = _targetDef.Kind;
+                secondsUntil = Math.Max(0f, _transitionDuration - _transitionElapsed);
+                return true;
+            }
+
+            if (_queuedNext == null)
+            {
+                next = WeatherKind.Clear;
+                secondsUntil = 0f;
+                return false;
+            }
+
+            next = _queuedNext.Kind;
+            secondsUntil = Math.Max(0f, _holdRemaining);
+            return true;
         }
 
         /// <summary>Force a transition (tests / abilities). Deterministic once called.</summary>
@@ -189,6 +215,17 @@ namespace Asterra.Core.World
             _transitionDuration = def.TransitionSeconds;
             PickNewWindTarget();
             RebuildState(_holdRemaining);
+            _queuedNext = PickNextDef(_currentDef.Kind);
+        }
+
+        /// <summary>Instant clear skies / sun, held for <paramref name="seconds"/> (Day of the Sun).</summary>
+        public void HoldSunny(float seconds)
+        {
+            var def = FindDef(WeatherKind.Sunny) ?? FindDef(WeatherKind.Clear) ?? _currentDef;
+            SnapToDef(def);
+            float hold = Math.Max(1f, seconds);
+            _holdRemaining = hold;
+            RebuildState(_holdRemaining);
         }
 
         private void TickWeatherMachine(float dt)
@@ -213,6 +250,7 @@ namespace Asterra.Core.World
                     _holdRemaining = Lerp(_currentDef.MinDurationSeconds, _currentDef.MaxDurationSeconds, _rng.NextFloat());
                     TransitionTarget = null;
                     _events.Add(new WeatherEvent(WeatherEventKind.TransitionCompleted, _currentDef.Kind, _displayIntensity));
+                    _queuedNext = PickNextDef(_currentDef.Kind);
                 }
 
                 return;
@@ -226,8 +264,7 @@ namespace Asterra.Core.World
 
             if (_holdRemaining <= 0f)
             {
-                var next = PickNextDef(_currentDef.Kind);
-                BeginTransition(next);
+                BeginTransition(_queuedNext ?? PickNextDef(_currentDef.Kind));
             }
         }
 
@@ -311,23 +348,27 @@ namespace Asterra.Core.World
 
         private void TickEnvironment(float dt)
         {
-            PrecipitationRate = 0f;
-            SnowfallRate = 0f;
-            FogDensity = 0f;
-
-            var active = _transitioning ? BlendDefsVisual() : _currentDef;
-            float intensity = _displayIntensity;
-            if (active.Kind == WeatherKind.Rain || active.Kind == WeatherKind.Storm)
-                PrecipitationRate = active.PrecipitationRate * intensity;
-            if (active.Kind == WeatherKind.Snow)
-                SnowfallRate = active.SnowfallRate * intensity;
-            if (active.Kind == WeatherKind.Fog)
-                FogDensity = intensity;
-            else if (active.Kind == WeatherKind.Storm || active.Kind == WeatherKind.Rain)
-                FogDensity = intensity * 0.15f;
+            if (_transitioning)
+            {
+                float t = _transitionDuration <= 0.001f ? 1f : Math.Min(1f, _transitionElapsed / _transitionDuration);
+                float blend = t * t * (3f - 2f * t);
+                float fromInt = _currentDef.DefaultIntensity;
+                float toInt = _targetDef.DefaultIntensity;
+                PrecipitationRate = Lerp(PrecipOf(_currentDef) * fromInt, PrecipOf(_targetDef) * toInt, blend);
+                SnowfallRate = Lerp(SnowOf(_currentDef) * fromInt, SnowOf(_targetDef) * toInt, blend);
+                FogDensity = Lerp(FogOf(_currentDef) * fromInt, FogOf(_targetDef) * toInt, blend);
+            }
+            else
+            {
+                PrecipitationRate = PrecipOf(_currentDef) * _displayIntensity;
+                SnowfallRate = SnowOf(_currentDef) * _displayIntensity;
+                FogDensity = FogOf(_currentDef) * _displayIntensity;
+            }
 
             if (_grid == null)
                 return;
+
+            var active = _transitioning ? BlendDefsVisual() : _currentDef;
 
             _envAcc += dt;
             if (_envAcc < EnvInterval)
@@ -438,6 +479,29 @@ namespace Asterra.Core.World
                 if (changed)
                     _grid.SetCell(cx, cz, cell);
             }
+        }
+
+        private static float PrecipOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Rain || def.Kind == WeatherKind.Storm)
+                return def.PrecipitationRate;
+            return 0f;
+        }
+
+        private static float SnowOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Snow)
+                return def.SnowfallRate;
+            return 0f;
+        }
+
+        private static float FogOf(WeatherDefData def)
+        {
+            if (def.Kind == WeatherKind.Fog)
+                return 1f;
+            if (def.Kind == WeatherKind.Storm || def.Kind == WeatherKind.Rain)
+                return 0.15f;
+            return 0f;
         }
 
         private WeatherDefData BlendDefsVisual()

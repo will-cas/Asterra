@@ -9,6 +9,7 @@ namespace Asterra.Gameplay
         public string DisplayName = "Commander";
         public FactionDefinition Faction;
         public string PassiveDescription;
+        public string PassivePowerId;
         public string ActiveAbilityId;
         public float ActiveCooldownSeconds = 60f;
         public GameObject PresentationPrefab;

@@ -4,13 +4,18 @@ namespace Asterra.Gameplay.Presentation
 {
     /// <summary>
     /// Playable ground plus black void past the border so map edges are obvious.
+    /// Void must NOT cover the playable basin — water sits below y=0 and would read as a black hole.
     /// </summary>
     public static class MapBorderVisual
     {
         public static void Ensure(Transform parent)
         {
-            if (GameObject.Find("AsterraMapRoot") != null)
+            var existing = GameObject.Find("AsterraMapRoot");
+            if (existing != null)
+            {
+                RepairVoid(existing.transform);
                 return;
+            }
 
             var root = new GameObject("AsterraMapRoot");
             root.transform.SetParent(parent, false);
@@ -20,6 +25,21 @@ namespace Asterra.Gameplay.Presentation
             CreateBorderFrame(root.transform);
         }
 
+        /// <summary>
+        /// Older builds placed one black plane under the whole map; replace with outer-only void.
+        /// </summary>
+        private static void RepairVoid(Transform root)
+        {
+            var legacy = root.Find("AsterraVoid");
+            if (legacy != null)
+                Object.Destroy(legacy.gameObject);
+
+            if (root.Find("AsterraVoidNorth") != null)
+                return;
+
+            CreateVoid(root);
+        }
+
         private static void CreateGround(Transform parent)
         {
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -27,19 +47,39 @@ namespace Asterra.Gameplay.Presentation
             ground.transform.SetParent(parent, false);
             ground.transform.localScale = new Vector3(MapBounds.PlayableSize / 10f, 1f, MapBounds.PlayableSize / 10f);
             ground.transform.position = Vector3.zero;
+            var groundCol = ground.GetComponent<Collider>();
+            if (groundCol != null)
+                Object.DestroyImmediate(groundCol);
             ApplyColor(ground.GetComponent<Renderer>(), new Color(0.28f, 0.36f, 0.22f));
         }
 
         private static void CreateVoid(Transform parent)
         {
-            var voidPlane = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            Object.Destroy(voidPlane.GetComponent<Collider>());
-            voidPlane.name = "AsterraVoid";
-            voidPlane.transform.SetParent(parent, false);
-            float voidSize = MapBounds.VoidHalfExtent * 2f;
-            voidPlane.transform.localScale = new Vector3(voidSize / 10f, 1f, voidSize / 10f);
-            voidPlane.transform.position = new Vector3(0f, -0.5f, 0f);
-            ApplyColor(voidPlane.GetComponent<Renderer>(), new Color(0.01f, 0.01f, 0.015f));
+            float play = MapBounds.PlayableHalfExtent;
+            float outer = MapBounds.VoidHalfExtent;
+            float y = -1.5f;
+            Color voidColor = new Color(0.01f, 0.01f, 0.015f);
+
+            // Four slabs outside the playable square — never under rivers/terrain.
+            float mid = (play + outer) * 0.5f;
+            float ring = outer - play;
+            float span = outer * 2f;
+
+            CreateVoidSlab(parent, "AsterraVoidNorth", new Vector3(0f, y, mid), new Vector3(span, 1f, ring), voidColor);
+            CreateVoidSlab(parent, "AsterraVoidSouth", new Vector3(0f, y, -mid), new Vector3(span, 1f, ring), voidColor);
+            CreateVoidSlab(parent, "AsterraVoidEast", new Vector3(mid, y, 0f), new Vector3(ring, 1f, play * 2f), voidColor);
+            CreateVoidSlab(parent, "AsterraVoidWest", new Vector3(-mid, y, 0f), new Vector3(ring, 1f, play * 2f), voidColor);
+        }
+
+        private static void CreateVoidSlab(Transform parent, string name, Vector3 pos, Vector3 worldSize, Color color)
+        {
+            var slab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Object.Destroy(slab.GetComponent<Collider>());
+            slab.name = name;
+            slab.transform.SetParent(parent, false);
+            slab.transform.position = pos;
+            slab.transform.localScale = worldSize;
+            ApplyColor(slab.GetComponent<Renderer>(), color);
         }
 
         private static void CreateBorderFrame(Transform parent)
@@ -50,13 +90,11 @@ namespace Asterra.Gameplay.Presentation
             Color border = new Color(0.08f, 0.09f, 0.11f);
             Color rim = new Color(0.55f, 0.52f, 0.42f);
 
-            // Outer black walls just past the playable edge.
             CreateWall(parent, "BorderNorth", new Vector3(0f, h * 0.5f, half + t * 0.5f), new Vector3(half * 2f + t * 2f, h, t), border);
             CreateWall(parent, "BorderSouth", new Vector3(0f, h * 0.5f, -half - t * 0.5f), new Vector3(half * 2f + t * 2f, h, t), border);
             CreateWall(parent, "BorderEast", new Vector3(half + t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, half * 2f), border);
             CreateWall(parent, "BorderWest", new Vector3(-half - t * 0.5f, h * 0.5f, 0f), new Vector3(t, h, half * 2f), border);
 
-            // Thin lit rim on the playable side so the edge reads clearly.
             float rimT = 2.2f;
             float rimY = 0.15f;
             CreateWall(parent, "RimNorth", new Vector3(0f, rimY, half - rimT * 0.5f), new Vector3(half * 2f, 0.3f, rimT), rim);

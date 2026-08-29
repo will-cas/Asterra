@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using Asterra.Core;
+using Asterra.Core.World;
+using Asterra.Gameplay.Audio;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Presentation;
+using Asterra.Gameplay.Sim;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Player
@@ -25,9 +28,8 @@ namespace Asterra.Gameplay.Player
         [SerializeField] private MatchBootstrap match;
         [SerializeField] private Camera rigCamera;
         [SerializeField] private LayerMask clickMask = ~0;
-        [SerializeField] private float screenPickPixels = 48f;
+        [SerializeField] private float screenPickPixels = 72f;
         [SerializeField] private float dragThresholdPixels = 8f;
-        [SerializeField] private float builderPlaceRadius = 55f;
 
         private SelectionState _selection;
         private ICommandBus _commands;
@@ -44,6 +46,16 @@ namespace Asterra.Gameplay.Player
         private SimEntityId? _selectedBuilding;
         private bool _placeMode;
         private string _placeBuildingDefId;
+        private float _placeYawDegrees;
+        private bool _powerGateMode;
+        private string _powerGatePowerId;
+        private bool _powerGateHasFirst;
+        private float _powerGateFirstX;
+        private float _powerGateFirstZ;
+        private bool _mindControlArmed;
+        private string _mindControlPowerId;
+        private bool _powerPointArmed;
+        private string _powerPointPowerId;
         private bool _attackMoveArmed;
         private bool _patrolArmed;
         private GameObject _ghost;
@@ -57,11 +69,29 @@ namespace Asterra.Gameplay.Player
         public bool IsPlaceMode => _placeMode;
         public bool IsAttackMoveArmed => _attackMoveArmed;
         public bool IsPatrolArmed => _patrolArmed;
+        public bool HasArmedMode => _placeMode || _attackMoveArmed || _patrolArmed || _terrainWorkArmed.HasValue
+                                    || _mindControlArmed || _powerPointArmed;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
         public int IdleWorkerCount => CountIdleWorkers();
         public bool HasBuilderSelected => HasSelectedBuilder();
+        public bool HasTerrainWorkArmed => _terrainWorkArmed.HasValue;
         public bool HasCombatUnitSelected => HasSelectedCombatUnit();
+        public bool HasOwnedGarrisonedCombatUnit()
+        {
+            if (_world == null)
+                return false;
+            for (int u = 0; u < _world.Units.Count; u++)
+            {
+                var unit = _world.Units[u];
+                if (unit.Owner != _local || !unit.IsAlive || !unit.IsGarrisoned)
+                    continue;
+                if (!FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
+                    return true;
+            }
+
+            return false;
+        }
 
         private static List<SimEntityId>[] CreateControlGroups()
         {
@@ -78,10 +108,9 @@ namespace Asterra.Gameplay.Player
             _commands = bootstrap.Commands;
             _world = bootstrap.World;
             _local = bootstrap.Session.LocalPlayer;
-            _roster = bootstrap.PlayerRoster ?? FactionDefaultContent.IronCovenant;
+            _roster = bootstrap.PlayerRoster ?? FactionDefaultContent.VeiledInheritance;
             if (rigCamera == null)
                 rigCamera = Camera.main;
-            AutoSelectOwnedUnits();
             BindPresentationSelection();
 
             if (FindFirstObjectByType<RtsCursorController>() == null)
@@ -109,10 +138,20 @@ namespace Asterra.Gameplay.Player
         {
             if (!HasSelectedBuilder() || string.IsNullOrEmpty(buildingDefId))
                 return;
+            if (buildingDefId == FactionDefaultContent.BridgeId
+                && _roster != null
+                && _roster.DefinitionId == FactionDefaultContent.UniversityId
+                && (_world == null || !_world.HasUpgrade(_local, FactionDefaultContent.AdvancedConstructionUpgradeId)))
+            {
+                MatchFeedback.Show("Research Advanced Construction to build bridges");
+                return;
+            }
             CancelAttackMoveArm();
             CancelPatrolArm();
             _placeBuildingDefId = buildingDefId;
             _placeMode = true;
+            _placeYawDegrees = 0f;
+            _terrainPaintStroke = false;
             EnsureGhost();
             ResizeGhostForCurrentBuilding();
         }
@@ -120,7 +159,16 @@ namespace Asterra.Gameplay.Player
         public void CancelPlaceMode()
         {
             _placeMode = false;
+            _terrainWorkArmed = null;
             _placeBuildingDefId = null;
+            _placeYawDegrees = 0f;
+            _powerGateMode = false;
+            _powerGatePowerId = null;
+            _powerGateHasFirst = false;
+            _mindControlArmed = false;
+            _mindControlPowerId = null;
+            _powerPointArmed = false;
+            _powerPointPowerId = null;
             if (_ghost != null)
                 _ghost.SetActive(false);
         }
@@ -178,7 +226,7 @@ namespace Asterra.Gameplay.Player
 
             if (idle.Count == 0)
             {
-                MatchFeedback.Show("No idle workers");
+                MatchFeedback.Show("No idle workers", AsterraSfx.Invalid);
                 return;
             }
 
@@ -191,27 +239,359 @@ namespace Asterra.Gameplay.Player
 
         public bool CanUseCommanderAbility =>
             _roster != null
-            && _roster.DefinitionId == FactionDefaultContent.IronCovenantId
+            && _roster.PowerIds != null
+            && _roster.PowerIds.Length > 0
             && _commands != null;
+
+        public bool HasAnyPowerUnlocked
+        {
+            get
+            {
+                if (_roster?.PowerIds == null || _world == null)
+                    return false;
+                for (int i = 0; i < _roster.PowerIds.Length; i++)
+                {
+                    if (_world.HasPower(_local, _roster.PowerIds[i]))
+                        return true;
+                }
+
+                return false;
+            }
+        }
 
         public void ActivateCommanderAbility()
         {
-            if (!CanUseCommanderAbility)
+            if (_roster?.PowerIds == null || _roster.PowerIds.Length == 0)
+                return;
+            for (int i = 0; i < _roster.PowerIds.Length; i++)
+            {
+                string id = _roster.PowerIds[i];
+                if (match != null
+                    && match.Definitions != null
+                    && match.Definitions.TryGetPower(id, out var def)
+                    && def.IsPassive)
+                    continue;
+                ActivateCommanderAbility(id);
+                return;
+            }
+        }
+
+        public void ActivateCommanderAbility(string powerDefId)
+        {
+            if (_commands == null || _roster == null || string.IsNullOrEmpty(powerDefId))
                 return;
 
+            if (match != null
+                && match.Definitions != null
+                && match.Definitions.TryGetPower(powerDefId, out var passiveCheck)
+                && passiveCheck.IsPassive)
+            {
+                MatchFeedback.Show($"{passiveCheck.DisplayName} is a passive — unlock only");
+                return;
+            }
+
+            if (_world != null && !_world.HasPower(_local, powerDefId))
+            {
+                string name = powerDefId;
+                if (match != null && match.Definitions != null && match.Definitions.TryGetPower(powerDefId, out var p))
+                    name = p.DisplayName;
+                MatchFeedback.Show($"Unlock {name} at your keep first");
+                return;
+            }
+
             if (_world != null
-                && _world.TryGetCommanderAbilityStatus(_local, out float cd, out _)
+                && _world.TryGetCommanderAbilityStatus(_local, powerDefId, out float cd, out _)
                 && cd > 0.05f)
             {
-                MatchFeedback.Show($"Iron Wall cooling down ({cd:0}s)");
+                MatchFeedback.Show($"Cooling down ({cd:0}s)");
                 return;
+            }
+
+            if (match != null && match.Definitions != null && match.Definitions.TryGetPower(powerDefId, out var armedDef))
+            {
+                if (armedDef.Effect == PowerEffectKind.PlaceGate || armedDef.Effect == PowerEffectKind.ExplosiveStrip)
+                {
+                    CancelAttackMoveArm();
+                    CancelPatrolArm();
+                    _mindControlArmed = false;
+                    _powerPointArmed = false;
+                    _powerGateMode = true;
+                    _powerGatePowerId = powerDefId;
+                    _powerGateHasFirst = false;
+                    _placeBuildingDefId = FactionDefaultContent.PortalGateId;
+                    _placeMode = true;
+                    _placeYawDegrees = 0f;
+                    EnsureGhost();
+                    ResizeGhostForCurrentBuilding();
+                    MatchFeedback.Show(armedDef.Effect == PowerEffectKind.ExplosiveStrip
+                        ? $"{armedDef.DisplayName}: click start, then the far end of the strip"
+                        : "Twin Gates: click source, then destination (no vision required)");
+                    return;
+                }
+
+                if (armedDef.Effect == PowerEffectKind.MindControl)
+                {
+                    CancelPlaceMode();
+                    _mindControlArmed = true;
+                    _mindControlPowerId = powerDefId;
+                    MatchFeedback.Show("Thrallbind: click an enemy troop");
+                    return;
+                }
+
+                if (armedDef.Effect == PowerEffectKind.FloodArea
+                    || armedDef.Effect == PowerEffectKind.SpawnRandomBeasts
+                    || armedDef.Effect == PowerEffectKind.EyesInSky
+                    || armedDef.Effect == PowerEffectKind.RelocateSight
+                    || armedDef.Effect == PowerEffectKind.SunRay
+                    || armedDef.Effect == PowerEffectKind.BlindRadius)
+                {
+                    CancelPlaceMode();
+                    _powerPointArmed = true;
+                    _powerPointPowerId = powerDefId;
+                    string hint = armedDef.Effect == PowerEffectKind.FloodArea
+                        ? "Dam Breaker: click the flood center"
+                        : armedDef.Effect == PowerEffectKind.EyesInSky
+                            ? "Eyes in the Sky: click where the birds appear (move them after)"
+                            : armedDef.Effect == PowerEffectKind.RelocateSight
+                                ? "Far Glass: click the place to watch (old glass goes dark)"
+                                : armedDef.Effect == PowerEffectKind.SunRay
+                                    ? "Sun Ray: click the blast"
+                                    : armedDef.Effect == PowerEffectKind.BlindRadius
+                                        ? "Blind: click the stun center"
+                                        : armedDef.Id == FactionDefaultContent.MercenariesAbilityId
+                                            ? "Mercenaries: click where the hired blades gather"
+                                            : armedDef.Id == FactionDefaultContent.FieldExerciseAbilityId
+                                                ? "Field Exercise: click where the fellows gather"
+                                                : "Nature's Aid: click where the beasts gather";
+                    MatchFeedback.Show(hint);
+                    return;
+                }
             }
 
             _commands.SubmitLocal(new ActivateCommanderAbilityCommand
             {
                 Issuer = _local,
+                PowerDefId = powerDefId,
             });
-            MatchFeedback.Show("Iron Wall — Lucien Vale");
+            if (match != null && match.Definitions != null && match.Definitions.TryGetPower(powerDefId, out var def))
+            {
+                string effect = def.Effect switch
+                {
+                    PowerEffectKind.ArmorAura => $"+{def.EffectMagnitude:0} armor",
+                    PowerEffectKind.MoveSpeedAura => $"+{def.EffectMagnitude:0.#} move",
+                    PowerEffectKind.DamageAura => $"+{def.EffectMagnitude:0} damage",
+                    PowerEffectKind.ForceWeather => "wild weather",
+                    PowerEffectKind.SpawnSwarm => "shadowed gate",
+                    PowerEffectKind.PlaceGate => "twin gates",
+                    PowerEffectKind.EconomyBoost => $"+{(int)def.EffectMagnitude} gold/sec",
+                    PowerEffectKind.SpawnScouts => "scouts",
+                    PowerEffectKind.MindControl => "steal one troop",
+                    PowerEffectKind.SpawnRandomBeasts => def.Id == FactionDefaultContent.MercenariesAbilityId
+                        ? "hired blades"
+                        : "wild creatures",
+                    PowerEffectKind.FloodArea => "flood",
+                    PowerEffectKind.EyesInSky => "sky eyes",
+                    PowerEffectKind.ExplosiveStrip => "powder carts",
+                    PowerEffectKind.Forecast => "upcoming weather",
+                    PowerEffectKind.RelocateSight => "far glass",
+                    PowerEffectKind.SunRay => "light blast",
+                    PowerEffectKind.DayOfTheSun => "sunny day",
+                    PowerEffectKind.BlindRadius => "stun",
+                    _ => "power",
+                };
+                MatchFeedback.Show($"{def.DisplayName} — {effect}");
+            }
+        }
+
+        public void UnlockPower()
+        {
+            if (_roster?.PowerIds == null || _roster.PowerIds.Length == 0)
+                return;
+            UnlockPower(_roster.PowerIds[0]);
+        }
+
+        public void UnlockPower(string powerDefId)
+        {
+            if (_commands == null || string.IsNullOrEmpty(powerDefId))
+                return;
+            if (_world != null && _world.HasPower(_local, powerDefId))
+                return;
+            _commands.SubmitLocal(new UnlockPowerCommand
+            {
+                Issuer = _local,
+                PowerDefId = powerDefId,
+            });
+            if (match != null && match.Definitions != null && match.Definitions.TryGetPower(powerDefId, out var def))
+                MatchFeedback.Show($"Unlocking {def.DisplayName}");
+        }
+
+        public void ResearchUpgrade()
+        {
+            if (_roster == null)
+                return;
+            ResearchUpgrade(_roster.BasicUpgradeId);
+        }
+
+        public void ResearchUpgrade(string upgradeDefId)
+        {
+            if (_commands == null || string.IsNullOrEmpty(upgradeDefId))
+                return;
+            if (!_selectedBuilding.HasValue)
+            {
+                MatchFeedback.Show("Select a keep or barracks to research", AsterraSfx.Invalid);
+                return;
+            }
+
+            if (_world != null && _world.HasUpgrade(_local, upgradeDefId))
+            {
+                MatchFeedback.Show("Already researched", AsterraSfx.Invalid);
+                return;
+            }
+
+            if (!TryGetBuildingSnapshot(_selectedBuilding.Value, out var building))
+            {
+                MatchFeedback.Show("Select a keep or barracks to research", AsterraSfx.Invalid);
+                return;
+            }
+
+            if (match != null && match.Definitions != null
+                && match.Definitions.TryGetUpgrade(upgradeDefId, out var def))
+            {
+                bool keepTech = def.Kind == UpgradeKind.Keep;
+                bool atKeep = building.Kind == BuildingKind.Keep;
+                bool atProducer = building.Kind == BuildingKind.Producer;
+                if (keepTech && !atKeep)
+                {
+                    MatchFeedback.Show("Research this at the keep", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (!keepTech && !atProducer && !atKeep)
+                {
+                    MatchFeedback.Show("Research equipment at barracks or keep", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(building.ResearchUpgradeDefId))
+                {
+                    MatchFeedback.Show("Already researching", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (match.Wallet != null && !match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost))
+                {
+                    MatchFeedback.Show("Not enough gold", AsterraSfx.Invalid);
+                    return;
+                }
+            }
+
+            _commands.SubmitLocal(new ChooseUpgradeCommand
+            {
+                Issuer = _local,
+                UpgradeDefId = upgradeDefId,
+                BuildingId = _selectedBuilding.Value,
+            });
+            MatchFeedback.Show("Research started", AsterraSfx.OrderResearch);
+        }
+
+        public void ApplyUpgradeToSelected()
+        {
+            if (_roster == null)
+                return;
+            ApplyUpgradeToSelected(_roster.BasicUpgradeId);
+        }
+
+        public void ApplyUpgradeToSelected(string upgradeDefId)
+        {
+            if (_commands == null || _world == null)
+                return;
+            if (!_world.HasUpgrade(_local, upgradeDefId))
+            {
+                MatchFeedback.Show("Research equipment at barracks first", AsterraSfx.Invalid);
+                return;
+            }
+
+            if (_selection == null || _selection.Selected.Count == 0)
+            {
+                MatchFeedback.Show("Select combat units to equip", AsterraSfx.Invalid);
+                return;
+            }
+
+            UpgradeDefData def = null;
+            int equipCost = 40;
+            if (match?.Definitions != null && match.Definitions.TryGetUpgrade(upgradeDefId, out def))
+                equipCost = def.ResolvedEquipGoldCost;
+
+            var pending = new System.Collections.Generic.List<SimEntityId>(_selection.Selected.Count);
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var snap = _world.Units[u];
+                    if (snap.Id.Value != id.Value)
+                        continue;
+                    if (snap.Owner != _local || !snap.IsAlive)
+                        break;
+                    if (def != null
+                        && match.Definitions != null
+                        && match.Definitions.TryGetUnit(snap.DefinitionId, out var unitDef)
+                        && !def.FitsUnit(unitDef.Id, unitDef.Role))
+                        break;
+                    if (def == null && FactionDefaultContent.IsBuilderUnitId(snap.DefinitionId))
+                        break;
+                    if (snap.HasAppliedEquipment(upgradeDefId))
+                        break;
+                    pending.Add(id);
+                    break;
+                }
+            }
+
+            if (pending.Count == 0)
+            {
+                MatchFeedback.Show(
+                    "Nothing eligible to equip (wrong unit type or already equipped)",
+                    AsterraSfx.Invalid);
+                return;
+            }
+
+            if (match?.Wallet != null && equipCost > 0)
+            {
+                int gold = match.Wallet.Get(_local, ResourceType.Gold);
+                int affordable = gold / equipCost;
+                if (affordable <= 0)
+                {
+                    MatchFeedback.Show($"Need {equipCost}g per unit to equip", AsterraSfx.Invalid);
+                    return;
+                }
+
+                if (affordable < pending.Count)
+                    pending.RemoveRange(affordable, pending.Count - affordable);
+            }
+
+            _commands.SubmitLocal(new ApplyUnitUpgradeCommand
+            {
+                Issuer = _local,
+                UpgradeDefId = upgradeDefId,
+                UnitIds = pending.ToArray(),
+            });
+            MatchFeedback.Show(
+                $"Equipping {pending.Count} (−{pending.Count * equipCost}g)",
+                AsterraSfx.OrderMove);
+        }
+
+        public void AttachToKeep(byte slotIndex, string buildingDefId)
+        {
+            if (!_selectedBuilding.HasValue || _commands == null || string.IsNullOrEmpty(buildingDefId))
+                return;
+            _commands.SubmitLocal(new AttachBuildingCommand
+            {
+                Issuer = _local,
+                ParentBuildingId = _selectedBuilding.Value,
+                SlotIndex = slotIndex,
+                BuildingDefId = buildingDefId,
+            });
+            MatchFeedback.Show("Attaching to keep", AsterraSfx.OrderBuild);
         }
 
         public void JumpToBuilding(SimEntityId buildingId)
@@ -302,12 +682,89 @@ namespace Asterra.Gameplay.Player
             if (!_selectedBuilding.HasValue || _commands == null || string.IsNullOrEmpty(defId))
                 return;
 
+            if (match?.Definitions != null && match.Wallet != null
+                && match.Definitions.TryGetUnit(defId, out var unitDef))
+            {
+                if (!match.Wallet.CanAfford(_local, ResourceType.Gold, unitDef.GoldCost))
+                {
+                    MatchFeedback.Show("Not enough gold", AsterraSfx.Invalid);
+                    return;
+                }
+            }
+
+            if (!_selectedBuilding.HasValue
+                || !TryGetBuildingSnapshot(_selectedBuilding.Value, out var building)
+                || !building.CanProduce)
+            {
+                MatchFeedback.Show("Cannot train here", AsterraSfx.Invalid);
+                return;
+            }
+
             _commands.SubmitLocal(new TrainUnitCommand
             {
                 Issuer = _local,
                 BuildingId = _selectedBuilding.Value,
                 UnitDefId = defId,
             });
+            AsterraAudio.Play(AsterraSfx.OrderTrain, 0.7f);
+            MatchFeedback.Show("Training...");
+        }
+
+        private bool TryResolveCaptureTarget(out SimEntityId territoryId)
+        {
+            territoryId = default;
+            if (_world == null || _world.Territories.Count == 0)
+                return false;
+
+            float fromX = 0f, fromZ = 0f;
+            int n = 0;
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                var id = _selection.Selected[i];
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var snap = _world.Units[u];
+                    if (snap.Id != id || !snap.IsAlive)
+                        continue;
+                    fromX += snap.X;
+                    fromZ += snap.Z;
+                    n++;
+                    break;
+                }
+            }
+
+            if (n == 0 && TryRaycastGround(out float gx, out float gz))
+            {
+                fromX = gx;
+                fromZ = gz;
+                n = 1;
+            }
+
+            if (n == 0)
+            {
+                territoryId = _world.Territories[0].Id;
+                return true;
+            }
+
+            fromX /= n;
+            fromZ /= n;
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < _world.Territories.Count; i++)
+            {
+                var t = _world.Territories[i];
+                float dx = t.X - fromX;
+                float dz = t.Z - fromZ;
+                float d2 = dx * dx + dz * dz;
+                if (d2 < best)
+                {
+                    best = d2;
+                    territoryId = t.Id;
+                    found = true;
+                }
+            }
+
+            return found;
         }
 
         public void CancelProduction()
@@ -325,6 +782,8 @@ namespace Asterra.Gameplay.Player
         private void Update()
         {
             if (match == null || _commands == null || match.Result.IsOver)
+                return;
+            if (match.IsMenuOverlayOpen)
                 return;
 
             HandlePointer();
@@ -359,11 +818,70 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             {
-                if (_attackMoveArmed)
-                    CancelAttackMoveArm();
-                if (_patrolArmed)
-                    CancelPatrolArm();
-                CancelPlaceMode();
+                if (_attackMoveArmed || _patrolArmed || _placeMode || _terrainWorkArmed.HasValue || _mindControlArmed)
+                {
+                    if (_attackMoveArmed)
+                        CancelAttackMoveArm();
+                    if (_patrolArmed)
+                        CancelPatrolArm();
+                    CancelPlaceMode();
+                    CancelTerrainWorkMode();
+                }
+            }
+
+            if (_terrainWorkArmed.HasValue)
+            {
+                if (UnityEngine.Input.GetMouseButtonDown(1))
+                {
+                    CancelTerrainWorkMode();
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButton(0) && !IsPointerOverUi()
+                    && TryRaycastGround(out float tx, out float tz))
+                {
+                    bool firstStroke = UnityEngine.Input.GetMouseButtonDown(0);
+                    float dx = tx - _terrainPaintLastX;
+                    float dz = tz - _terrainPaintLastZ;
+                    bool spaced = !_terrainPaintStroke
+                                  || dx * dx + dz * dz >= TerrainPaintSpacing * TerrainPaintSpacing;
+                    if (firstStroke || spaced)
+                    {
+                        var kind = _terrainWorkArmed.Value;
+                        if (CanTerrainWorkAt(kind, tx, tz))
+                        {
+                            IssueTerrainWork(kind, tx, tz, announce: firstStroke || !_terrainPaintStroke);
+                            if (firstStroke || !_terrainPaintStroke)
+                            {
+                                var builders = GetSelectedBuilderIds();
+                                if (builders.Length > 0)
+                                {
+                                    _commands.SubmitLocal(new MoveCommand
+                                    {
+                                        Issuer = _local,
+                                        UnitIds = builders,
+                                        TargetX = tx,
+                                        TargetZ = tz,
+                                    });
+                                }
+                            }
+
+                            _terrainPaintLastX = tx;
+                            _terrainPaintLastZ = tz;
+                            _terrainPaintStroke = true;
+                        }
+                        else if (firstStroke)
+                        {
+                            MatchFeedback.Show(DescribeInvalidTerrainWork(kind), AsterraSfx.Invalid);
+                        }
+                    }
+                }
+
+                if (UnityEngine.Input.GetMouseButtonUp(0))
+                    _terrainPaintStroke = false;
+
+                // Stay armed until Esc / RMB so click-drag can paint a line.
+                return;
             }
 
             if (_attackMoveArmed)
@@ -378,35 +896,142 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (_mindControlArmed)
+            {
+                if (UnityEngine.Input.GetMouseButtonDown(1))
+                {
+                    _mindControlArmed = false;
+                    _mindControlPowerId = null;
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
+                    TryIssueMindControlClick();
+                return;
+            }
+
+            if (_powerPointArmed)
+            {
+                if (UnityEngine.Input.GetMouseButtonDown(1))
+                {
+                    _powerPointArmed = false;
+                    _powerPointPowerId = null;
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi() && TryRaycastGround(out float px, out float pz))
+                {
+                    _commands.SubmitLocal(new ActivateCommanderAbilityCommand
+                    {
+                        Issuer = _local,
+                        PowerDefId = _powerPointPowerId,
+                        TargetX = px,
+                        TargetZ = pz,
+                    });
+                    _powerPointArmed = false;
+                    _powerPointPowerId = null;
+                }
+
+                return;
+            }
+
             if (_placeMode)
             {
+                HandlePlaceModeRotation();
+
                 if (UnityEngine.Input.GetMouseButtonDown(1))
                 {
                     CancelPlaceMode();
                     return;
                 }
 
-                if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
+                string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                    ? _roster.ProducerBuildingId
+                    : _placeBuildingDefId;
+                bool earthPaint = FactionDefaultContent.IsEarthworkBuildingId(defId);
+                bool paintHeld = earthPaint && UnityEngine.Input.GetMouseButton(0);
+                bool paintClick = UnityEngine.Input.GetMouseButtonDown(0);
+
+                if ((paintClick || paintHeld) && !IsPointerOverUi()
+                    && TryRaycastGround(out float x, out float z))
                 {
-                    if (TryRaycastGround(out float x, out float z) && CanPlaceAt(x, z))
+                    bool firstStroke = paintClick;
+                    float dx = x - _terrainPaintLastX;
+                    float dz = z - _terrainPaintLastZ;
+                    bool spaced = !_terrainPaintStroke
+                                  || dx * dx + dz * dz >= TerrainPaintSpacing * TerrainPaintSpacing;
+                    if (!earthPaint)
                     {
-                        string defId = string.IsNullOrEmpty(_placeBuildingDefId)
-                            ? _roster.ProducerBuildingId
-                            : _placeBuildingDefId;
-                        _commands.SubmitLocal(new PlaceBuildingCommand
+                        // Normal buildings: single click only.
+                        if (!paintClick)
+                            return;
+                        spaced = true;
+                    }
+
+                    if (firstStroke || spaced)
+                    {
+                        if (IsWallLikeDef(defId))
+                            WallPlacement.Snap(ref x, ref z);
+                        if (CanPlaceAt(x, z))
                         {
-                            Issuer = _local,
-                            BuildingDefId = defId,
-                            X = x,
-                            Z = z,
-                            YawDegrees = 0f,
-                        });
-                        MatchFeedback.Show("Building ordered");
-                        if (!IsAdditiveModifierHeld())
-                            CancelPlaceMode();
+                            if (_powerGateMode)
+                            {
+                                HandlePowerGateClick(x, z);
+                            }
+                            else
+                            {
+                            _commands.SubmitLocal(new PlaceBuildingCommand
+                            {
+                                Issuer = _local,
+                                BuildingDefId = defId,
+                                X = x,
+                                Z = z,
+                                YawDegrees = _placeYawDegrees,
+                            });
+                            if (firstStroke || !_terrainPaintStroke)
+                            {
+                                var builders = GetSelectedBuilderIds();
+                                if (builders.Length > 0)
+                                {
+                                    _commands.SubmitLocal(new MoveCommand
+                                    {
+                                        Issuer = _local,
+                                        UnitIds = builders,
+                                        TargetX = x,
+                                        TargetZ = z,
+                                    });
+                                }
+
+                                MatchFeedback.Show(
+                                    earthPaint
+                                        ? "Earthwork ordered — builder digs on site"
+                                        : FactionDefaultContent.IsPortalGateId(defId)
+                                            ? "Gate placed — place the destination gate"
+                                            : "Building ordered — send builder to site",
+                                    AsterraSfx.OrderBuild);
+                            }
+
+                            _terrainPaintLastX = x;
+                            _terrainPaintLastZ = z;
+                            _terrainPaintStroke = true;
+
+                            if (!earthPaint
+                                && !IsAdditiveModifierHeld()
+                                && !FactionDefaultContent.IsPortalGateId(defId))
+                                CancelPlaceMode();
+                            }
+                        }
+                        else if (firstStroke)
+                        {
+                            MatchFeedback.Show(DescribeInvalidPlace(), AsterraSfx.Invalid);
+                        }
                     }
                 }
 
+                if (UnityEngine.Input.GetMouseButtonUp(0))
+                    _terrainPaintStroke = false;
+
+                // Earthwork tools stay armed for drag paint until Esc / RMB.
                 return;
             }
 
@@ -432,17 +1057,21 @@ namespace Asterra.Gameplay.Player
 
             if (_pointerDown && UnityEngine.Input.GetMouseButtonUp(0))
             {
-                bool additive = IsAdditiveModifierHeld();
-                if (_isDragging)
+                // Swallow world select when the click is still over HUD (e.g. Train Builder).
+                if (!IsPointerOverUi())
                 {
-                    _selectedBuilding = null;
-                    SelectOwnedInScreenRect(
-                        ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen),
-                        additive);
-                }
-                else
-                {
-                    HandleClickSelect(additive);
+                    bool additive = IsAdditiveModifierHeld();
+                    if (_isDragging)
+                    {
+                        _selectedBuilding = null;
+                        SelectOwnedInScreenRect(
+                            ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen),
+                            additive);
+                    }
+                    else
+                    {
+                        HandleClickSelect(additive);
+                    }
                 }
 
                 _pointerDown = false;
@@ -481,9 +1110,38 @@ namespace Asterra.Gameplay.Player
                             UnitIds = builders,
                             ResourceNodeId = resource.Id,
                         });
-                        MatchFeedback.Show("Gathering...");
+                        MatchFeedback.Show("Gathering...", AsterraSfx.OrderGather);
                         return;
                     }
+                }
+
+                if (TryPickDestructible(out var propView))
+                {
+                    _commands.SubmitLocal(new AttackCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetId = propView.Id,
+                    });
+                    string chop = propView.DefinitionId == DefaultDestructibleCatalog.TreeId
+                        ? "Chopping tree..."
+                        : propView.DefinitionId == DefaultDestructibleCatalog.BridgeId
+                            ? "Attacking bridge..."
+                            : "Attacking...";
+                    MatchFeedback.Show(chop, AsterraSfx.OrderAttack);
+                    return;
+                }
+
+                if (TryPickHostileEntity(out var hostile))
+                {
+                    _commands.SubmitLocal(new AttackCommand
+                    {
+                        Issuer = _local,
+                        UnitIds = unitIds,
+                        TargetId = hostile.Id,
+                    });
+                    AsterraAudio.Play(AsterraSfx.OrderAttack, 0.8f);
+                    return;
                 }
 
                 if (TryPickEntity(out var targetView))
@@ -498,18 +1156,7 @@ namespace Asterra.Gameplay.Player
                             UnitIds = unitIds,
                             BuildingId = targetView.Id,
                         });
-                        MatchFeedback.Show("Garrisoning...");
-                        return;
-                    }
-
-                    if (targetView.Owner != _local && targetView.IsRevealed)
-                    {
-                        _commands.SubmitLocal(new AttackCommand
-                        {
-                            Issuer = _local,
-                            UnitIds = unitIds,
-                            TargetId = targetView.Id,
-                        });
+                        MatchFeedback.Show("Garrisoning...", AsterraSfx.OrderMove);
                         return;
                     }
                 }
@@ -525,6 +1172,7 @@ namespace Asterra.Gameplay.Player
                         TargetX = mx,
                         TargetZ = mz,
                     });
+                    AsterraAudio.Play(AsterraSfx.OrderMove, 0.7f);
                 }
             }
         }
@@ -553,7 +1201,7 @@ namespace Asterra.Gameplay.Player
                         TargetX = x,
                         TargetZ = z,
                     });
-                    MatchFeedback.Show("Attack-move ordered");
+                    MatchFeedback.Show("Attack-move ordered", AsterraSfx.OrderAttack);
                 }
 
                 CancelAttackMoveArm();
@@ -588,7 +1236,7 @@ namespace Asterra.Gameplay.Player
                         TargetX = x,
                         TargetZ = z,
                     });
-                    MatchFeedback.Show("Patrol ordered");
+                    MatchFeedback.Show("Patrol ordered", AsterraSfx.OrderMove);
                 }
 
                 CancelPatrolArm();
@@ -601,13 +1249,24 @@ namespace Asterra.Gameplay.Player
 
         private void HandleClickSelect(bool additive)
         {
-            if (TryPickEntity(out var view))
+            // Prefer buildings when the ray hits one — large squad pick spheres otherwise steal keep/tower clicks.
+            if (TryPickEntity(out var view, preferUnits: false))
             {
                 if (!view.IsUnit && view.Owner == _local)
                 {
+                    // Only keep unit selection if a unit collider is clearly closer than the building.
+                    if (TryPickCloserOwnedUnitThan(view, out var nearbyUnit))
+                    {
+                        _selectedBuilding = null;
+                        if (additive)
+                            _selection.Toggle(nearbyUnit.Id);
+                        else
+                            _selection.Set(new[] { nearbyUnit.Id });
+                        return;
+                    }
+
                     _selectedBuilding = view.Id;
-                    if (!additive)
-                        _selection.Clear();
+                    _selection.Clear();
                     return;
                 }
 
@@ -620,6 +1279,9 @@ namespace Asterra.Gameplay.Player
                         _selection.Set(new[] { view.Id });
                     return;
                 }
+
+                // Enemy / neutral under cursor: keep current selection (do not clear).
+                return;
             }
 
             if (!additive && TryRaycastGround(out _, out _))
@@ -627,6 +1289,317 @@ namespace Asterra.Gameplay.Player
                 _selection.Clear();
                 _selectedBuilding = null;
             }
+        }
+
+        private bool TryPickCloserOwnedUnitThan(EntityView building, out EntityView unit)
+        {
+            unit = null;
+            if (rigCamera == null || building == null)
+                return false;
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, 5000f, clickMask, QueryTriggerInteraction.Ignore);
+            float buildingDist = float.MaxValue;
+            float bestUnitDist = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                var candidate = _rayHits[i].collider != null
+                    ? _rayHits[i].collider.GetComponentInParent<EntityView>()
+                    : null;
+                if (candidate == null || !candidate.IsRevealed)
+                    continue;
+                float d = _rayHits[i].distance;
+                if (candidate == building || (!candidate.IsUnit && candidate.Id.Value == building.Id.Value))
+                    buildingDist = Mathf.Min(buildingDist, d);
+                if (candidate.IsUnit && candidate.Owner == _local && d < bestUnitDist)
+                {
+                    bestUnitDist = d;
+                    unit = candidate;
+                }
+            }
+
+            // Unit must be meaningfully closer (not just overlapping a huge old pick sphere).
+            return unit != null && bestUnitDist + 1.5f < buildingDist;
+        }
+
+        private bool TryPickOwnedUnitNearCursor(out EntityView unit)
+        {
+            unit = null;
+            if (rigCamera == null)
+                return false;
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var hits = Physics.RaycastAll(ray, 5000f, clickMask);
+            float best = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var view = hits[i].collider != null
+                    ? hits[i].collider.GetComponentInParent<EntityView>()
+                    : null;
+                if (view == null || !view.IsUnit || view.Owner != _local || !view.IsRevealed)
+                    continue;
+                float d = hits[i].distance;
+                if (d < best)
+                {
+                    best = d;
+                    unit = view;
+                }
+            }
+
+            if (unit != null)
+                return true;
+            return TryScreenPickOwnedUnit(out unit, maxPixels: 48f);
+        }
+
+        public void DemolishSelectedBuilding()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new DemolishBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+            });
+            MatchFeedback.Show("Demolish ordered", AsterraSfx.OrderBuild);
+            _selectedBuilding = null;
+        }
+
+        public void RazeSelectedWall()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new DemolishBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+                RazeForMaterials = true,
+            });
+            MatchFeedback.Show("Raze for timber", AsterraSfx.OrderBuild);
+            _selectedBuilding = null;
+        }
+
+        public void UpgradeSelectedWallToStone()
+        {
+            if (_commands == null || !_selectedBuilding.HasValue)
+                return;
+            _commands.SubmitLocal(new UpgradeBuildingCommand
+            {
+                Issuer = _local,
+                BuildingId = _selectedBuilding.Value,
+                UpgradeDefId = FactionDefaultContent.StoneWallsUpgradeId,
+            });
+            MatchFeedback.Show("Upgrade to stone", AsterraSfx.OrderResearch);
+        }
+
+        public void IssueTerrainWork(TerrainWorkKind kind, float x, float z, float halfExtent = 8f, bool announce = true)
+        {
+            if (_commands == null)
+                return;
+            _commands.SubmitLocal(new TerrainWorkCommand
+            {
+                Issuer = _local,
+                Kind = kind,
+                X = x,
+                Z = z,
+                HalfExtent = halfExtent,
+            });
+            if (announce)
+                MatchFeedback.Show($"{TerrainWorkLabel(kind)} ordered — builder digs on arrival", AsterraSfx.OrderBuild);
+        }
+
+        public void EnterTerrainWorkMode(TerrainWorkKind kind)
+        {
+            string buildingId = FactionDefaultContent.EarthworkBuildingId(kind);
+            if (string.IsNullOrEmpty(buildingId))
+                return;
+            EnterPlaceMode(buildingId);
+            _terrainPaintStroke = false;
+            MatchFeedback.Show($"{TerrainWorkLabel(kind)} ready", AsterraSfx.OrderBuild);
+        }
+
+        public void CancelTerrainWorkMode()
+        {
+            _terrainWorkArmed = null;
+            _terrainPaintStroke = false;
+        }
+
+        private bool CanTerrainWorkAt(TerrainWorkKind kind, float x, float z)
+        {
+            if (match?.World is SkirmishWorldSim sim)
+                return sim.CanPreviewTerrainWork(kind, x, z);
+            return true;
+        }
+
+        private static string TerrainWorkLabel(TerrainWorkKind kind) => kind switch
+        {
+            TerrainWorkKind.DigMoat => "Moat",
+            TerrainWorkKind.RaiseBerm => "Berm",
+            TerrainWorkKind.FillTrench => "Fill",
+            TerrainWorkKind.ClearForest => "Clear",
+            TerrainWorkKind.BurnBrush => "Burn",
+            TerrainWorkKind.QuarryRock => "Quarry",
+            TerrainWorkKind.PlaceSpikes => "Spikes",
+            TerrainWorkKind.ClearDebris => "Debris",
+            TerrainWorkKind.DigTrench => "Trench",
+            TerrainWorkKind.FlattenHill => "Flatten",
+            _ => kind.ToString(),
+        };
+
+        private static string DescribeInvalidTerrainWork(TerrainWorkKind kind) => kind switch
+        {
+            TerrainWorkKind.DigMoat => "Moat needs diggable ground (grass/forest/beach)",
+            TerrainWorkKind.DigTrench => "Trench needs diggable ground",
+            TerrainWorkKind.RaiseBerm => "Berm needs diggable ground",
+            TerrainWorkKind.FillTrench => "No trench here to fill",
+            TerrainWorkKind.ClearForest => "No brush/forest here to clear",
+            TerrainWorkKind.BurnBrush => "No brush/forest here to burn",
+            TerrainWorkKind.QuarryRock => "No rock here to quarry",
+            TerrainWorkKind.PlaceSpikes => "Spikes need diggable ground",
+            TerrainWorkKind.ClearDebris => "No debris/crater here",
+            _ => "Cannot work terrain here",
+        };
+
+        public void RepairBridgeAtCursor()
+        {
+            if (_commands == null || !TryRaycastGround(out float x, out float z))
+                return;
+            _commands.SubmitLocal(new RepairBridgeCommand { Issuer = _local, X = x, Z = z });
+            MatchFeedback.Show("Repair bridge", AsterraSfx.OrderBuild);
+        }
+
+        private TerrainWorkKind? _terrainWorkArmed;
+        private bool _terrainPaintStroke;
+        private float _terrainPaintLastX;
+        private float _terrainPaintLastZ;
+        private const float TerrainPaintSpacing = 10f;
+
+        private bool TryPickDestructible(out DestructibleView view)
+        {
+            view = null;
+            if (rigCamera == null)
+                return false;
+
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var hits = Physics.RaycastAll(ray, 5000f, clickMask);
+            float best = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i].collider != null
+                    ? hits[i].collider.GetComponentInParent<DestructibleView>()
+                    : null;
+                if (candidate == null)
+                    continue;
+                float d = hits[i].distance;
+                if (d < best)
+                {
+                    best = d;
+                    view = candidate;
+                }
+            }
+
+            if (view != null)
+                return true;
+
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float bestPx2 = 56f * 56f;
+            var views = FindObjectsByType<DestructibleView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null)
+                    continue;
+                Vector3 sp = rigCamera.WorldToScreenPoint(candidate.transform.position + Vector3.up * 4f);
+                if (sp.z <= 0f)
+                    continue;
+                float dx = sp.x - mouse.x;
+                float dy = sp.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < bestPx2)
+                {
+                    bestPx2 = d2;
+                    view = candidate;
+                }
+            }
+
+            return view != null;
+        }
+
+        private bool TryPickHostileEntity(out EntityView view)
+        {
+            view = null;
+            if (rigCamera == null)
+                return false;
+
+            var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var hits = Physics.RaycastAll(ray, 5000f, clickMask);
+            float best = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var candidate = hits[i].collider != null
+                    ? hits[i].collider.GetComponentInParent<EntityView>()
+                    : null;
+                if (candidate == null || candidate.Owner == _local || !candidate.IsRevealed)
+                    continue;
+                float d = hits[i].distance;
+                if (d < best)
+                {
+                    best = d;
+                    view = candidate;
+                }
+            }
+
+            if (view != null)
+                return true;
+
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float bestPx2 = 64f * 64f;
+            var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null || candidate.Owner == _local || !candidate.IsRevealed)
+                    continue;
+                Vector3 sp = rigCamera.WorldToScreenPoint(candidate.transform.position + Vector3.up * 4f);
+                if (sp.z <= 0f)
+                    continue;
+                float dx = sp.x - mouse.x;
+                float dy = sp.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < bestPx2)
+                {
+                    bestPx2 = d2;
+                    view = candidate;
+                }
+            }
+
+            return view != null;
+        }
+
+        private bool TryScreenPickOwnedUnit(out EntityView unit, float maxPixels)
+        {
+            unit = null;
+            if (rigCamera == null)
+                return false;
+            Vector3 mouse = UnityEngine.Input.mousePosition;
+            float best = maxPixels * maxPixels;
+            var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
+            for (int i = 0; i < views.Length; i++)
+            {
+                var candidate = views[i];
+                if (candidate == null || !candidate.IsUnit || candidate.Owner != _local || !candidate.IsRevealed)
+                    continue;
+                Vector3 sp = rigCamera.WorldToScreenPoint(candidate.transform.position + Vector3.up * 4f);
+                if (sp.z <= 0f)
+                    continue;
+                float dx = sp.x - mouse.x;
+                float dy = sp.y - mouse.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < best)
+                {
+                    best = d2;
+                    unit = candidate;
+                }
+            }
+
+            return unit != null;
         }
 
         private void SelectOwnedInScreenRect(Rect screenRect, bool additive)
@@ -668,18 +1641,62 @@ namespace Asterra.Gameplay.Player
                 EnterPlaceMode(_roster.WallBuildingId);
             if (UnityEngine.Input.GetKeyDown(KeyCode.O) && HasSelectedBuilder())
                 EnterPlaceMode(_roster.OutpostBuildingId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.V) && HasSelectedBuilder())
+            {
+                if (_roster != null
+                    && _roster.DefinitionId == FactionDefaultContent.UniversityId
+                    && (_world == null || !_world.HasUpgrade(_local, FactionDefaultContent.AdvancedConstructionUpgradeId)))
+                    MatchFeedback.Show("Research Advanced Construction to build bridges");
+                else
+                    EnterPlaceMode(FactionDefaultContent.BridgeId);
+            }
+            if (UnityEngine.Input.GetKeyDown(KeyCode.J) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.TrenchWorksId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Comma) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.BarricadeId);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Period) && HasSelectedBuilder())
+                EnterPlaceMode(FactionDefaultContent.FerryDockId);
+
+            // Terrain-work arms cancel place mode — skip while placing so Q/E/[ /] rotate the ghost.
+            if (!_placeMode)
+            {
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Y) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.FillTrench);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.K) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.RaiseBerm);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.L) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.DigMoat);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Semicolon) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.ClearForest);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Quote) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.BurnBrush);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.Backslash) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.QuarryRock);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.LeftBracket) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.PlaceSpikes);
+                if (UnityEngine.Input.GetKeyDown(KeyCode.RightBracket) && HasSelectedBuilder())
+                    EnterTerrainWorkMode(TerrainWorkKind.ClearDebris);
+            }
+
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Equals) && HasSelectedBuilder())
+                RepairBridgeAtCursor();
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.T))
             {
                 if (_selectedBuilding.HasValue)
+                {
+                    _selection.Clear();
                     TrainFromSelectedBuilding();
+                }
                 else if (TryFindOwnedKeep(out var keepId))
                 {
+                    _selection.Clear();
                     _selectedBuilding = keepId;
                     TrainFromSelectedBuilding();
                 }
                 else if (TryFindOwnedProducer(out var buildingId))
                 {
+                    _selection.Clear();
                     _selectedBuilding = buildingId;
                     TrainFromSelectedBuilding();
                 }
@@ -690,31 +1707,49 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.C) && _world.Territories.Count > 0)
             {
-                _commands.SubmitLocal(new CaptureTerritoryCommand
+                if (!TryResolveCaptureTarget(out var territoryId))
                 {
-                    Issuer = _local,
-                    TerritoryNodeId = _world.Territories[0].Id,
-                });
+                    MatchFeedback.Show("No territory nearby", AsterraSfx.Invalid);
+                }
+                else if (_selection.Selected.Count == 0)
+                {
+                    MatchFeedback.Show("Select units to capture", AsterraSfx.Invalid);
+                }
+                else
+                {
+                    var ids = new SimEntityId[_selection.Selected.Count];
+                    for (int i = 0; i < _selection.Selected.Count; i++)
+                        ids[i] = _selection.Selected[i];
+                    _commands.SubmitLocal(new CaptureTerritoryCommand
+                    {
+                        Issuer = _local,
+                        TerritoryNodeId = territoryId,
+                        UnitIds = ids,
+                    });
+                    MatchFeedback.Show("Capture ordered");
+                }
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.U))
             {
-                _commands.SubmitLocal(new ChooseUpgradeCommand
-                {
-                    Issuer = _local,
-                    UpgradeDefId = _roster.BasicUpgradeId,
-                });
+                if (UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift))
+                    ApplyUpgradeToSelected();
+                else
+                    ResearchUpgrade();
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Q))
-                ActivateCommanderAbility();
+            {
+                if (!_placeMode)
+                    ActivateCommanderAbility();
+            }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.A))
             {
                 CancelPlaceMode();
                 CancelPatrolArm();
                 _attackMoveArmed = true;
-                MatchFeedback.Show("Attack-move: click ground");
+                MatchFeedback.Show("Attack-move armed");
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.P))
@@ -722,7 +1757,7 @@ namespace Asterra.Gameplay.Player
                 CancelPlaceMode();
                 CancelAttackMoveArm();
                 _patrolArmed = true;
-                MatchFeedback.Show("Patrol: click ground");
+                MatchFeedback.Show("Patrol armed");
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.S))
@@ -839,9 +1874,14 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (IsWallLikeDef(_placeBuildingDefId))
+                WallPlacement.Snap(ref x, ref z);
+
             bool ok = CanPlaceAt(x, z);
             _ghost.SetActive(true);
             _ghost.transform.position = new Vector3(x, 0.2f, z);
+            _ghost.transform.rotation = Quaternion.Euler(0f, _placeYawDegrees, 0f);
+            ResizeGhostForCurrentBuilding();
             if (_ghostRenderer != null)
             {
                 var color = ok ? new Color(0.25f, 0.85f, 0.4f, 0.55f) : new Color(0.9f, 0.2f, 0.2f, 0.55f);
@@ -849,8 +1889,44 @@ namespace Asterra.Gameplay.Player
             }
         }
 
+        private void HandlePlaceModeRotation()
+        {
+            int steps = 0;
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Q) || UnityEngine.Input.GetKeyDown(KeyCode.LeftBracket))
+                steps = -1;
+            else if (UnityEngine.Input.GetKeyDown(KeyCode.E) || UnityEngine.Input.GetKeyDown(KeyCode.RightBracket))
+                steps = 1;
+
+            float scroll = UnityEngine.Input.mouseScrollDelta.y;
+            if (Mathf.Abs(scroll) > 0.01f)
+                steps = scroll > 0f ? 1 : -1;
+
+            if (steps == 0)
+                return;
+
+            _placeYawDegrees = Mathf.Repeat(_placeYawDegrees + steps * 90f, 360f);
+            ResizeGhostForCurrentBuilding();
+            MatchFeedback.Show($"Facing {_placeYawDegrees:0}°");
+        }
+
+        private bool IsWallLikeDef(string defId)
+        {
+            if (string.IsNullOrEmpty(defId) || match == null || match.Definitions == null)
+                return false;
+            if (!match.Definitions.TryGetBuilding(defId, out var def))
+                return false;
+            return def.Kind == BuildingKind.Wall || def.Kind == BuildingKind.Gate || def.SnapToWallGrid;
+        }
+
         private void UpdateCursorMode()
         {
+            // HUD / menus own the pointer — never show world move/invalid under chrome.
+            if (IsPointerOverUi())
+            {
+                CurrentCursorMode = OrderCursorMode.Select;
+                return;
+            }
+
             if (_placeMode)
             {
                 if (TryRaycastGround(out float x, out float z))
@@ -860,15 +1936,34 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (_terrainWorkArmed.HasValue)
+            {
+                if (TryRaycastGround(out float tx, out float tz))
+                    CurrentCursorMode = CanTerrainWorkAt(_terrainWorkArmed.Value, tx, tz)
+                        ? OrderCursorMode.Build
+                        : OrderCursorMode.Invalid;
+                else
+                    CurrentCursorMode = OrderCursorMode.Invalid;
+                return;
+            }
+
             if (_attackMoveArmed)
             {
-                CurrentCursorMode = OrderCursorMode.Attack;
+                if (TryRaycastGround(out float ax, out float az) && !IsPassableForSelection(ax, az)
+                    && !TryPickEntity(out _))
+                    CurrentCursorMode = OrderCursorMode.Invalid;
+                else
+                    CurrentCursorMode = OrderCursorMode.Attack;
                 return;
             }
 
             if (_patrolArmed)
             {
-                CurrentCursorMode = OrderCursorMode.Move;
+                if (TryRaycastGround(out float px, out float pz) && !IsPassableForSelection(px, pz)
+                    && !TryPickEntity(out _))
+                    CurrentCursorMode = OrderCursorMode.Invalid;
+                else
+                    CurrentCursorMode = OrderCursorMode.Move;
                 return;
             }
 
@@ -886,9 +1981,22 @@ namespace Asterra.Gameplay.Player
                     return;
                 }
 
-                if (TryPickEntity(out var hover) && hover.Owner != _local && hover.IsRevealed)
+                if (TryPickEntity(out var hover) && hover.IsRevealed)
                 {
-                    CurrentCursorMode = OrderCursorMode.Attack;
+                    if (hover.Owner != _local)
+                    {
+                        CurrentCursorMode = OrderCursorMode.Attack;
+                        return;
+                    }
+
+                    // Own building / unit under cursor — never show no-entry over footprints.
+                    CurrentCursorMode = OrderCursorMode.Move;
+                    return;
+                }
+
+                if (TryRaycastGround(out float gx, out float gz) && !IsPassableForSelection(gx, gz))
+                {
+                    CurrentCursorMode = OrderCursorMode.Invalid;
                     return;
                 }
 
@@ -896,7 +2004,146 @@ namespace Asterra.Gameplay.Player
                 return;
             }
 
+            if (TryPickEntity(out var underCursor) && underCursor.IsRevealed && underCursor.Owner == _local)
+            {
+                CurrentCursorMode = underCursor.IsUnit ? OrderCursorMode.Select : OrderCursorMode.Train;
+                return;
+            }
+
             CurrentCursorMode = OrderCursorMode.Select;
+        }
+
+        private bool IsPassableForSelection(float x, float z)
+        {
+            if (match?.World is not SkirmishWorldSim sim)
+                return true;
+
+            var env = sim.Environment;
+            if (env == null)
+                return true;
+
+            // Outside map.
+            if (x < -MapBounds.PlayableHalfExtent || x > MapBounds.PlayableHalfExtent
+                || z < -MapBounds.PlayableHalfExtent || z > MapBounds.PlayableHalfExtent)
+                return false;
+
+            var caps = SelectionTraversalCapabilities();
+            // Sample a small footprint so corner/blocked edges read as impassable.
+            float r = 1.2f;
+            if (!env.CanUnitEnter(x, z, caps))
+                return false;
+            if (!env.CanUnitEnter(x + r, z, caps))
+                return false;
+            if (!env.CanUnitEnter(x - r, z, caps))
+                return false;
+            if (!env.CanUnitEnter(x, z + r, caps))
+                return false;
+            if (!env.CanUnitEnter(x, z - r, caps))
+                return false;
+            return true;
+        }
+
+        private TraversalCapability SelectionTraversalCapabilities()
+        {
+            // Default land. Prefer water if every selected unit is water-only (boats).
+            if (_selection == null || _selection.Selected.Count == 0 || match?.Definitions == null || _world == null)
+                return TraversalCapability.Land;
+
+            bool anyLand = false;
+            bool anyWater = false;
+            bool anyFlying = false;
+            for (int i = 0; i < _selection.Selected.Count; i++)
+            {
+                uint id = _selection.Selected[i].Value;
+                for (int u = 0; u < _world.Units.Count; u++)
+                {
+                    var snap = _world.Units[u];
+                    if (snap.Id.Value != id)
+                        continue;
+                    if (!match.Definitions.TryGetUnit(snap.DefinitionId, out var def))
+                        break;
+                    var c = def.TraversalCapabilities;
+                    if (c == 0)
+                        c = TraversalCapability.Land;
+                    if ((c & TraversalCapability.Land) != 0)
+                        anyLand = true;
+                    if ((c & TraversalCapability.Water) != 0)
+                        anyWater = true;
+                    if ((c & TraversalCapability.Flying) != 0)
+                        anyFlying = true;
+                    break;
+                }
+            }
+
+            if (anyFlying)
+                return TraversalCapability.Flying;
+            if (anyWater && !anyLand)
+                return TraversalCapability.Water;
+            return TraversalCapability.Land;
+        }
+
+        private void HandlePowerGateClick(float x, float z)
+        {
+            if (!_powerGateHasFirst)
+            {
+                _powerGateHasFirst = true;
+                _powerGateFirstX = x;
+                _powerGateFirstZ = z;
+                MatchFeedback.Show(_powerGatePowerId == FactionDefaultContent.SurprisedDeliveryAbilityId
+                    || _powerGatePowerId == FactionDefaultContent.ExplosiveConvoyAbilityId
+                    ? "Now click the far end of the strip"
+                    : "Now click the destination gate");
+                return;
+            }
+
+            _commands.SubmitLocal(new ActivateCommanderAbilityCommand
+            {
+                Issuer = _local,
+                PowerDefId = _powerGatePowerId,
+                TargetX = _powerGateFirstX,
+                TargetZ = _powerGateFirstZ,
+                SecondaryX = x,
+                SecondaryZ = z,
+            });
+            MatchFeedback.Show(_powerGatePowerId == FactionDefaultContent.SurprisedDeliveryAbilityId
+                || _powerGatePowerId == FactionDefaultContent.ExplosiveConvoyAbilityId
+                ? "Carts rolling"
+                : "Twin Gates opening");
+            CancelPlaceMode();
+        }
+
+        private void TryIssueMindControlClick()
+        {
+            if (!TryPickEntity(out var view, preferUnits: true) || view == null || !view.IsUnit)
+            {
+                MatchFeedback.Show("Click an enemy troop", AsterraSfx.Invalid);
+                return;
+            }
+
+            for (int i = 0; i < _world.Units.Count; i++)
+            {
+                var u = _world.Units[i];
+                if (u.Id.Value != view.Id.Value)
+                    continue;
+                if (!u.IsAlive || u.Owner == _local)
+                {
+                    MatchFeedback.Show("Thrallbind needs an enemy troop", AsterraSfx.Invalid);
+                    return;
+                }
+
+                _commands.SubmitLocal(new ActivateCommanderAbilityCommand
+                {
+                    Issuer = _local,
+                    PowerDefId = _mindControlPowerId,
+                    TargetId = u.Id,
+                });
+                MatchFeedback.Show("Thrallbind");
+                _mindControlArmed = false;
+                _mindControlPowerId = null;
+                return;
+            }
+
+            MatchFeedback.Show("Thrallbind needs an enemy troop", AsterraSfx.Invalid);
         }
 
         private bool CanPlaceAt(float x, float z)
@@ -905,24 +2152,88 @@ namespace Asterra.Gameplay.Player
                 || z < -MapBounds.PlayableHalfExtent || z > MapBounds.PlayableHalfExtent)
                 return false;
 
-            if (!HasSelectedBuilderNear(x, z))
+            if (!_powerGateMode && !HasSelectedBuilder())
                 return false;
 
-            if (match != null && match.Definitions != null && match.Wallet != null)
+            string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                ? (_roster != null ? _roster.ProducerBuildingId : null)
+                : _placeBuildingDefId;
+
+            if (!_powerGateMode
+                && FactionDefaultContent.IsPortalGateId(defId)
+                && match != null
+                && match.World is SkirmishWorldSim visionSim
+                && !visionSim.IsVisibleTo(_local, x, z))
+                return false;
+
+            if (match != null && match.World is SkirmishWorldSim sim)
             {
-                string defId = string.IsNullOrEmpty(_placeBuildingDefId)
-                    ? (_roster != null ? _roster.ProducerBuildingId : null)
-                    : _placeBuildingDefId;
+                if (!string.IsNullOrEmpty(defId)
+                    && !sim.CanPreviewPlaceBuilding(defId, x, z, _placeYawDegrees, _local))
+                    return false;
+                if (string.IsNullOrEmpty(defId)
+                    && sim.Environment != null
+                    && !sim.Environment.CanPlaceBuilding(x, z))
+                    return false;
+            }
+
+            if (match != null && match.Definitions != null && match.Wallet != null && !_powerGateMode)
+            {
                 if (!string.IsNullOrEmpty(defId) && match.Definitions.TryGetBuilding(defId, out var def))
                 {
                     if (!match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost))
                         return false;
                     if (!match.Wallet.CanAfford(_local, ResourceType.Timber, def.TimberCost))
                         return false;
+
+                    float placeR = Mathf.Max(def.FootprintX, def.FootprintZ) * 0.5f;
+                    for (int i = 0; i < _world.Buildings.Count; i++)
+                    {
+                        var b = _world.Buildings[i];
+                        if (b.State == BuildingState.Destroyed)
+                            continue;
+                        float dx = x - b.X;
+                        float dz = z - b.Z;
+                        float otherR = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId) ? 9f : 6f;
+                        if (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate)
+                            otherR = 4f;
+                        else if (b.Kind == BuildingKind.Tower)
+                            otherR = 5f;
+                        float min = placeR + otherR;
+                        if (dx * dx + dz * dz < min * min)
+                            return false;
+                    }
                 }
             }
 
             return true;
+        }
+
+        private string DescribeInvalidPlace()
+        {
+            if (!HasSelectedBuilder() && !_powerGateMode)
+                return "Select a builder first";
+            string defId = string.IsNullOrEmpty(_placeBuildingDefId)
+                ? (_roster != null ? _roster.ProducerBuildingId : null)
+                : _placeBuildingDefId;
+            if (FactionDefaultContent.IsPortalGateId(defId) && !_powerGateMode)
+                return "Portal gates need vision — or use Twin Gates to place through fog";
+            if (defId == FactionDefaultContent.BridgeId)
+                return "Bridge needs shore + water/gap along facing";
+            if (defId == FactionDefaultContent.FerryDockId)
+                return "Ferry dock needs shore facing water";
+            if (FactionDefaultContent.TryGetEarthworkKind(defId, out var earthKind))
+                return DescribeInvalidTerrainWork(earthKind);
+            if (match != null && match.Definitions != null && match.Wallet != null
+                && !string.IsNullOrEmpty(defId)
+                && match.Definitions.TryGetBuilding(defId, out var def))
+            {
+                if (!match.Wallet.CanAfford(_local, ResourceType.Gold, def.GoldCost)
+                    || !match.Wallet.CanAfford(_local, ResourceType.Timber, def.TimberCost))
+                    return "Not enough gold/timber";
+            }
+
+            return "Cannot place here";
         }
 
         private bool HasSelectedBuilder()
@@ -987,45 +2298,6 @@ namespace Asterra.Gameplay.Player
             return list.ToArray();
         }
 
-        private bool HasSelectedBuilderNear(float x, float z)
-        {
-            float r2 = builderPlaceRadius * builderPlaceRadius;
-            if (_selection == null)
-                return false;
-            for (int i = 0; i < _selection.Selected.Count; i++)
-            {
-                var id = _selection.Selected[i];
-                for (int u = 0; u < _world.Units.Count; u++)
-                {
-                    var unit = _world.Units[u];
-                    if (unit.Id != id || !unit.IsAlive || unit.Owner != _local)
-                        continue;
-                    if (!FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
-                        continue;
-                    float dx = unit.X - x;
-                    float dz = unit.Z - z;
-                    if (dx * dx + dz * dz <= r2)
-                        return true;
-                }
-            }
-
-            // Also allow any owned builder nearby (sim rule).
-            for (int u = 0; u < _world.Units.Count; u++)
-            {
-                var unit = _world.Units[u];
-                if (!unit.IsAlive || unit.Owner != _local)
-                    continue;
-                if (!FactionDefaultContent.IsBuilderUnitId(unit.DefinitionId))
-                    continue;
-                float dx = unit.X - x;
-                float dz = unit.Z - z;
-                if (dx * dx + dz * dz <= r2)
-                    return true;
-            }
-
-            return false;
-        }
-
         private void EnsureGhost()
         {
             if (_ghost != null)
@@ -1044,6 +2316,21 @@ namespace Asterra.Gameplay.Player
                 var mat = new Material(shader);
                 SetMatColor(mat, new Color(0.25f, 0.85f, 0.4f, 0.55f));
                 _ghostRenderer.sharedMaterial = mat;
+            }
+
+            // Facing chevron so 90° yaw is obvious even on square footprints.
+            var tip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Object.Destroy(tip.GetComponent<Collider>());
+            tip.name = "GhostFacing";
+            tip.transform.SetParent(_ghost.transform, false);
+            tip.transform.localPosition = new Vector3(0f, 0.55f, 0.55f);
+            tip.transform.localScale = new Vector3(0.22f, 0.12f, 0.55f);
+            var tipRend = tip.GetComponent<Renderer>();
+            if (shader != null)
+            {
+                var tipMat = new Material(shader);
+                SetMatColor(tipMat, new Color(1f, 0.92f, 0.35f, 0.9f));
+                tipRend.sharedMaterial = tipMat;
             }
 
             _ghost.SetActive(false);
@@ -1066,7 +2353,10 @@ namespace Asterra.Gameplay.Player
                         break;
                     case BuildingKind.Wall:
                     case BuildingKind.Gate:
-                        scale = new Vector3(18f, 5f, 4f);
+                        scale = new Vector3(
+                            Mathf.Max(def.FootprintX, 14f),
+                            5f,
+                            Mathf.Max(def.FootprintZ, 4f));
                         break;
                     case BuildingKind.Outpost:
                         scale = new Vector3(8f, 7f, 8f);
@@ -1079,14 +2369,22 @@ namespace Asterra.Gameplay.Player
                         break;
                     case BuildingKind.Generic:
                     case BuildingKind.Special:
-                        scale = new Vector3(10f, 6f, 10f);
+                        float h = FactionDefaultContent.IsEarthworkBuildingId(defId) ? 2.2f
+                            : defId == FactionDefaultContent.BridgeId ? 3.5f : 5f;
+                        scale = new Vector3(
+                            Mathf.Max(def.FootprintX, 4f),
+                            h,
+                            Mathf.Max(def.FootprintZ, 4f));
                         break;
                     default:
                         throw new System.ArgumentOutOfRangeException(nameof(def.Kind), def.Kind, null);
                 }
+
+                // Rotate only — do not also swap axes (that cancelled yaw in the preview).
             }
 
             _ghost.transform.localScale = scale;
+            _ghost.transform.rotation = Quaternion.Euler(0f, _placeYawDegrees, 0f);
         }
 
         private static void SetMatColor(Material mat, Color color)
@@ -1182,7 +2480,9 @@ namespace Asterra.Gameplay.Player
             return false;
         }
 
-        private bool TryPickEntity(out EntityView view)
+        private bool TryPickEntity(out EntityView view) => TryPickEntity(out view, preferUnits: false);
+
+        private bool TryPickEntity(out EntityView view, bool preferUnits)
         {
             view = null;
             if (rigCamera == null)
@@ -1191,30 +2491,49 @@ namespace Asterra.Gameplay.Player
             var ray = rigCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
             int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, 5000f, clickMask, QueryTriggerInteraction.Ignore);
             float bestDist = float.MaxValue;
+            EntityView bestUnit = null;
+            float bestUnitDist = float.MaxValue;
             for (int i = 0; i < hitCount; i++)
             {
                 var candidate = _rayHits[i].collider.GetComponentInParent<EntityView>();
                 if (candidate == null || !candidate.IsRevealed)
                     continue;
-                if (_rayHits[i].distance < bestDist)
+                float d = _rayHits[i].distance;
+                if (preferUnits && candidate.IsUnit && d < bestUnitDist)
                 {
-                    bestDist = _rayHits[i].distance;
+                    bestUnitDist = d;
+                    bestUnit = candidate;
+                }
+
+                if (d < bestDist)
+                {
+                    bestDist = d;
                     view = candidate;
                 }
+            }
+
+            if (preferUnits && bestUnit != null && bestUnitDist <= bestDist + 12f)
+            {
+                view = bestUnit;
+                return true;
             }
 
             if (view != null)
                 return true;
 
-            return TryScreenPickEntity(out view);
+            return TryScreenPickEntity(out view, preferUnits);
         }
 
-        private bool TryScreenPickEntity(out EntityView view)
+        private bool TryScreenPickEntity(out EntityView view) => TryScreenPickEntity(out view, preferUnits: false);
+
+        private bool TryScreenPickEntity(out EntityView view, bool preferUnits)
         {
             view = null;
             Vector3 mouse = UnityEngine.Input.mousePosition;
             float maxPx2 = screenPickPixels * screenPickPixels;
             float bestPx2 = maxPx2;
+            float bestUnitPx2 = maxPx2;
+            EntityView bestUnit = null;
             var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
             for (int i = 0; i < views.Length; i++)
             {
@@ -1230,11 +2549,23 @@ namespace Asterra.Gameplay.Player
                 float dx = screen.x - mouse.x;
                 float dy = screen.y - mouse.y;
                 float d2 = dx * dx + dy * dy;
+                if (preferUnits && candidate.IsUnit && d2 < bestUnitPx2)
+                {
+                    bestUnitPx2 = d2;
+                    bestUnit = candidate;
+                }
+
                 if (d2 < bestPx2)
                 {
                     bestPx2 = d2;
                     view = candidate;
                 }
+            }
+
+            if (preferUnits && bestUnit != null)
+            {
+                view = bestUnit;
+                return true;
             }
 
             return view != null;
@@ -1257,7 +2588,8 @@ namespace Asterra.Gameplay.Player
             return false;
         }
 
-        private static bool IsPointerOverUi() => false;
+        private static bool IsPointerOverUi() =>
+            HudClickBlocker.ContainsScreenPoint(UnityEngine.Input.mousePosition);
 
         private static Rect ScreenRectFromPoints(Vector3 a, Vector3 b)
         {
@@ -1286,19 +2618,13 @@ namespace Asterra.Gameplay.Player
 
         private SimEntityId[] GetOrderUnitIds()
         {
-            if (_selection.Selected.Count > 0)
-            {
-                var arr = new SimEntityId[_selection.Selected.Count];
-                for (int i = 0; i < _selection.Selected.Count; i++)
-                    arr[i] = _selection.Selected[i];
-                return arr;
-            }
+            if (_selection.Selected.Count == 0)
+                return System.Array.Empty<SimEntityId>();
 
-            AutoSelectOwnedUnits();
-            var fallback = new SimEntityId[_selection.Selected.Count];
+            var arr = new SimEntityId[_selection.Selected.Count];
             for (int i = 0; i < _selection.Selected.Count; i++)
-                fallback[i] = _selection.Selected[i];
-            return fallback;
+                arr[i] = _selection.Selected[i];
+            return arr;
         }
 
         private void AutoSelectOwnedUnits()

@@ -3,7 +3,9 @@
   "rootNamespace": "Asterra.Editor",
   "references": [
     "Unity.RenderPipelines.Universal.Runtime",
-    "Unity.RenderPipelines.Core.Runtime"
+    "Unity.RenderPipelines.Core.Runtime",
+    "Asterra.Core",
+    "Asterra.Gameplay"
   ],
   "includePlatforms": [
     "Editor"

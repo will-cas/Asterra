@@ -10,7 +10,7 @@ namespace Asterra.Gameplay.Presentation
     /// </summary>
     public sealed class FogOfWarPresenter : MonoBehaviour
     {
-        private const int MaxVision = 48;
+        private const int MaxVision = 64;
         private const int ExploredResolution = 192;
 
         [SerializeField] private MatchBootstrap match;
@@ -205,6 +205,10 @@ namespace Asterra.Gameplay.Presentation
             _built = true;
             _mapSize = mapHalfExtent * 2f;
 
+            var stale = GameObject.Find("SoftFogOfWar");
+            if (stale != null)
+                Destroy(stale);
+
             _exploredTex = new Texture2D(ExploredResolution, ExploredResolution, TextureFormat.RGB24, mipChain: false, linear: true);
             _exploredTex.name = "FoWExplored";
             _exploredTex.wrapMode = TextureWrapMode.Clamp;
@@ -223,12 +227,13 @@ namespace Asterra.Gameplay.Presentation
 
             _fogMat = new Material(shader);
             _fogMat.SetTexture("_ExploredTex", _exploredTex);
-            _fogMat.SetColor("_FogColor", new Color(0.05f, 0.08f, 0.12f, 1f));
-            _fogMat.SetFloat("_UnexploredAlpha", 0.72f);
-            _fogMat.SetFloat("_ExploredAlpha", 0.28f);
+            // Slate mist — terrain/water stay visible underneath.
+            _fogMat.SetColor("_FogColor", new Color(0.2f, 0.26f, 0.34f, 1f));
+            _fogMat.SetFloat("_UnexploredAlpha", 0.5f);
+            _fogMat.SetFloat("_ExploredAlpha", 0.2f);
             _fogMat.SetVector("_MapOrigin", new Vector4(-mapHalfExtent, -mapHalfExtent, 0f, 0f));
             _fogMat.SetFloat("_MapSize", _mapSize);
-            _fogMat.SetFloat("_EdgeSoftness", 0.38f);
+            _fogMat.SetFloat("_EdgeSoftness", 0.42f);
             _fogMat.renderQueue = 3200;
 
             var plane = GameObject.CreatePrimitive(PrimitiveType.Quad);

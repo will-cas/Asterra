@@ -110,10 +110,12 @@ namespace Asterra.Core
                 case CaptureTerritoryCommand capture:
                     writer.Write((byte)CommandType.CaptureTerritory);
                     writer.Write(capture.TerritoryNodeId.Value);
+                    WriteEntityIds(writer, capture.UnitIds);
                     break;
                 case ChooseUpgradeCommand upgrade:
                     writer.Write((byte)CommandType.ChooseUpgrade);
                     WriteString(writer, upgrade.UpgradeDefId);
+                    writer.Write(upgrade.BuildingId.Value);
                     break;
                 case SetStanceCommand stance:
                     writer.Write((byte)CommandType.SetStance);
@@ -151,8 +153,29 @@ namespace Asterra.Core
                     WriteQuantized(writer, patrol.TargetX);
                     WriteQuantized(writer, patrol.TargetZ);
                     break;
-                case ActivateCommanderAbilityCommand:
+                case ActivateCommanderAbilityCommand ability:
                     writer.Write((byte)CommandType.ActivateCommanderAbility);
+                    WriteString(writer, ability.PowerDefId);
+                    WriteQuantized(writer, ability.TargetX);
+                    WriteQuantized(writer, ability.TargetZ);
+                    WriteQuantized(writer, ability.SecondaryX);
+                    WriteQuantized(writer, ability.SecondaryZ);
+                    writer.Write(ability.TargetId.Value);
+                    break;
+                case ApplyUnitUpgradeCommand applyUpgrade:
+                    writer.Write((byte)CommandType.ApplyUnitUpgrade);
+                    WriteString(writer, applyUpgrade.UpgradeDefId);
+                    WriteEntityIds(writer, applyUpgrade.UnitIds);
+                    break;
+                case UnlockPowerCommand unlockPower:
+                    writer.Write((byte)CommandType.UnlockPower);
+                    WriteString(writer, unlockPower.PowerDefId);
+                    break;
+                case AttachBuildingCommand attach:
+                    writer.Write((byte)CommandType.AttachBuilding);
+                    writer.Write(attach.ParentBuildingId.Value);
+                    writer.Write(attach.SlotIndex);
+                    WriteString(writer, attach.BuildingDefId);
                     break;
                 case EnterGarrisonCommand enter:
                     writer.Write((byte)CommandType.EnterGarrison);
@@ -162,6 +185,34 @@ namespace Asterra.Core
                 case ExitGarrisonCommand exit:
                     writer.Write((byte)CommandType.ExitGarrison);
                     writer.Write(exit.BuildingId.Value);
+                    break;
+                case DigTrenchCommand dig:
+                    writer.Write((byte)CommandType.DigTrench);
+                    WriteQuantized(writer, dig.X);
+                    WriteQuantized(writer, dig.Z);
+                    WriteQuantized(writer, dig.HalfExtent);
+                    break;
+                case DemolishBuildingCommand demolish:
+                    writer.Write((byte)CommandType.DemolishBuilding);
+                    writer.Write(demolish.BuildingId.Value);
+                    writer.Write(demolish.RazeForMaterials);
+                    break;
+                case TerrainWorkCommand work:
+                    writer.Write((byte)CommandType.TerrainWork);
+                    writer.Write((byte)work.Kind);
+                    WriteQuantized(writer, work.X);
+                    WriteQuantized(writer, work.Z);
+                    WriteQuantized(writer, work.HalfExtent);
+                    break;
+                case RepairBridgeCommand repair:
+                    writer.Write((byte)CommandType.RepairBridge);
+                    WriteQuantized(writer, repair.X);
+                    WriteQuantized(writer, repair.Z);
+                    break;
+                case UpgradeBuildingCommand upgradeBuilding:
+                    writer.Write((byte)CommandType.UpgradeBuilding);
+                    writer.Write(upgradeBuilding.BuildingId.Value);
+                    WriteString(writer, upgradeBuilding.UpgradeDefId);
                     break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
@@ -212,12 +263,14 @@ namespace Asterra.Core
                     command = new CaptureTerritoryCommand
                     {
                         TerritoryNodeId = new SimEntityId(reader.ReadUInt32()),
+                        UnitIds = ReadEntityIds(reader),
                     };
                     break;
                 case CommandType.ChooseUpgrade:
                     command = new ChooseUpgradeCommand
                     {
                         UpgradeDefId = ReadString(reader),
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
                     };
                     break;
                 case CommandType.SetStance:
@@ -271,7 +324,36 @@ namespace Asterra.Core
                     };
                     break;
                 case CommandType.ActivateCommanderAbility:
-                    command = new ActivateCommanderAbilityCommand();
+                    command = new ActivateCommanderAbilityCommand
+                    {
+                        PowerDefId = ReadString(reader),
+                        TargetX = ReadQuantized(reader),
+                        TargetZ = ReadQuantized(reader),
+                        SecondaryX = ReadQuantized(reader),
+                        SecondaryZ = ReadQuantized(reader),
+                        TargetId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.ApplyUnitUpgrade:
+                    command = new ApplyUnitUpgradeCommand
+                    {
+                        UpgradeDefId = ReadString(reader),
+                        UnitIds = ReadEntityIds(reader),
+                    };
+                    break;
+                case CommandType.UnlockPower:
+                    command = new UnlockPowerCommand
+                    {
+                        PowerDefId = ReadString(reader),
+                    };
+                    break;
+                case CommandType.AttachBuilding:
+                    command = new AttachBuildingCommand
+                    {
+                        ParentBuildingId = new SimEntityId(reader.ReadUInt32()),
+                        SlotIndex = reader.ReadByte(),
+                        BuildingDefId = ReadString(reader),
+                    };
                     break;
                 case CommandType.EnterGarrison:
                     command = new EnterGarrisonCommand
@@ -284,6 +366,44 @@ namespace Asterra.Core
                     command = new ExitGarrisonCommand
                     {
                         BuildingId = new SimEntityId(reader.ReadUInt32()),
+                    };
+                    break;
+                case CommandType.DigTrench:
+                    command = new DigTrenchCommand
+                    {
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                        HalfExtent = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.DemolishBuilding:
+                    command = new DemolishBuildingCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                        RazeForMaterials = reader.ReadBoolean(),
+                    };
+                    break;
+                case CommandType.TerrainWork:
+                    command = new TerrainWorkCommand
+                    {
+                        Kind = (TerrainWorkKind)reader.ReadByte(),
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                        HalfExtent = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.RepairBridge:
+                    command = new RepairBridgeCommand
+                    {
+                        X = ReadQuantized(reader),
+                        Z = ReadQuantized(reader),
+                    };
+                    break;
+                case CommandType.UpgradeBuilding:
+                    command = new UpgradeBuildingCommand
+                    {
+                        BuildingId = new SimEntityId(reader.ReadUInt32()),
+                        UpgradeDefId = ReadString(reader),
                     };
                     break;
                 default:

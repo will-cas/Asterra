@@ -17,10 +17,10 @@ namespace Asterra.Gameplay.Content
     /// </summary>
     public static class SkirmishDefaultContent
     {
-        public const string MilitiaId = FactionDefaultContent.MilitiaId;
-        public const string BarracksId = FactionDefaultContent.BarracksId;
-        public const string KeepId = FactionDefaultContent.IronKeepId;
-        public const string MilitiaTrainingId = FactionDefaultContent.MilitiaTrainingId;
+        public const string MilitiaId = FactionDefaultContent.VeiledApprenticeId;
+        public const string BarracksId = FactionDefaultContent.ArcaneAcademyId;
+        public const string KeepId = FactionDefaultContent.ArcaneumId;
+        public const string MilitiaTrainingId = FactionDefaultContent.ForbiddenCurriculumId;
 
         public const byte PlayerFaction = 0;
         public const byte EnemyFaction = 1;
@@ -38,8 +38,8 @@ namespace Asterra.Gameplay.Content
             FactionRoster playerFaction = null,
             FactionRoster enemyFaction = null)
         {
-            playerFaction ??= FactionDefaultContent.IronCovenant;
-            enemyFaction ??= FactionDefaultContent.VerdantCourt;
+            playerFaction ??= FactionDefaultContent.VeiledInheritance;
+            enemyFaction ??= FactionDefaultContent.MundorCrown;
             PopulateTwoPlayer(
                 world,
                 ids,
@@ -60,19 +60,35 @@ namespace Asterra.Gameplay.Content
             PlayerSlotState[] slots,
             SkirmishMapId map = SkirmishMapId.TwinKeeps)
         {
+            PopulateFromSlots(world, ids, slots, MapCatalog.BuiltinChoice(map).Id);
+        }
+
+        /// <summary>Load built-in or custom map by catalog id (e.g. twin_keeps, my_custom_map).</summary>
+        public static void PopulateFromSlots(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerSlotState[] slots,
+            string mapKey)
+        {
             if (slots == null || slots.Length < 2)
                 throw new System.ArgumentException("Need at least two player slots.", nameof(slots));
 
             var a = slots[0];
             var b = slots[1];
-            PopulateTwoPlayer(
-                world,
-                ids,
-                a.Player,
-                FactionDefaultContent.Get(new FactionId(a.FactionIndex)),
-                b.Player,
-                FactionDefaultContent.Get(new FactionId(b.FactionIndex)),
-                map);
+            var westFaction = FactionDefaultContent.Get(new FactionId(a.FactionIndex));
+            var eastFaction = FactionDefaultContent.Get(new FactionId(b.FactionIndex));
+
+            if (MapCatalog.TryLoad(mapKey, out var custom))
+            {
+                SkirmishMapLoader.Apply(
+                    world, ids, a.Player, westFaction, b.Player, eastFaction, custom);
+                return;
+            }
+
+            if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
+                builtin = SkirmishMapId.TwinKeeps;
+
+            PopulateTwoPlayer(world, ids, a.Player, westFaction, b.Player, eastFaction, builtin);
         }
 
         private static void PopulateTwoPlayer(
@@ -103,6 +119,19 @@ namespace Asterra.Gameplay.Content
             }
 
             SkirmishMapDestructibles.Apply(world, ids, map);
+            EnsureBuiltinArmies(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
+        }
+
+        private static void EnsureBuiltinArmies(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerId westPlayer,
+            FactionRoster westFaction,
+            PlayerId eastPlayer,
+            FactionRoster eastFaction)
+        {
+            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, westPlayer, westFaction);
+            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, eastPlayer, eastFaction);
         }
 
         private static void PopulateTwinKeeps(
@@ -118,13 +147,8 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 350f, 0f, startActive: true);
 
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, -20f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 0f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -320f, 20f);
+            // Workers only — train combat after the match starts.
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 0f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, -15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 320f, 15f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
@@ -160,13 +184,7 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 300f, 220f, startActive: true);
 
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -270f, -200f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -280f, -230f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -250f, -210f);
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -260f, -190f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 270f, 200f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 280f, 230f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 260f, 190f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
@@ -212,18 +230,8 @@ namespace Asterra.Gameplay.Content
             world.SpawnBuilding(
                 ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 360f, 0f, startActive: true);
 
-            // Starting garrisons
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, -18f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 0f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BasicUnitId, -330f, 18f);
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.RangedUnitId, -310f, -30f);
+            // Workers only — train combat after the match starts.
             world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 8f);
-            world.SpawnUnit(
-                ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.PathfinderId, -305f, -20f);
-
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, -15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BasicUnitId, 330f, 15f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.RangedUnitId, 310f, 28f);
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, -8f);
 
             // West pass mouth fortifications
@@ -268,6 +276,25 @@ namespace Asterra.Gameplay.Content
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, -290f, -70f);
             world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 280f, -60f);
             world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 290f, 70f);
+        }
+
+        public static void ApplyMapEnvironmentOnly(SkirmishWorldSim world, string mapKey)
+        {
+            if (world?.Environment == null)
+                return;
+
+            if (MapCatalog.TryLoad(mapKey, out var custom))
+            {
+                SkirmishMapLoader.ApplyTerrain(world.Environment, custom);
+                SkirmishMapLoader.ApplyTraversal(world.Environment, custom);
+                return;
+            }
+
+            if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
+                builtin = SkirmishMapId.TwinKeeps;
+
+            SkirmishMapTerrain.Apply(world.Environment, builtin);
+            SkirmishMapTraversal.Apply(world.Environment, builtin);
         }
 
         public static string GetMapDisplayName(SkirmishMapId map)
