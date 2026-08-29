@@ -31,7 +31,7 @@ Local offline / skirmish input (keyboard + mouse).
 | J | Dig trench works — requires builder |
 | , | Place barricade — requires builder |
 | . | Place ferry dock (shore) — requires builder |
-| Y / K / L | Fill / berm / moat — ghost preview, click/drag, Q/E rotate, costs + build time |
+| Y / K / L | Fill trench / raise berm / dig moat — click ground |
 | ; / ' / \ | Clear forest / burn brush / quarry rock — click ground |
 | [ / ] | While placing: rotate ghost 90°. Otherwise: spike pits / clear debris |
 | = | Repair nearest collapsed bridge |
@@ -68,10 +68,11 @@ Bottom command dock (classic RTS):
 | --- | --- |
 | Always | Idle workers |
 | Combat selected | Stop / stances; Gear submenu for equipment |
-| Builder selected | Barracks, Tower, Wall, Trench, Bridge, Barrier, Ferry, Mine, Berm, Fill, Moat, Clear, Burn, Quarry, Spikes, Debris, Repair (one dock) |
+| Builder selected | Barracks / Tower / Wall / **Trench** / **Bridge** / Earth / More |
+| Earth submenu | Fill, berm, moat, clear, burn, quarry, spikes, debris, repair |
 | More submenu | Barricade, ferry, gold mine |
 | Producer / keep | Train cards + research; **More** for demolish / turrets |
-| Esc pause | Resume · Save/Load · Options · **Controls** · Main Menu |
+| Esc pause | Resume · Save/Load · Options · Main Menu |
 
 Resources top-left; commander powers as compact icons top-right; minimap bottom-right.
-Builder dock shows build/earthwork costs. Keyboard shortcuts that are not labeled on dock cards live in the in-game **Controls** menu: lobby chip, **Esc → Controls**, or **Options → Controls**. F5/F9 save/load.
+Hotkeys still work for builds and terrain (see table above). F5/F9 save/load.

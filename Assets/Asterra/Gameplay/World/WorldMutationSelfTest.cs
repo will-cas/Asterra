@@ -17,8 +17,6 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "dig trench paints cells", DigTrenchPaints());
             Expect(ref fails, sb, "fill trench restores grass", FillTrench());
             Expect(ref fails, sb, "raise berm", RaiseBerm());
-            Expect(ref fails, sb, "dig moat paints shallow", DigMoatPaints());
-            Expect(ref fails, sb, "terrain work waits for builder", TerrainWorkPending());
             Expect(ref fails, sb, "clear forest drops timber", ClearForest());
             Expect(ref fails, sb, "quarry rock drops gold", QuarryRock());
             Expect(ref fails, sb, "chop tree drops timber", ChopTreeDropsTimber());
@@ -78,46 +76,6 @@ namespace Asterra.Gameplay
                 new TerrainWorkCommand { Issuer = p, Kind = TerrainWorkKind.RaiseBerm, X = 20f, Z = 20f, HalfExtent = 5f },
             });
             return sim.Environment.Grid.TryGetCell(20f, 20f, out var cell)
-                   && cell.TerrainDefIndex == DefaultTerrainCatalog.Berm;
-        }
-
-        private static bool DigMoatPaints()
-        {
-            Boot(out var sim, out _, out var wallet, out var p, out var builder);
-            wallet.Seed(p, ResourceType.Gold, 200);
-            wallet.Seed(p, ResourceType.Timber, 100);
-            builder.X = 24f;
-            builder.Z = 24f;
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new TerrainWorkCommand { Issuer = p, Kind = TerrainWorkKind.DigMoat, X = 24f, Z = 24f, HalfExtent = 6f },
-            });
-            return sim.Environment.Grid.TryGetCell(24f, 24f, out var cell)
-                   && cell.TerrainDefIndex == DefaultTerrainCatalog.WaterShallow;
-        }
-
-        private static bool TerrainWorkPending()
-        {
-            Boot(out var sim, out _, out var wallet, out var p, out var builder);
-            wallet.Seed(p, ResourceType.Gold, 200);
-            wallet.Seed(p, ResourceType.Timber, 100);
-            // Builder far from site — command must queue, not vanish.
-            builder.X = 200f;
-            builder.Z = 200f;
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new TerrainWorkCommand { Issuer = p, Kind = TerrainWorkKind.RaiseBerm, X = 30f, Z = 30f, HalfExtent = 5f },
-            });
-            if (sim.Environment.Grid.TryGetCell(30f, 30f, out var early)
-                && early.TerrainDefIndex == DefaultTerrainCatalog.Berm)
-                return false;
-
-            builder.X = 30f;
-            builder.Z = 30f;
-            for (int i = 0; i < 5; i++)
-                sim.Tick(0.05f);
-
-            return sim.Environment.Grid.TryGetCell(30f, 30f, out var cell)
                    && cell.TerrainDefIndex == DefaultTerrainCatalog.Berm;
         }
 
@@ -384,7 +342,7 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 100);
             wallet.Seed(p, ResourceType.Timber, 100);
             builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 0f, 0f);
         }
 
         private static void Expect(ref int fails, StringBuilder sb, string name, bool ok)

@@ -6,9 +6,8 @@ namespace Asterra.Gameplay.Presentation
     /// <summary>Clickable view bound to a sim entity.</summary>
     public sealed class EntityView : MonoBehaviour
     {
-        // Free-art OBJs are ~1.3–1.85 local units tall; these multipliers put them at RTS map size.
-        public const float UnitVisualScale = 14f;
-        public const float BuildingVisualScale = 18f;
+        public const float UnitVisualScale = 8f;
+        public const float BuildingVisualScale = 2.5f;
         public const float BuildingCollapseSeconds = 0.42f;
 
         public SimEntityId Id { get; private set; }
@@ -49,7 +48,6 @@ namespace Asterra.Gameplay.Presentation
         private bool _collapsing;
         private float _animPhase;
         private GameObject _scaffold;
-        private bool _isWorking;
 
         public void Initialize(SimEntityId id, bool isUnit, PlayerId owner, string definitionId, byte factionIndex)
         {
@@ -83,7 +81,7 @@ namespace Asterra.Gameplay.Presentation
             {
                 _squadSize = 1;
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
-                    visualScale *= 1.35f;
+                    visualScale *= 1.65f;
             }
 
             transform.localScale = Vector3.one * visualScale;
@@ -162,30 +160,10 @@ namespace Asterra.Gameplay.Presentation
             {
                 _completePopUntil = Time.time + 0.38f;
                 PlayBuildCompleteFlash();
-                if (_bodyRoot != null)
-                {
-                    _bodyRoot.localPosition = Vector3.zero;
-                    _bodyRoot.localRotation = Quaternion.identity;
-                    _bodyRoot.localScale = Vector3.one;
-                }
             }
 
             if (_scaffold != null)
                 _scaffold.SetActive(state == BuildingState.Constructing || state == BuildingState.Ghost);
-        }
-
-        /// <summary>Builder hammer bob while actively constructing a site.</summary>
-        public void SetWorking(bool working)
-        {
-            if (_isWorking == working)
-                return;
-            _isWorking = working;
-            if (!working && _bodyRoot != null && IsUnit)
-            {
-                _bodyRoot.localPosition = Vector3.zero;
-                _bodyRoot.localRotation = Quaternion.identity;
-                _bodyRoot.localScale = Vector3.one;
-            }
         }
 
         /// <summary>Start a short collapse animation before the view is destroyed.</summary>
@@ -228,30 +206,41 @@ namespace Asterra.Gameplay.Presentation
             bool ew = (links & 2) != 0 || (links & 8) != 0;
             bool ns = (links & 1) != 0 || (links & 4) != 0;
             float yaw = yawDegrees;
-            float sx = BuildingVisualScale * 1.35f;
+            float sx = BuildingVisualScale;
             float sy = BuildingVisualScale;
-            float sz = BuildingVisualScale * 0.85f;
-            // Mesh is long on local X. Align that axis with the run of the wall.
+            float sz = BuildingVisualScale;
             if (ew && !ns)
             {
-                // Neighbours east/west → span E–W → yaw 0.
-                yaw = 0f;
+                yaw = 90f;
+                sx = BuildingVisualScale * 1.35f;
+                sz = BuildingVisualScale * 0.85f;
             }
             else if (ns && !ew)
             {
-                // Neighbours north/south → span N–S → yaw 90.
-                yaw = 90f;
+                yaw = 0f;
+                sx = BuildingVisualScale * 0.85f;
+                sz = BuildingVisualScale * 1.35f;
             }
             else if (ew && ns)
             {
-                // Corner / cross: keep placement yaw, slightly squarer footprint.
                 sx = BuildingVisualScale * 1.15f;
                 sz = BuildingVisualScale * 1.15f;
             }
             else
             {
-                // Isolated: honour placement yaw; keep long-on-X (no axis swap).
-                yaw = yawDegrees;
+                // Isolated segment: honour placement yaw and elongate along local X.
+                bool sideways = Mathf.Abs(Mathf.DeltaAngle(yaw, 90f)) < 1f
+                                || Mathf.Abs(Mathf.DeltaAngle(yaw, 270f)) < 1f;
+                if (sideways)
+                {
+                    sx = BuildingVisualScale * 0.85f;
+                    sz = BuildingVisualScale * 1.35f;
+                }
+                else
+                {
+                    sx = BuildingVisualScale * 1.35f;
+                    sz = BuildingVisualScale * 0.85f;
+                }
             }
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -513,16 +502,6 @@ namespace Asterra.Gameplay.Presentation
 
             if (IsUnit)
             {
-                float ut = Time.time + _animPhase;
-                if (_isWorking)
-                {
-                    float swing = Mathf.Sin(ut * 11f);
-                    _bodyRoot.localPosition = new Vector3(0f, Mathf.Abs(swing) * 0.4f, 0f);
-                    _bodyRoot.localRotation = Quaternion.Euler(swing * 14f, 0f, swing * -6f);
-                    _bodyRoot.localScale = Vector3.one;
-                    return;
-                }
-
                 float bob = 0f;
                 if (Time.time < _hitBobUntil)
                 {

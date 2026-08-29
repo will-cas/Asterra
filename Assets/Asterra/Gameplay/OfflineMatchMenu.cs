@@ -109,23 +109,16 @@ namespace Asterra.Gameplay
 
             // Top-right lobby chrome.
             float chipY = y + 18f;
-            if (LobbyChip(new Rect(x + w - 360f, chipY, 100f, 28f), "Profile"))
+            if (LobbyChip(new Rect(x + w - 248f, chipY, 100f, 28f), "Profile"))
             {
                 AsterraAudio.PlayUiClick();
                 _overlay = AsterraMenuPanels.Overlay.Profile;
             }
 
-            if (LobbyChip(new Rect(x + w - 248f, chipY, 100f, 28f), "Options"))
+            if (LobbyChip(new Rect(x + w - 136f, chipY, 100f, 28f), "Options"))
             {
                 AsterraAudio.PlayUiClick();
                 _overlay = AsterraMenuPanels.Overlay.Options;
-            }
-
-            if (LobbyChip(new Rect(x + w - 136f, chipY, 100f, 28f), "Controls"))
-            {
-                AsterraAudio.PlayUiClick();
-                AsterraMenuPanels.PrepareControls(AsterraMenuPanels.Overlay.None);
-                _overlay = AsterraMenuPanels.Overlay.Controls;
             }
 
             float contentX = x + 28f;
@@ -216,7 +209,7 @@ namespace Asterra.Gameplay
             GUI.color = new Color(0.7f, 0.72f, 0.68f, 0.75f);
             GUI.Label(
                 new Rect(x + 28f, y + h - footH - 2f, w - 56f, footH),
-                "Click keep markers to pick spawn",
+                "Click keep markers to pick spawn  ·  ‹ › cycle maps  ·  F5/F9 in match",
                 HudStyle.Caption);
             GUI.color = Color.white;
 

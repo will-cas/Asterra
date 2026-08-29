@@ -24,12 +24,10 @@ namespace Asterra.Gameplay.Audio
     }
 
     /// <summary>
-    /// Loads clips from <c>Resources/Asterra/Audio</c> (Kenney CC0). No procedural synth fallback.
+    /// Procedural placeholder audio (no asset pack required). Replace clips later via Resources/Asterra/Audio.
     /// </summary>
     public sealed class AsterraAudio : MonoBehaviour
     {
-        private const string ResourceRoot = "Asterra/Audio/";
-
         private static AsterraAudio _instance;
 
         [SerializeField] private float masterVolume = 0.85f;
@@ -153,33 +151,25 @@ namespace Asterra.Gameplay.Audio
 
         private void BuildLibrary()
         {
-            _clips[AsterraSfx.UiClick] = LoadClip("ui_click");
-            _clips[AsterraSfx.Select] = LoadClip("select");
-            _clips[AsterraSfx.OrderMove] = LoadClip("order_move");
-            _clips[AsterraSfx.OrderAttack] = LoadClip("order_attack");
-            _clips[AsterraSfx.OrderBuild] = LoadClip("order_build");
-            _clips[AsterraSfx.OrderGather] = LoadClip("order_gather");
-            _clips[AsterraSfx.OrderTrain] = LoadClip("order_train");
-            _clips[AsterraSfx.OrderResearch] = LoadClip("order_research");
-            _clips[AsterraSfx.Hit] = LoadClip("hit");
-            _clips[AsterraSfx.Death] = LoadClip("death");
-            _clips[AsterraSfx.BuildComplete] = LoadClip("build_done");
-            _clips[AsterraSfx.Deposit] = LoadClip("deposit");
-            _clips[AsterraSfx.Capture] = LoadClip("capture");
-            _clips[AsterraSfx.Victory] = LoadClip("victory");
-            _clips[AsterraSfx.Defeat] = LoadClip("defeat");
-            _clips[AsterraSfx.Invalid] = LoadClip("invalid");
+            _clips[AsterraSfx.UiClick] = Tone("ui_click", 880f, 0.04f, 0.22f, soft: false);
+            _clips[AsterraSfx.Select] = Tone("select", 620f, 0.05f, 0.18f, soft: false);
+            _clips[AsterraSfx.OrderMove] = Sweep("order_move", 320f, 480f, 0.09f, 0.28f);
+            _clips[AsterraSfx.OrderAttack] = NoiseBurst("order_attack", 0.08f, 0.35f, bright: true);
+            _clips[AsterraSfx.OrderBuild] = Sweep("order_build", 180f, 260f, 0.12f, 0.3f);
+            _clips[AsterraSfx.OrderGather] = Tone("order_gather", 240f, 0.08f, 0.25f, soft: true);
+            _clips[AsterraSfx.OrderTrain] = Sweep("order_train", 400f, 700f, 0.14f, 0.28f);
+            _clips[AsterraSfx.OrderResearch] = Sweep("order_research", 500f, 900f, 0.16f, 0.25f);
+            _clips[AsterraSfx.Hit] = NoiseBurst("hit", 0.05f, 0.4f, bright: true);
+            _clips[AsterraSfx.Death] = Sweep("death", 220f, 80f, 0.22f, 0.4f);
+            _clips[AsterraSfx.BuildComplete] = Chord("build_done", 360f, 540f, 0.18f, 0.32f);
+            _clips[AsterraSfx.Deposit] = Tone("deposit", 760f, 0.07f, 0.22f, soft: false);
+            _clips[AsterraSfx.Capture] = Chord("capture", 440f, 660f, 0.2f, 0.3f);
+            _clips[AsterraSfx.Victory] = Chord("victory", 523f, 784f, 0.55f, 0.4f);
+            _clips[AsterraSfx.Defeat] = Sweep("defeat", 300f, 90f, 0.6f, 0.4f);
+            _clips[AsterraSfx.Invalid] = Tone("invalid", 140f, 0.08f, 0.3f, soft: true);
 
-            _musicBed = LoadClip("music_bed");
-            _ambienceBed = LoadClip("ambience");
-        }
-
-        private static AudioClip LoadClip(string resourceName)
-        {
-            var clip = Resources.Load<AudioClip>(ResourceRoot + resourceName);
-            if (clip == null)
-                Debug.LogError($"[Asterra] Missing audio clip Resources/{ResourceRoot}{resourceName}");
-            return clip;
+            _musicBed = SoftPad("music_bed", 110f, 165f, 4.5f);
+            _ambienceBed = SoftNoise("ambience", 3.2f, 0.35f);
         }
 
         private void StartBeds()
@@ -213,6 +203,120 @@ namespace Asterra.Gameplay.Audio
                 return;
             var src = sfx == AsterraSfx.UiClick || sfx == AsterraSfx.Select ? _ui : _sfx;
             src.PlayOneShot(clip, Mathf.Clamp01(sfxVolume * masterVolume * volumeScale));
+        }
+
+        private static AudioClip Tone(string name, float hz, float seconds, float amp, bool soft)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                float t = i / (float)rate;
+                float env = soft
+                    ? Mathf.Sin(Mathf.PI * (i / (float)(samples - 1)))
+                    : Mathf.Exp(-t * 18f);
+                data[i] = Mathf.Sin(2f * Mathf.PI * hz * t) * amp * env;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip Sweep(string name, float fromHz, float toHz, float seconds, float amp)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                float u = i / (float)(samples - 1);
+                float hz = Mathf.Lerp(fromHz, toHz, u);
+                float t = i / (float)rate;
+                float env = Mathf.Sin(Mathf.PI * u);
+                data[i] = Mathf.Sin(2f * Mathf.PI * hz * t) * amp * env;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip Chord(string name, float aHz, float bHz, float seconds, float amp)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                float t = i / (float)rate;
+                float u = i / (float)(samples - 1);
+                float env = Mathf.Sin(Mathf.PI * u);
+                float s = Mathf.Sin(2f * Mathf.PI * aHz * t) + 0.7f * Mathf.Sin(2f * Mathf.PI * bHz * t);
+                data[i] = s * 0.5f * amp * env;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip NoiseBurst(string name, float seconds, float amp, bool bright)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            float prev = 0f;
+            for (int i = 0; i < samples; i++)
+            {
+                float n = (Random.value * 2f - 1f);
+                if (!bright)
+                    n = (n + prev) * 0.5f;
+                prev = n;
+                float env = Mathf.Exp(-(i / (float)rate) * 28f);
+                data[i] = n * amp * env;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip SoftPad(string name, float aHz, float bHz, float seconds)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            for (int i = 0; i < samples; i++)
+            {
+                float t = i / (float)rate;
+                float s = Mathf.Sin(2f * Mathf.PI * aHz * t) * 0.35f
+                          + Mathf.Sin(2f * Mathf.PI * bHz * t) * 0.25f
+                          + Mathf.Sin(2f * Mathf.PI * (aHz * 1.5f) * t) * 0.12f;
+                data[i] = s * 0.22f;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip SoftNoise(string name, float seconds, float amp)
+        {
+            int rate = 22050;
+            int samples = Mathf.Max(64, (int)(rate * seconds));
+            var data = new float[samples];
+            float state = 0f;
+            for (int i = 0; i < samples; i++)
+            {
+                state = state * 0.97f + (Random.value * 2f - 1f) * 0.03f;
+                data[i] = state * amp;
+            }
+
+            var clip = AudioClip.Create(name, samples, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
         }
     }
 }

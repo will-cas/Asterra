@@ -39,12 +39,12 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "west link on B", (b.WallLinks & 8) != 0);
 
             var keep = sim.SpawnBuilding(
-                ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.ArcaneumId, -80f, -80f, startActive: true);
+                ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.IronKeepId, -80f, -80f, startActive: true);
             Expect(ref fails, sb, "keep garrison", keep.AllowsGarrison && keep.GarrisonCapacity >= 8);
             Expect(ref fails, sb, "keep category castle", keep.Category == BuildingCategory.Castle);
 
             sim.AddTerritory(ids.Next(), 100f, 100f, 40f, goldPerSecond: 1);
-            sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 100f, 100f);
+            sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.MilitiaId, 100f, 100f);
             bool sawStart = false;
             bool sawComplete = false;
             for (int i = 0; i < 200; i++)
@@ -65,7 +65,7 @@ namespace Asterra.Gameplay
             // Garrison enter/exit.
             var tower = sim.SpawnBuilding(
                 ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.WatchtowerId, 200f, 200f, startActive: true);
-            var grunt = sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 205f, 200f);
+            var grunt = sim.SpawnUnit(ids.Next(), new PlayerId(0), new FactionId(0), FactionDefaultContent.MilitiaId, 205f, 200f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new EnterGarrisonCommand
@@ -101,7 +101,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = new PlayerId(0),
-                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
+                    BuildingDefId = FactionDefaultContent.BarracksId,
                     X = -120f,
                     Z = 120f,
                 },
@@ -111,7 +111,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < sim.Buildings.Count; i++)
             {
                 var snap = sim.Buildings[i];
-                if (snap.DefinitionId == FactionDefaultContent.ArcaneAcademyId
+                if (snap.DefinitionId == FactionDefaultContent.BarracksId
                     && snap.State == BuildingState.Constructing
                     && Abs(snap.X + 120f) < 0.5f)
                 {
@@ -129,7 +129,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 new PlayerId(0),
                 new FactionId(0),
-                FactionDefaultContent.ArcaneAcademyId,
+                FactionDefaultContent.BarracksId,
                 siteX,
                 siteZ,
                 startActive: false);
@@ -146,7 +146,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 new PlayerId(0),
                 new FactionId(0),
-                FactionDefaultContent.VeiledBuilderId,
+                FactionDefaultContent.IronBuilderId,
                 siteX + 2f,
                 siteZ + 2f);
             float remainingAtArrive = foundation.BuildSecondsRemaining;
@@ -163,7 +163,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 new PlayerId(0),
                 new FactionId(0),
-                FactionDefaultContent.VeiledBuilderId,
+                FactionDefaultContent.IronBuilderId,
                 keep.X + 55f,
                 keep.Z + 10f);
             int beforeAttach = sim.Buildings.Count;

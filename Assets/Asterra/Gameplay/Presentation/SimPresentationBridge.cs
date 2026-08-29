@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Asterra.Core;
 using Asterra.Core.World;
-using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Presentation;
 using UnityEngine;
 
@@ -156,36 +155,9 @@ namespace Asterra.Gameplay
                 view.SyncPresentation(new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z));
                 view.SetHealth(snap.Health, snap.MaxHealth);
                 view.SetEquipmentVisuals(snap.EquipmentVisualFlags);
-                view.SetWorking(IsBuilderWorking(snap));
             }
 
             RemoveMissing(_unitViews, alive);
-        }
-
-        private bool IsBuilderWorking(UnitSnapshot snap)
-        {
-            if (match?.World == null || match.Definitions == null)
-                return false;
-            if (!match.Definitions.TryGetUnit(snap.DefinitionId, out var def) || !def.IsBuilder)
-                return false;
-            if (snap.HasAttackTarget)
-                return false;
-
-            float workR = SkirmishWorldSim.ConstructionWorkRadius;
-            float r2 = workR * workR;
-            var buildings = match.World.Buildings;
-            for (int i = 0; i < buildings.Count; i++)
-            {
-                var b = buildings[i];
-                if (b.Owner != snap.Owner || b.State != BuildingState.Constructing)
-                    continue;
-                float dx = b.X - snap.X;
-                float dz = b.Z - snap.Z;
-                if (dx * dx + dz * dz <= r2)
-                    return true;
-            }
-
-            return false;
         }
 
         private void SyncBuildings(IReadOnlyList<BuildingSnapshot> buildings)
@@ -273,15 +245,14 @@ namespace Asterra.Gameplay
             rend.sharedMaterial = CreateColorMaterial(AsterraMeshLibrary.ResourceColor(snap.Type));
 
             // Gold nugget vs timber log: different world scales for silhouette.
-            // Gold mesh ~2.3 tall; timber log ~0.25 tall — timber needs a larger multiplier for a readable pile.
             bool gold = snap.Type == ResourceType.Gold;
             go.transform.localScale = gold
-                ? new Vector3(12f, 12f, 12f)
-                : new Vector3(28f, 28f, 28f);
+                ? new Vector3(7.5f, 7.5f, 7.5f)
+                : new Vector3(6.5f, 6.5f, 6.5f);
 
             var sphere = go.AddComponent<SphereCollider>();
-            sphere.center = new Vector3(0f, gold ? 0.55f : 0.35f, 0f);
-            sphere.radius = gold ? 1.0f : 0.9f;
+            sphere.center = new Vector3(0f, 0.6f, 0f);
+            sphere.radius = gold ? 1.2f : 1.4f;
 
             var view = go.AddComponent<ResourceNodeView>();
             view.Initialize(snap.Id, snap.Type);
@@ -337,13 +308,12 @@ namespace Asterra.Gameplay
             var rend = go.AddComponent<MeshRenderer>();
             rend.sharedMaterial = CreateColorMaterial(color);
 
-            // prop_tree ~1.5 tall, prop_rock ~0.5, prop_bridge ~1.2 — bump into RTS silhouette space.
-            float scale = snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 8f : 12f;
+            float scale = snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 1.15f : 1.35f;
             go.transform.localScale = new Vector3(scale, scale, scale);
 
             var sphere = go.AddComponent<SphereCollider>();
-            sphere.center = new Vector3(0f, snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 0.55f : 0.7f, 0f);
-            sphere.radius = snap.FootprintRadius > 0.5f ? snap.FootprintRadius * 0.35f : 0.55f;
+            sphere.center = new Vector3(0f, 1.2f, 0f);
+            sphere.radius = snap.FootprintRadius > 0.5f ? snap.FootprintRadius * 0.35f : 1.4f;
 
             var view = go.AddComponent<DestructibleView>();
             view.Initialize(snap.Id, snap.DefinitionId, color);
@@ -433,17 +403,7 @@ namespace Asterra.Gameplay
                 }
 
                 if (!view.IsCollapsing)
-                {
-                    // Earthwork scaffolds vanish on complete — no death collapse.
-                    if (FactionDefaultContent.IsEarthworkBuildingId(view.DefinitionId))
-                    {
-                        Destroy(view.gameObject);
-                        _buildingViews.Remove(id);
-                        continue;
-                    }
-
                     view.BeginCollapse();
-                }
 
                 if (view.CollapseFinished)
                 {

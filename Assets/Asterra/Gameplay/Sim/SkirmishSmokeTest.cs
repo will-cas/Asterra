@@ -146,8 +146,8 @@ namespace Asterra.Gameplay
 
             var player = new PlayerId(0);
             var enemy = new PlayerId(1);
-            var playerFaction = FactionDefaultContent.VeiledInheritance;
-            var enemyFaction = FactionDefaultContent.MundorCrown;
+            var playerFaction = FactionDefaultContent.IronCovenant;
+            var enemyFaction = FactionDefaultContent.VerdantCourt;
             wallet.Seed(player, ResourceType.Gold, 900);
             wallet.Seed(player, ResourceType.Timber, 300);
             wallet.Seed(enemy, ResourceType.Gold, 500);

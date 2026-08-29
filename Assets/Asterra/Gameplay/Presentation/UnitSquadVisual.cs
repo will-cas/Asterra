@@ -86,7 +86,7 @@ namespace Asterra.Gameplay.Presentation
         public static float TroopLocalScale(int squadSize)
         {
             // Keep individuals large enough to read at RTS camera distance.
-            // Parent EntityView already applies UnitVisualScale (~14).
+            // Parent EntityView already applies UnitVisualScale (~8).
             if (squadSize <= 1)
                 return 1f;
             if (squadSize <= 2)
@@ -113,7 +113,7 @@ namespace Asterra.Gameplay.Presentation
 
         private static float SpacingFor(int squadSize)
         {
-            // Local spacing × UnitVisualScale(~14) ≈ world gap between troop centres.
+            // Local spacing × UnitVisualScale(~8) ≈ world gap between troop centres.
             // 0.55 * 8 ≈ 4.4u — wide ranks so companies read as many soldiers.
             if (squadSize <= 2)
                 return 0.72f;

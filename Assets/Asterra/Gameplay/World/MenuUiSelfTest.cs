@@ -36,7 +36,6 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "map catalog builtin blackridge", MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass).Id == MapCatalog.BlackridgePassId);
             Expect(ref fails, sb, "overlay enum pause", (int)AsterraMenuPanels.Overlay.Pause == 3);
             Expect(ref fails, sb, "overlay enum profile", (int)AsterraMenuPanels.Overlay.Profile == 2);
-            Expect(ref fails, sb, "overlay enum controls", (int)AsterraMenuPanels.Overlay.Controls == 4);
             Expect(ref fails, sb, "ui scale default in range",
                 AsterraSettings.UiScale >= AsterraSettings.UiScaleMin
                 && AsterraSettings.UiScale <= AsterraSettings.UiScaleMax);

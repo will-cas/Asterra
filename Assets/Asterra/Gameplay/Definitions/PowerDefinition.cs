@@ -17,7 +17,6 @@ namespace Asterra.Gameplay
         public float EffectMagnitude = 3f;
         public float BuildingMitigation;
         public bool IsPassive;
-        public string SpawnUnitDefinitionId;
 
         public PowerDefData ToData()
         {
@@ -32,7 +31,6 @@ namespace Asterra.Gameplay
                 EffectMagnitude = EffectMagnitude,
                 BuildingMitigation = BuildingMitigation,
                 IsPassive = IsPassive,
-                SpawnUnitDefinitionId = SpawnUnitDefinitionId,
             };
         }
     }
@@ -46,7 +44,7 @@ namespace Asterra.Gameplay
         public static FactionRoster ToRoster(this FactionDefinition def)
         {
             if (def == null)
-                return FactionDefaultContent.VeiledInheritance;
+                return FactionDefaultContent.IronCovenant;
 
             var fallback = FactionDefaultContent.Get(new FactionId(def.FactionIndex));
             var roster = new FactionRoster
@@ -68,7 +66,6 @@ namespace Asterra.Gameplay
                 TowerBuildingId = fallback.TowerBuildingId,
                 WallBuildingId = fallback.WallBuildingId,
                 OutpostBuildingId = fallback.OutpostBuildingId,
-                ExtraBuildingIds = fallback.ExtraBuildingIds,
                 BasicUpgradeId = fallback.BasicUpgradeId,
                 KeepUpgradeIds = fallback.KeepUpgradeIds,
                 EquipmentUpgradeIds = fallback.EquipmentUpgradeIds,

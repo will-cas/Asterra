@@ -174,10 +174,10 @@ namespace Asterra.Gameplay
             var p1 = new PlayerId(1);
             wallet.Seed(p0, ResourceType.Gold, 2000);
             wallet.Seed(p1, ResourceType.Gold, 2000);
-            sim.SpawnBuilding(ids.Next(), p0, new FactionId(0), FactionDefaultContent.ArcaneumId, -80f, 0f, startActive: true);
-            sim.SpawnBuilding(ids.Next(), p1, new FactionId(0), FactionDefaultContent.ArcaneumId, 80f, 0f, startActive: true);
-            sim.SpawnUnit(ids.Next(), p0, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, -70f, 0f);
-            sim.SpawnUnit(ids.Next(), p1, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 70f, 0f);
+            sim.SpawnBuilding(ids.Next(), p0, new FactionId(0), FactionDefaultContent.IronKeepId, -80f, 0f, startActive: true);
+            sim.SpawnBuilding(ids.Next(), p1, new FactionId(0), FactionDefaultContent.IronKeepId, 80f, 0f, startActive: true);
+            sim.SpawnUnit(ids.Next(), p0, new FactionId(0), FactionDefaultContent.MilitiaId, -70f, 0f);
+            sim.SpawnUnit(ids.Next(), p1, new FactionId(0), FactionDefaultContent.MilitiaId, 70f, 0f);
             return sim;
         }
 

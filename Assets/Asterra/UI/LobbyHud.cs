@@ -68,7 +68,7 @@ namespace Asterra.UI
 
             by += 44f;
             GUI.Label(new Rect(bx, by, 120f, 24f), "Faction", HudStyle.Label);
-            string fname = FactionDefaultContent.All[factionIndex % FactionDefaultContent.All.Length].DisplayName;
+            string fname = FactionDefaultContent.All[factionIndex % 3].DisplayName;
             if (IconBtn(new Rect(bx + 120f, by, 240f, 28f), fname))
                 OnCycleFaction();
 
@@ -116,7 +116,7 @@ namespace Asterra.UI
 
         public void OnCycleFaction()
         {
-            factionIndex = (factionIndex + 1) % FactionDefaultContent.All.Length;
+            factionIndex = (factionIndex + 1) % 3;
             lobby?.SetLocalFaction(factionIndex);
             AsterraAudio.PlayUiClick();
         }

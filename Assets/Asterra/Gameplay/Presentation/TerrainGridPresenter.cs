@@ -22,7 +22,6 @@ namespace Asterra.Gameplay.Presentation
         private Transform _root;
         private WorldTerrainGrid _builtForGrid;
         private int _builtCellFingerprint = int.MinValue;
-        private ulong _builtMutationVersion = ulong.MaxValue;
         private Material _terrainMat;
         private Material _waterMat;
         private Material _trunkMat;
@@ -41,9 +40,8 @@ namespace Asterra.Gameplay.Presentation
         private float _heightCellSize = 1f;
 
         /// <summary>
-        /// Units render at <see cref="EntityView.UnitVisualScale"/> (~26 world units tall).
-        /// Procedural props were authored for ~1-unit silhouettes — multiply into unit space.
-        /// Left at 5.5: doodad trees/rocks already read at map scale; bump if they look tiny next to entities.
+        /// Units render at <see cref="EntityView.UnitVisualScale"/> (~14 world units tall).
+        /// Props were authored for 1-unit silhouettes — multiply into that space.
         /// </summary>
         private const float PropToUnitScale = 5.5f;
 
@@ -66,20 +64,18 @@ namespace Asterra.Gameplay.Presentation
             if (grid == null)
                 return;
 
-            // Prefer MutationVersion: digs/berms are small and sparse fingerprints can miss them.
-            if (_root != null
-                && _builtForGrid == grid
-                && _builtMutationVersion == grid.MutationVersion)
+            int fingerprint = ComputeLayoutFingerprint(grid);
+            if (_root != null && _builtForGrid == grid && _builtCellFingerprint == fingerprint)
                 return;
 
-            int fingerprint = ComputeLayoutFingerprint(grid);
-            Rebuild(grid, fingerprint, grid.MutationVersion);
+            Rebuild(grid, fingerprint);
         }
 
         private static int ComputeLayoutFingerprint(WorldTerrainGrid grid)
         {
             unchecked
             {
+                // MutationVersion must dominate: sparse cell samples miss small digs/berms.
                 int hash = grid.Width * 73856093 ^ grid.Height * 19349663;
                 hash = (hash * 16777619) ^ (int)grid.MutationVersion;
                 hash = (hash * 16777619) ^ (int)(grid.MutationVersion >> 32);
@@ -100,11 +96,10 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private void Rebuild(WorldTerrainGrid grid, int fingerprint, ulong mutationVersion)
+        private void Rebuild(WorldTerrainGrid grid, int fingerprint)
         {
             _builtForGrid = grid;
             _builtCellFingerprint = fingerprint;
-            _builtMutationVersion = mutationVersion;
 
             if (_root != null)
                 Destroy(_root.gameObject);
@@ -146,27 +141,22 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < smoothHeight.Length; i++)
             {
                 var cat = categories[i];
-                ushort def = defIndices[i];
-                float target = yBias + HeightFor(cat, def);
-                if (IsEarthworkDef(def) || cat == TerrainCategory.Trench || cat == TerrainCategory.Gap)
-                {
-                    // Keep digs/berms sharp — blur would erase them.
-                    smoothHeight[i] = target;
-                }
-                else if (IsWater(cat))
+                float target = yBias + HeightFor(cat, defIndices[i]);
+                if (IsWater(cat))
                     smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.35f);
                 else if (cat == TerrainCategory.Mountain)
                     smoothHeight[i] = Mathf.Lerp(smoothHeight[i], Mathf.Max(smoothHeight[i], target), 0.72f);
                 else if (cat == TerrainCategory.Hill)
                     smoothHeight[i] = Mathf.Lerp(smoothHeight[i], Mathf.Max(smoothHeight[i], target), 0.45f);
+                else if (cat == TerrainCategory.Trench || cat == TerrainCategory.Gap)
+                    smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.05f);
             }
 
-            BuildContinuousMesh(grid, smoothHeight, colors, categories, defIndices);
+            BuildContinuousMesh(grid, smoothHeight, colors, categories);
             CacheHeightSamples(grid, smoothHeight);
             BuildWaterSurface(grid, smoothHeight, categories);
             ScatterTrees(grid, smoothHeight, categories, propRoot);
             ScatterDeco(grid, smoothHeight, categories, propRoot);
-            ScatterEarthworkMarkers(grid, smoothHeight, defIndices, propRoot);
         }
 
         private void CacheHeightSamples(WorldTerrainGrid grid, float[] heights)
@@ -211,8 +201,7 @@ namespace Asterra.Gameplay.Presentation
             WorldTerrainGrid grid,
             float[] heights,
             Color[] colors,
-            TerrainCategory[] categories,
-            ushort[] defIndices)
+            TerrainCategory[] categories)
         {
             int w = grid.Width;
             int h = grid.Height;
@@ -225,8 +214,8 @@ namespace Asterra.Gameplay.Presentation
                 landColors[i] = IsWater(categories[i])
                     ? new Color(0.2f, 0.42f, 0.58f)
                     : colors[i];
-                if (categories[i] == TerrainCategory.Trench || IsEarthworkDef(defIndices[i]))
-                    landColors[i] = ColorFor(categories[i], defIndices[i]);
+                if (categories[i] == TerrainCategory.Trench)
+                    landColors[i] = new Color(0.52f, 0.42f, 0.28f);
                 if (categories[i] == TerrainCategory.Gap)
                     landColors[i] = new Color(0.3f, 0.28f, 0.26f);
             }
@@ -242,32 +231,13 @@ namespace Asterra.Gameplay.Presentation
                     float hSum = 0f;
                     Color cSum = Color.clear;
                     int n = 0;
-                    float digMin = float.MaxValue;
-                    float bermMax = float.MinValue;
-                    bool anyDig = false;
-                    bool anyBerm = false;
-                    Color earthC = Color.clear;
-                    SampleCornerCell(heights, landColors, defIndices, w, h, cx - 1, cz - 1,
-                        ref hSum, ref cSum, ref n, ref digMin, ref bermMax, ref anyDig, ref anyBerm, ref earthC);
-                    SampleCornerCell(heights, landColors, defIndices, w, h, cx, cz - 1,
-                        ref hSum, ref cSum, ref n, ref digMin, ref bermMax, ref anyDig, ref anyBerm, ref earthC);
-                    SampleCornerCell(heights, landColors, defIndices, w, h, cx - 1, cz,
-                        ref hSum, ref cSum, ref n, ref digMin, ref bermMax, ref anyDig, ref anyBerm, ref earthC);
-                    SampleCornerCell(heights, landColors, defIndices, w, h, cx, cz,
-                        ref hSum, ref cSum, ref n, ref digMin, ref bermMax, ref anyDig, ref anyBerm, ref earthC);
+                    AccumulateCorner(heights, landColors, w, h, cx - 1, cz - 1, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx, cz - 1, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx - 1, cz, ref hSum, ref cSum, ref n);
+                    AccumulateCorner(heights, landColors, w, h, cx, cz, ref hSum, ref cSum, ref n);
                     int i = cz * cw + cx;
-                    float avg = n > 0 ? hSum / n : 0f;
-                    if (anyDig)
-                        cornerH[i] = digMin;
-                    else if (anyBerm)
-                        cornerH[i] = bermMax;
-                    else
-                        cornerH[i] = avg;
-                    // Keep dig/berm tint undiluted — averaged grass washes earthworks out.
-                    if (anyDig || anyBerm)
-                        cornerC[i] = earthC;
-                    else
-                        cornerC[i] = n > 0 ? cSum / n : ColorFor(TerrainCategory.GrassShort);
+                    cornerH[i] = n > 0 ? hSum / n : 0f;
+                    cornerC[i] = n > 0 ? cSum / n : ColorFor(TerrainCategory.GrassShort);
                 }
             }
 
@@ -293,13 +263,7 @@ namespace Asterra.Gameplay.Presentation
                                    - Mathf.PerlinNoise(worldX * 0.012f + 9.7f, worldZ * 0.012f) * 0.4f;
                     int cx = Mathf.Clamp(Mathf.FloorToInt(u), 0, w - 1);
                     int cz = Mathf.Clamp(Mathf.FloorToInt(v), 0, h - 1);
-                    var cellCat = categories[cz * w + cx];
-                    ushort cellDef = defIndices[cz * w + cx];
-                    // Ripple erases shallow-looking digs from a top-down camera — skip earthworks.
-                    if (!IsWater(cellCat)
-                        && !IsEarthworkDef(cellDef)
-                        && cellCat != TerrainCategory.Trench
-                        && cellCat != TerrainCategory.Gap)
+                    if (!IsWater(categories[cz * w + cx]))
                         y += ripple;
 
                     int idx = vz * vertsX + vx;
@@ -944,7 +908,7 @@ namespace Asterra.Gameplay.Presentation
 
         private static float MicroRelief(int cx, int cz, TerrainCategory category)
         {
-            if (IsWater(category) || category == TerrainCategory.Mountain || category == TerrainCategory.Trench || category == TerrainCategory.Gap)
+            if (IsWater(category) || category == TerrainCategory.Mountain)
                 return 0f;
             return (((cx * 17 + cz * 29) & 7) - 3) * 0.08f;
         }
@@ -969,189 +933,16 @@ namespace Asterra.Gameplay.Presentation
 
             _builtForGrid = null;
             _builtCellFingerprint = int.MinValue;
-            _builtMutationVersion = ulong.MaxValue;
-        }
-
-        private static bool IsEarthworkDef(ushort defIndex)
-        {
-            return defIndex == DefaultTerrainCatalog.Trench
-                   || defIndex == DefaultTerrainCatalog.Berm
-                   || defIndex == DefaultTerrainCatalog.SpikePit
-                   || defIndex == DefaultTerrainCatalog.Debris
-                   || defIndex == DefaultTerrainCatalog.Crater
-                   || defIndex == DefaultTerrainCatalog.Scorched
-                   || defIndex == DefaultTerrainCatalog.WaterShallow;
-        }
-
-        private static bool IsDigEarthwork(ushort defIndex) =>
-            defIndex == DefaultTerrainCatalog.Trench
-            || defIndex == DefaultTerrainCatalog.SpikePit
-            || defIndex == DefaultTerrainCatalog.Crater
-            || defIndex == DefaultTerrainCatalog.Gap;
-
-        private static bool IsRaiseEarthwork(ushort defIndex) =>
-            defIndex == DefaultTerrainCatalog.Berm
-            || defIndex == DefaultTerrainCatalog.Debris;
-
-        private static void SampleCornerCell(
-            float[] heights,
-            Color[] colors,
-            ushort[] defs,
-            int w,
-            int h,
-            int cx,
-            int cz,
-            ref float hSum,
-            ref Color cSum,
-            ref int n,
-            ref float digMin,
-            ref float bermMax,
-            ref bool anyDig,
-            ref bool anyBerm,
-            ref Color earthC)
-        {
-            if (cx < 0 || cz < 0 || cx >= w || cz >= h)
-                return;
-            int i = cz * w + cx;
-            float hy = heights[i];
-            hSum += hy;
-            cSum += colors[i];
-            n++;
-            ushort def = defs[i];
-            if (IsDigEarthwork(def))
-            {
-                anyDig = true;
-                if (hy < digMin)
-                {
-                    digMin = hy;
-                    earthC = colors[i];
-                }
-            }
-            else if (IsRaiseEarthwork(def))
-            {
-                anyBerm = true;
-                if (hy > bermMax)
-                {
-                    bermMax = hy;
-                    earthC = colors[i];
-                }
-            }
-        }
-
-        private void ScatterEarthworkMarkers(
-            WorldTerrainGrid grid,
-            float[] heights,
-            ushort[] defIndices,
-            Transform propRoot)
-        {
-            EnsureMaterials();
-            var root = new GameObject("Earthworks").transform;
-            root.SetParent(propRoot, false);
-            int w = grid.Width;
-            int h = grid.Height;
-            int spawned = 0;
-            const int maxMarkers = 280;
-            var bermMat = _rockMat != null
-                ? _rockMat
-                : CreateSimpleLit(new Color(0.58f, 0.44f, 0.28f), 0.2f);
-            var digMat = CreateSimpleLit(new Color(0.38f, 0.26f, 0.16f), 0.12f);
-            var spikeMat = CreateSimpleLit(new Color(0.55f, 0.25f, 0.18f), 0.25f);
-            var debrisMat = _rockMat != null
-                ? _rockMat
-                : CreateSimpleLit(new Color(0.4f, 0.38f, 0.35f), 0.1f);
-            var scorchMat = CreateSimpleLit(new Color(0.18f, 0.14f, 0.11f), 0.05f);
-
-            for (int cz = 0; cz < h; cz++)
-            {
-                for (int cx = 0; cx < w; cx++)
-                {
-                    if (spawned >= maxMarkers)
-                        return;
-                    ushort def = defIndices[cz * w + cx];
-                    // Skip moat shallows — water sheet already reads; markers would clutter.
-                    if (def == DefaultTerrainCatalog.WaterShallow || !IsEarthworkDef(def))
-                        continue;
-
-                    grid.CellCenter(cx, cz, out float wx, out float wz);
-                    float gy = heights[cz * w + cx];
-
-                    if (def == DefaultTerrainCatalog.Berm)
-                    {
-                        SpawnEarthMark(root, "Berm", wx, gy + 2.2f, wz, new Vector3(8.2f, 4.2f, 8.2f), bermMat);
-                        spawned++;
-                    }
-                    else if (def == DefaultTerrainCatalog.Trench || def == DefaultTerrainCatalog.Crater)
-                    {
-                        // Floor patch + bank lips so digs read from a high RTS camera.
-                        SpawnEarthMark(root, "DigFloor", wx, gy + 0.15f, wz, new Vector3(9f, 0.25f, 9f), digMat);
-                        float depth = Mathf.Max(2.5f, -gy + 0.5f);
-                        float bankY = gy + depth * 0.55f;
-                        float bankH = depth * 0.9f;
-                        SpawnEarthMark(root, "DigBankN", wx, bankY, wz + 4.2f, new Vector3(9f, bankH, 1.2f), bermMat);
-                        SpawnEarthMark(root, "DigBankS", wx, bankY, wz - 4.2f, new Vector3(9f, bankH, 1.2f), bermMat);
-                        SpawnEarthMark(root, "DigBankE", wx + 4.2f, bankY, wz, new Vector3(1.2f, bankH, 9f), bermMat);
-                        SpawnEarthMark(root, "DigBankW", wx - 4.2f, bankY, wz, new Vector3(1.2f, bankH, 9f), bermMat);
-                        spawned += 5;
-                    }
-                    else if (def == DefaultTerrainCatalog.SpikePit)
-                    {
-                        SpawnEarthMark(root, "Spike", wx, gy + 1.2f, wz, new Vector3(2.4f, 2.4f, 2.4f), spikeMat);
-                        spawned++;
-                    }
-                    else if (def == DefaultTerrainCatalog.Debris)
-                    {
-                        SpawnEarthMark(root, "Debris", wx, gy + 1.4f, wz, new Vector3(5f, 2.6f, 5f), debrisMat);
-                        spawned++;
-                    }
-                    else if (def == DefaultTerrainCatalog.Scorched)
-                    {
-                        SpawnEarthMark(root, "Scorch", wx, gy + 0.18f, wz, new Vector3(9f, 0.22f, 9f), scorchMat);
-                        spawned++;
-                    }
-                }
-            }
-        }
-
-        private static void SpawnEarthMark(
-            Transform parent,
-            string name,
-            float x,
-            float y,
-            float z,
-            Vector3 scale,
-            Material mat)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            go.transform.SetParent(parent, false);
-            go.transform.position = new Vector3(x, y, z);
-            go.transform.localScale = scale;
-            Object.Destroy(go.GetComponent<Collider>());
-            var rend = go.GetComponent<Renderer>();
-            rend.sharedMaterial = mat;
-            rend.shadowCastingMode = ShadowCastingMode.Off;
         }
 
         private static float HeightFor(TerrainCategory category, ushort defIndex = 0)
         {
             if (defIndex == DefaultTerrainCatalog.WaterShallow)
-                return -0.55f;
+                return -0.18f;
             if (defIndex == DefaultTerrainCatalog.WaterDeep)
                 return -0.55f;
             if (defIndex == DefaultTerrainCatalog.WaterFast)
                 return -0.4f;
-            if (defIndex == DefaultTerrainCatalog.Berm)
-                return 6.8f;
-            if (defIndex == DefaultTerrainCatalog.Trench)
-                return -4.6f;
-            if (defIndex == DefaultTerrainCatalog.SpikePit)
-                return -3.0f;
-            if (defIndex == DefaultTerrainCatalog.Crater)
-                return -3.8f;
-            if (defIndex == DefaultTerrainCatalog.Debris)
-                return 2.4f;
-            if (defIndex == DefaultTerrainCatalog.Scorched)
-                return 0.05f;
 
             switch (category)
             {
@@ -1161,8 +952,8 @@ namespace Asterra.Gameplay.Presentation
                 case TerrainCategory.WaterWaterfall: return -0.2f;
                 case TerrainCategory.Beach: return -0.15f;
                 case TerrainCategory.Swamp: return -0.35f;
-                case TerrainCategory.Trench: return -4.6f;
-                case TerrainCategory.Gap: return -4.8f;
+                case TerrainCategory.Trench: return -2.6f;
+                case TerrainCategory.Gap: return -3.5f;
                 case TerrainCategory.Ice: return -0.55f;
                 case TerrainCategory.Hill: return 7.5f;
                 case TerrainCategory.Mountain: return 24f;
@@ -1184,18 +975,6 @@ namespace Asterra.Gameplay.Presentation
                 return new Color(0.14f, 0.32f, 0.58f);
             if (defIndex == DefaultTerrainCatalog.WaterFast)
                 return new Color(0.28f, 0.62f, 0.88f);
-            if (defIndex == DefaultTerrainCatalog.Berm)
-                return new Color(0.68f, 0.5f, 0.28f);
-            if (defIndex == DefaultTerrainCatalog.Trench)
-                return new Color(0.42f, 0.28f, 0.15f);
-            if (defIndex == DefaultTerrainCatalog.SpikePit)
-                return new Color(0.55f, 0.28f, 0.2f);
-            if (defIndex == DefaultTerrainCatalog.Crater)
-                return new Color(0.36f, 0.26f, 0.18f);
-            if (defIndex == DefaultTerrainCatalog.Debris)
-                return new Color(0.45f, 0.42f, 0.38f);
-            if (defIndex == DefaultTerrainCatalog.Scorched)
-                return new Color(0.18f, 0.14f, 0.11f);
 
             switch (category)
             {
@@ -1214,7 +993,7 @@ namespace Asterra.Gameplay.Presentation
                 case TerrainCategory.WaterOcean: return new Color(0.18f, 0.4f, 0.65f);
                 case TerrainCategory.WaterWaterfall: return new Color(0.48f, 0.7f, 0.88f);
                 case TerrainCategory.Ice: return new Color(0.86f, 0.93f, 0.98f);
-                case TerrainCategory.Trench: return new Color(0.42f, 0.28f, 0.15f);
+                case TerrainCategory.Trench: return new Color(0.55f, 0.44f, 0.3f);
                 case TerrainCategory.Gap: return new Color(0.32f, 0.3f, 0.28f);
                 case TerrainCategory.NoEntry: return new Color(0.22f, 0.2f, 0.2f);
                 default: return new Color(0.36f, 0.46f, 0.28f);

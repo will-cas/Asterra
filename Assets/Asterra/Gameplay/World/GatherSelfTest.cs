@@ -43,7 +43,7 @@ namespace Asterra.Gameplay
             FactionDefaultContent.RegisterAll(defs);
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
-            var grunt = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
+            var grunt = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
             var nodeId = ids.Next();
             sim.AddResourceNode(nodeId, ResourceType.Gold, 500, 10f, 0f);
             sim.ApplyCommands(new GameCommand[]
@@ -70,7 +70,7 @@ namespace Asterra.Gameplay
         {
             Setup(out var sim, out var ids, out var wallet, out var p, out var builder, out var nodeId);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
             PlaceOnNode(sim, builder, nodeId);
             wallet.Seed(p, ResourceType.Gold, 0);
             int g0 = wallet.Get(p, ResourceType.Gold);
@@ -92,11 +92,11 @@ namespace Asterra.Gameplay
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
             var nodeId = ids.Next();
             sim.AddResourceNode(nodeId, ResourceType.Gold, 8, 12f, 0f);
             var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 12f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 12f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
@@ -117,9 +117,9 @@ namespace Asterra.Gameplay
             var nodeId = ids.Next();
             sim.AddResourceNode(nodeId, ResourceType.Gold, 1, 20f, 20f);
             var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 20f, 20f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 20f, 20f);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
@@ -128,7 +128,7 @@ namespace Asterra.Gameplay
                 sim.Tick(0.25f);
 
             var other = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 25f, 25f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 25f, 25f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new GatherCommand { Issuer = p, UnitIds = new[] { other.Id }, ResourceNodeId = nodeId },
@@ -153,7 +153,7 @@ namespace Asterra.Gameplay
             nodeId = ids.Next();
             sim.AddResourceNode(nodeId, ResourceType.Gold, 500, 40f, 0f);
             builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 30f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 30f, 0f);
         }
 
         private static void PlaceOnNode(SkirmishWorldSim sim, SimUnit builder, SimEntityId nodeId)

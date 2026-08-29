@@ -144,7 +144,7 @@ namespace Asterra.Gameplay
             wallet.Seed(ai, ResourceType.Gold, 5000);
             wallet.Seed(ai, ResourceType.Timber, 5000);
             sim = new SkirmishWorldSim(wallet, ids, defs);
-            var roster = FactionDefaultContent.VeiledInheritance;
+            var roster = FactionDefaultContent.IronCovenant;
             keep = sim.SpawnBuilding(
                 ids.Next(), ai, roster.Id, roster.KeepBuildingId, 100f, 0f, startActive: true);
             if (seedProducer)

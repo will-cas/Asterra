@@ -2,8 +2,20 @@
 
 Low-poly meshes live in `Meshes/*.obj` (Unity-importable and Blender-editable).
 
-Runtime: `AsterraMeshLibrary` loads these OBJs via `ObjMeshLoader` only. Missing keys log an error and return an empty mesh. Free CC0 OBJs only — no procedural mesh fallback.
+Runtime: `AsterraMeshLibrary` prefers these OBJs via `ObjMeshLoader`, then falls back to code-built silhouettes.
 
-Sources: Quaternius (Ultimate Fantasy RTS buildings + RPG Character Pack units) and Kenney (Nature Kit / Castle Kit). See `ThirdParty/CREDITS.md`.
+## Regenerate base shapes
 
-Basenames: `unit_*`, `building_*`, `resource_*`, `prop_*`.
+```bash
+python3 tools/meshgen/generate_objs.py
+```
+
+## Blender art pass (bevel + detail)
+
+Requires Blender on PATH or at `/Applications/Blender.app`:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --python tools/meshgen/blender_art_pass.py
+```
+
+Then open any `Meshes/*.obj` in Blender to sculpt further (File → Import → Wavefront). Export back to the same folder.

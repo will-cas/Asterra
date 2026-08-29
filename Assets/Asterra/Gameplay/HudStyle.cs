@@ -221,16 +221,16 @@ namespace Asterra.Gameplay
             DrawFrame(rect, fill, border, selected ? 2f : 1f);
             DrawAccentBar(new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, S(2f)), AccentSoft);
 
-            float iconSize = Mathf.Min(S(26f), rect.height * 0.38f);
+            float iconSize = Mathf.Min(S(28f), rect.height * 0.42f);
             float iconX = rect.x + (rect.width - iconSize) * 0.5f;
-            float iconY = rect.y + S(6f);
+            float iconY = rect.y + S(8f);
             Color iconColor = enabled ? accent : Color.Lerp(accent, Color.black, 0.55f);
             GUI.DrawTexture(new Rect(iconX, iconY, iconSize, iconSize), GetIcon(iconKey, iconColor));
 
             var prev = GUI.color;
             GUI.color = enabled ? Text : TextDim;
             GUI.Label(
-                new Rect(rect.x + S(2f), rect.yMax - S(32f), rect.width - S(4f), S(30f)),
+                new Rect(rect.x + S(3f), rect.yMax - S(28f), rect.width - S(6f), S(26f)),
                 label,
                 CardLabel);
             GUI.color = prev;
@@ -323,112 +323,289 @@ namespace Asterra.Gameplay
             string cacheKey = key + "#" + ColorUtility.ToHtmlStringRGBA(accent);
             if (Icons.TryGetValue(cacheKey, out var tex) && tex != null)
                 return tex;
-            tex = LoadAndColorizeIcon(key, accent);
+            tex = BuildIcon(key, accent);
             Icons[cacheKey] = tex;
             return tex;
         }
 
         public static Texture2D Portrait(string definitionId, Color faction)
         {
-            string iconKey = PortraitIconKey(definitionId);
-            string cacheKey = "port_" + iconKey + "#" + ColorUtility.ToHtmlStringRGBA(faction);
-            if (Icons.TryGetValue(cacheKey, out var tex) && tex != null)
+            string key = "port_" + (definitionId ?? "unit");
+            if (Icons.TryGetValue(key, out var tex) && tex != null)
                 return tex;
-            tex = LoadAndColorizeIcon(iconKey, faction);
-            Icons[cacheKey] = tex;
+            tex = BuildPortrait(definitionId, faction);
+            Icons[key] = tex;
             return tex;
         }
 
-        private static string PortraitIconKey(string definitionId)
+        private static Texture2D BuildIcon(string key, Color accent)
         {
-            string id = definitionId ?? string.Empty;
-            if (id.Contains("builder") || id.Contains("pathfinder"))
-                return "worker";
-            if (id.Contains("archer") || id.Contains("ranger") || id.Contains("acolyte"))
-                return "bow";
-            if (id.Contains("ashen_knight") || id.Contains("mage"))
-                return "research";
-            if (id.Contains("knight") || id.Contains("cavalry") || id.Contains("rider"))
-                return "horse";
-            if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista") || id.Contains("guardian"))
-                return "siege";
-            if (id.Contains("sapper"))
-                return "sapper";
-            if (id.Contains("lucien") || id.Contains("captain") || id.Contains("hierophant") || id.Contains("leader")
-                || id.Contains("vale") || id.Contains("flame"))
-                return "leader";
-            if (id.Contains("scout"))
-                return "scout";
-            if (id.Contains("dryad"))
-                return "timber";
-            if (id.Contains("ember"))
-                return "sapper";
-            return "sword";
+            const int s = 32;
+            var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            var clear = new Color(0, 0, 0, 0);
+            for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+                tex.SetPixel(x, y, clear);
+
+            void Pix(int x, int y, Color c)
+            {
+                if (x < 0 || y < 0 || x >= s || y >= s)
+                    return;
+                tex.SetPixel(x, y, c);
+            }
+
+            void Fill(int x0, int y0, int x1, int y1, Color c)
+            {
+                for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                    Pix(x, y, c);
+            }
+
+            Color ink = Color.Lerp(accent, Color.white, 0.25f);
+            switch (key)
+            {
+                case "sword":
+                    Fill(15, 4, 17, 24, ink);
+                    Fill(12, 10, 20, 12, ink);
+                    Fill(14, 24, 18, 28, Color.Lerp(accent, Color.black, 0.3f));
+                    break;
+                case "bow":
+                    Fill(8, 6, 12, 26, ink);
+                    Fill(12, 8, 24, 10, ink);
+                    Fill(12, 22, 24, 24, ink);
+                    Fill(22, 10, 24, 22, ink);
+                    break;
+                case "horse":
+                    Fill(6, 16, 26, 24, ink);
+                    Fill(18, 8, 26, 16, ink);
+                    Fill(22, 4, 26, 8, ink);
+                    break;
+                case "elite":
+                    Fill(12, 8, 20, 26, ink);
+                    Fill(10, 4, 22, 10, Color.Lerp(accent, Color.yellow, 0.45f));
+                    break;
+                case "siege":
+                    Fill(6, 18, 26, 26, ink);
+                    Fill(10, 8, 22, 18, ink);
+                    Fill(20, 4, 28, 10, Color.Lerp(accent, Color.black, 0.2f));
+                    break;
+                case "scout":
+                    Fill(14, 6, 18, 26, ink);
+                    Fill(8, 12, 24, 16, ink);
+                    Fill(20, 6, 26, 12, Color.Lerp(accent, Color.cyan, 0.35f));
+                    break;
+                case "sapper":
+                    Fill(10, 8, 22, 14, ink);
+                    Fill(14, 14, 18, 28, ink);
+                    Fill(8, 20, 24, 24, Color.Lerp(accent, Color.yellow, 0.25f));
+                    break;
+                case "shield":
+                    Fill(8, 6, 24, 22, ink);
+                    Fill(10, 8, 22, 20, Color.Lerp(accent, Color.black, 0.35f));
+                    break;
+                case "hammer":
+                    Fill(8, 8, 24, 14, ink);
+                    Fill(14, 14, 18, 28, ink);
+                    break;
+                case "tower":
+                    Fill(12, 6, 20, 26, ink);
+                    Fill(10, 4, 22, 8, ink);
+                    break;
+                case "wall":
+                    Fill(4, 12, 28, 24, ink);
+                    Fill(6, 8, 10, 12, ink);
+                    Fill(14, 8, 18, 12, ink);
+                    Fill(22, 8, 26, 12, ink);
+                    break;
+                case "outpost":
+                    Fill(10, 10, 22, 24, ink);
+                    Fill(15, 4, 17, 10, ink);
+                    Fill(17, 4, 26, 8, Color.Lerp(accent, Color.yellow, 0.4f));
+                    break;
+                case "bridge":
+                    Fill(4, 14, 28, 18, ink);
+                    Fill(6, 10, 10, 22, ink);
+                    Fill(22, 10, 26, 22, ink);
+                    break;
+                case "trench":
+                    Fill(4, 18, 28, 26, Color.Lerp(accent, Color.black, 0.35f));
+                    Fill(8, 12, 24, 18, ink);
+                    break;
+                case "barricade":
+                    Fill(6, 10, 26, 24, ink);
+                    Fill(10, 6, 14, 10, ink);
+                    Fill(18, 6, 22, 10, ink);
+                    break;
+                case "ferry":
+                    Fill(6, 16, 26, 24, ink);
+                    Fill(10, 10, 22, 16, Color.Lerp(accent, Color.cyan, 0.3f));
+                    break;
+                case "earth":
+                    Fill(6, 18, 26, 26, ink);
+                    Fill(10, 10, 22, 18, Color.Lerp(accent, Color.green, 0.2f));
+                    break;
+                case "more":
+                    Fill(8, 14, 12, 18, ink);
+                    Fill(14, 14, 18, 18, ink);
+                    Fill(20, 14, 24, 18, ink);
+                    break;
+                case "back":
+                    Fill(8, 14, 20, 18, ink);
+                    Fill(8, 10, 14, 22, ink);
+                    break;
+                case "gear":
+                    Fill(12, 8, 20, 24, ink);
+                    Fill(8, 12, 24, 20, ink);
+                    break;
+                case "admin":
+                    Fill(10, 6, 22, 26, ink);
+                    Fill(14, 10, 18, 22, Color.Lerp(accent, Color.black, 0.4f));
+                    break;
+                case "gold":
+                    Fill(8, 8, 24, 24, Color.Lerp(accent, Color.yellow, 0.35f));
+                    Fill(12, 12, 20, 20, Color.Lerp(accent, Color.black, 0.25f));
+                    break;
+                case "timber":
+                    Fill(10, 6, 22, 26, ink);
+                    Fill(8, 10, 24, 14, Color.Lerp(accent, Color.black, 0.2f));
+                    Fill(8, 18, 24, 22, Color.Lerp(accent, Color.black, 0.2f));
+                    break;
+                case "worker":
+                case "idle":
+                    Fill(12, 6, 20, 14, ink);
+                    Fill(10, 14, 22, 26, ink);
+                    break;
+                case "leader":
+                    Fill(12, 8, 20, 26, ink);
+                    Fill(10, 4, 22, 10, Color.Lerp(accent, Color.yellow, 0.5f));
+                    break;
+                case "research":
+                    Fill(10, 8, 22, 24, ink);
+                    Fill(14, 4, 18, 10, Color.Lerp(accent, Color.cyan, 0.4f));
+                    break;
+                case "power":
+                    Fill(15, 4, 17, 28, Color.Lerp(accent, Color.yellow, 0.5f));
+                    Fill(8, 12, 24, 16, Color.Lerp(accent, Color.yellow, 0.5f));
+                    break;
+                case "stop":
+                    Fill(8, 8, 24, 24, ink);
+                    break;
+                case "stance":
+                    Fill(8, 16, 24, 24, ink);
+                    Fill(14, 6, 18, 16, ink);
+                    break;
+                case "hold":
+                    Fill(10, 8, 22, 24, ink);
+                    Fill(14, 12, 18, 20, Color.Lerp(accent, Color.black, 0.35f));
+                    break;
+                case "cancel":
+                    Fill(8, 8, 12, 12, ink);
+                    Fill(20, 8, 24, 12, ink);
+                    Fill(8, 20, 12, 24, ink);
+                    Fill(20, 20, 24, 24, ink);
+                    Fill(12, 12, 20, 20, ink);
+                    break;
+                case "unload":
+                    Fill(8, 8, 24, 14, ink);
+                    Fill(12, 14, 20, 26, ink);
+                    break;
+                case "demolish":
+                    Fill(8, 10, 24, 22, ink);
+                    Fill(14, 4, 18, 10, Danger);
+                    break;
+                case "stone":
+                    Fill(8, 12, 24, 24, ink);
+                    Fill(10, 8, 22, 12, Color.Lerp(accent, Color.white, 0.2f));
+                    break;
+                case "turret":
+                    Fill(12, 10, 20, 26, ink);
+                    Fill(8, 6, 24, 12, ink);
+                    break;
+                case "repair":
+                    Fill(8, 14, 24, 18, ink);
+                    Fill(14, 8, 18, 24, ink);
+                    break;
+                default:
+                    Fill(10, 10, 22, 22, ink);
+                    break;
+            }
+
+            tex.Apply();
+            return tex;
         }
 
-        private static Texture2D LoadAndColorizeIcon(string key, Color accent)
+        private static Texture2D BuildPortrait(string definitionId, Color faction)
         {
-            if (string.IsNullOrEmpty(key))
+            const int s = 48;
+            var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            Color deep = new Color(0.04f, 0.05f, 0.06f, 1f);
+            Color bg = Color.Lerp(faction, deep, 0.55f);
+            Color rim = Color.Lerp(faction, Color.white, 0.45f);
+            for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
             {
-                Debug.LogError("[Asterra] Missing icon key (empty)");
-                return MakeClearIcon();
-            }
-
-            var src = Resources.Load<Texture2D>("Asterra/Icons/" + key);
-            if (src == null)
-            {
-                Debug.LogError($"[Asterra] Missing icon Resources/Asterra/Icons/{key}");
-                return MakeClearIcon();
-            }
-
-            var readable = MakeReadableCopy(src);
-            var pixels = readable.GetPixels32();
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                var p = pixels[i];
-                if (p.a < 8)
+                bool outer = x == 0 || y == 0 || x == s - 1 || y == s - 1;
+                bool border = x < 2 || y < 2 || x >= s - 2 || y >= s - 2;
+                if (outer)
+                    tex.SetPixel(x, y, Color.Lerp(rim, Color.black, 0.35f));
+                else if (border)
+                    tex.SetPixel(x, y, rim);
+                else
                 {
-                    pixels[i] = new Color32(0, 0, 0, 0);
-                    continue;
+                    float t = y / (float)(s - 1);
+                    tex.SetPixel(x, y, Color.Lerp(bg, deep, t * 0.35f));
                 }
-
-                pixels[i] = new Color32(
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(p.r / 255f * accent.r * 255f), 0, 255),
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(p.g / 255f * accent.g * 255f), 0, 255),
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(p.b / 255f * accent.b * 255f), 0, 255),
-                    p.a);
             }
 
-            readable.SetPixels32(pixels);
-            readable.Apply(false, false);
-            readable.name = "icon_" + key;
-            return readable;
-        }
-
-        private static Texture2D MakeClearIcon()
-        {
-            var empty = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            empty.SetPixel(0, 0, Color.clear);
-            empty.Apply();
-            return empty;
-        }
-
-        private static Texture2D MakeReadableCopy(Texture2D src)
-        {
-            var rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
-            var prev = RenderTexture.active;
-            Graphics.Blit(src, rt);
-            RenderTexture.active = rt;
-            var copy = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false)
+            Color body = Color.Lerp(faction, Color.white, 0.22f);
+            string id = definitionId ?? string.Empty;
+            if (id.Contains("archer") || id.Contains("ranger") || id.Contains("acolyte") || id.Contains("mage"))
             {
-                filterMode = src.filterMode,
-                wrapMode = TextureWrapMode.Clamp,
-            };
-            copy.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
-            copy.Apply(false, false);
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            return copy;
+                FillRect(tex, 18, 10, 30, 38, body);
+                FillRect(tex, 26, 12, 34, 36, Color.Lerp(body, Color.cyan, 0.35f));
+            }
+            else if (id.Contains("knight") || id.Contains("cavalry") || id.Contains("rider"))
+            {
+                FillRect(tex, 8, 22, 40, 34, body);
+                FillRect(tex, 16, 10, 30, 24, Color.Lerp(body, Color.white, 0.2f));
+            }
+            else if (id.Contains("catapult") || id.Contains("siege") || id.Contains("ballista") || id.Contains("guardian"))
+            {
+                FillRect(tex, 6, 20, 42, 34, body);
+                FillRect(tex, 20, 8, 36, 22, Color.Lerp(body, Color.black, 0.2f));
+            }
+            else if (id.Contains("builder") || id.Contains("sapper") || id.Contains("pathfinder"))
+            {
+                FillRect(tex, 14, 12, 34, 36, body);
+                FillRect(tex, 30, 16, 40, 24, Color.Lerp(body, Color.yellow, 0.3f));
+            }
+            else if (id.Contains("lucien") || id.Contains("captain") || id.Contains("hierophant") || id.Contains("leader")
+                     || id.Contains("vale") || id.Contains("flame"))
+            {
+                FillRect(tex, 14, 12, 34, 38, body);
+                FillRect(tex, 12, 6, 36, 14, Color.Lerp(faction, Color.yellow, 0.55f));
+            }
+            else
+            {
+                FillRect(tex, 14, 10, 34, 38, body);
+                FillRect(tex, 8, 18, 16, 30, Color.Lerp(body, Color.white, 0.15f));
+            }
+
+            tex.Apply();
+            return tex;
+        }
+
+        private static void FillRect(Texture2D tex, int x0, int y0, int x1, int y1, Color c)
+        {
+            for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                if (x < 0 || y < 0 || x >= tex.width || y >= tex.height)
+                    continue;
+                tex.SetPixel(x, y, c);
+            }
         }
     }
 }

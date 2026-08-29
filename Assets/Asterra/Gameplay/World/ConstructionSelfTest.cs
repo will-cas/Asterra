@@ -33,21 +33,21 @@ namespace Asterra.Gameplay
             wallet.Seed(player, ResourceType.Timber, 500);
             int g0 = wallet.Get(player, ResourceType.Gold);
             int t0 = wallet.Get(player, ResourceType.Timber);
-            if (!defs.TryGetBuilding(FactionDefaultContent.ArcaneAcademyId, out var def))
+            if (!defs.TryGetBuilding(FactionDefaultContent.BarracksId, out var def))
                 return false;
             sim.ApplyCommands(new GameCommand[]
             {
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
+                    BuildingDefId = FactionDefaultContent.BarracksId,
                     X = 40f,
                     Z = 40f,
                 },
             });
             return wallet.Get(player, ResourceType.Gold) == g0 - def.GoldCost
                    && wallet.Get(player, ResourceType.Timber) == t0 - def.TimberCost
-                   && CountConstructing(sim, player, FactionDefaultContent.ArcaneAcademyId) == 1;
+                   && CountConstructing(sim, player, FactionDefaultContent.BarracksId) == 1;
         }
 
         private static DefinitionRegistry defs;
@@ -64,7 +64,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
+                    BuildingDefId = FactionDefaultContent.BarracksId,
                     X = 50f,
                     Z = -50f,
                 },
@@ -78,13 +78,13 @@ namespace Asterra.Gameplay
             wallet.Seed(player, ResourceType.Gold, 500);
             wallet.Seed(player, ResourceType.Timber, 500);
             var builder = sim.SpawnUnit(
-                ids.Next(), player, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
+                ids.Next(), player, new FactionId(0), FactionDefaultContent.IronBuilderId, 0f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
+                    BuildingDefId = FactionDefaultContent.BarracksId,
                     X = 80f,
                     Z = 0f,
                 },
@@ -101,12 +101,12 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.ArcaneAcademyId,
+                FactionDefaultContent.BarracksId,
                 30f,
                 -30f,
                 startActive: false);
             sim.SpawnUnit(
-                ids.Next(), player, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 31f, -29f);
+                ids.Next(), player, new FactionId(0), FactionDefaultContent.IronBuilderId, 31f, -29f);
             for (int i = 0; i < 80; i++)
                 sim.Tick(0.25f);
             return site.State == BuildingState.Active;
@@ -119,7 +119,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.ArcaneAcademyId,
+                FactionDefaultContent.BarracksId,
                 0f,
                 0f,
                 startActive: false);
@@ -127,7 +127,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.VeiledBuilderId,
+                FactionDefaultContent.IronBuilderId,
                 80f,
                 80f);
             float before = site.BuildSecondsRemaining;
@@ -145,7 +145,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.ArcaneumId,
+                FactionDefaultContent.IronKeepId,
                 -60f,
                 -60f,
                 startActive: true);
@@ -177,7 +177,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.ArcaneumId,
+                FactionDefaultContent.IronKeepId,
                 90f,
                 -90f,
                 startActive: true);
@@ -207,7 +207,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.ArcaneumId,
+                FactionDefaultContent.IronKeepId,
                 -120f,
                 40f,
                 startActive: true);

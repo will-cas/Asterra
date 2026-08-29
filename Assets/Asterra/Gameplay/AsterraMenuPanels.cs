@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Shared IMGUI overlays for Options, Profile (lobby-only), Controls, and in-match Pause.</summary>
+    /// <summary>Shared IMGUI overlays for Options, Profile (lobby-only), and in-match Pause.</summary>
     public static class AsterraMenuPanels
     {
         public enum Overlay
@@ -13,66 +13,10 @@ namespace Asterra.Gameplay
             Options = 1,
             Profile = 2,
             Pause = 3,
-            Controls = 4,
         }
 
         /// <summary>Profile is lobby / out-of-match only — never from Esc pause.</summary>
         public static bool IsProfileAllowedDuringMatch => false;
-
-        private static Vector2 _controlsScroll;
-        private static Overlay _controlsReturn = Overlay.None;
-
-        /// <summary>Call before opening <see cref="Overlay.Controls"/> so Back returns correctly.</summary>
-        public static void PrepareControls(Overlay returnTo)
-        {
-            _controlsReturn = returnTo;
-            _controlsScroll = Vector2.zero;
-        }
-
-        private static readonly (string key, string action)[] ControlRows =
-        {
-            ("Camera", ""),
-            ("WASD / arrows", "Pan camera"),
-            ("Middle-mouse / edge", "Pan camera"),
-            ("Minimap click", "Jump camera"),
-            ("", ""),
-            ("Selection", ""),
-            ("LMB click / drag", "Select units"),
-            ("Shift / Cmd + LMB", "Add to selection"),
-            ("RMB", "Move / attack / gather / chop / rally"),
-            ("R", "Reselect all owned units"),
-            ("Ctrl/Cmd + 1–9", "Assign control group"),
-            ("1–9", "Select group (double-tap centers)"),
-            (". / I", "Select idle workers"),
-            ("", ""),
-            ("Combat orders", ""),
-            ("A then click", "Attack-move"),
-            ("S", "Stop"),
-            ("P then click", "Patrol"),
-            ("F / G / H", "Stance: Aggressive / Defensive / Hold"),
-            ("C", "Capture nearest territory"),
-            ("U", "Buy faction upgrade / equip"),
-            ("Q", "Primary commander power (outside place mode)"),
-            ("", ""),
-            ("Build & earthworks", ""),
-            ("B / N / M / O", "Barracks / Tower / Wall / Mine"),
-            ("V / J / , / .", "Bridge / Trench / Barricade / Ferry"),
-            ("Y / K / L", "Fill / Berm / Moat (ghost + click/drag)"),
-            ("; / ' / \\", "Clear forest / Burn / Quarry"),
-            ("[ / ]", "Spikes / Clear debris (or rotate while placing)"),
-            ("Q / E / scroll", "Rotate place ghost 90°"),
-            ("=", "Repair collapsed bridge"),
-            ("Shift while placing", "Keep place mode after one stamp"),
-            ("Esc", "Cancel armed mode; otherwise pause"),
-            ("", ""),
-            ("Production", ""),
-            ("T", "Train from selected keep/producer"),
-            ("X", "Cancel production queue"),
-            ("", ""),
-            ("System", ""),
-            ("F5 / F9", "Quick save / load"),
-            ("Esc", "Pause menu (Options, Controls, Main Menu)"),
-        };
 
         /// <summary>
         /// Draws a modal. Returns true if the overlay should close (Close / backdrop not used).
@@ -100,12 +44,7 @@ namespace Asterra.Gameplay
             else if (overlay == Overlay.Profile)
                 h = HudStyle.S(360f);
             else if (overlay == Overlay.Pause)
-                h = HudStyle.S(360f);
-            else if (overlay == Overlay.Controls)
-            {
-                w = Mathf.Min(HudStyle.S(560f), Screen.width - 40f);
-                h = Mathf.Min(HudStyle.S(520f), Screen.height - 48f);
-            }
+                h = HudStyle.S(320f);
 
             var box = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
             HudClickBlocker.Block(box);
@@ -123,8 +62,6 @@ namespace Asterra.Gameplay
                     return DrawProfile(box, out navigateTo);
                 case Overlay.Pause:
                     return DrawPause(box, out quitMainMenu, out navigateTo);
-                case Overlay.Controls:
-                    return DrawControls(box, out navigateTo);
                 default:
                     return false;
             }
@@ -210,15 +147,12 @@ namespace Asterra.Gameplay
                 " Fullscreen");
             if (full != Screen.fullScreen)
                 Screen.fullScreen = full;
-            y += HudStyle.S(34f);
+            y += HudStyle.S(30f);
 
-            if (ChipButton(new Rect(box.x + pad, y, HudStyle.S(160f), HudStyle.S(32f)), "Controls"))
-            {
-                AsterraAudio.PlayUiClick();
-                PrepareControls(Overlay.Options);
-                navigateTo = Overlay.Controls;
-                return false;
-            }
+            GUI.Label(
+                new Rect(box.x + pad, y, box.width - pad * 2f, HudStyle.S(36f)),
+                "Keybinds: see CONTROLS.md (WASD pan, B/N/M/O build, F5/F9 save).",
+                HudStyle.Caption);
 
             if (ChipButton(new Rect(box.x + pad, box.yMax - HudStyle.S(48f), HudStyle.S(120f), HudStyle.S(32f)), "Close"))
             {
@@ -301,14 +235,14 @@ namespace Asterra.Gameplay
             GUI.Label(new Rect(box.x, box.y + HudStyle.S(18f), box.width, HudStyle.S(28f)), "PAUSED", HudStyle.Title);
             GUI.Label(
                 new Rect(box.x + HudStyle.S(24f), box.y + HudStyle.S(52f), box.width - HudStyle.S(48f), HudStyle.S(36f)),
-                "Soft pause keeps the sim ticking (lockstep-safe).",
+                "Esc resumes. Soft pause keeps the sim ticking (lockstep-safe).",
                 HudStyle.Caption);
 
-            float y = box.y + HudStyle.S(96f);
+            float y = box.y + HudStyle.S(100f);
             float bw = box.width - HudStyle.S(80f);
             float bx = box.x + HudStyle.S(40f);
             float bh = HudStyle.S(34f);
-            float gap = HudStyle.S(38f);
+            float gap = HudStyle.S(40f);
             if (ChipButton(new Rect(bx, y, bw, bh), "Resume"))
             {
                 AsterraAudio.PlayUiClick();
@@ -317,33 +251,25 @@ namespace Asterra.Gameplay
             }
 
             y += gap;
-            if (ChipButton(new Rect(bx, y, bw * 0.48f, bh), "Save"))
+            if (ChipButton(new Rect(bx, y, bw * 0.48f, bh), "Save (F5)"))
             {
                 AsterraAudio.PlayUiClick();
-                var match = Object.FindFirstObjectByType<MatchBootstrap>();
+                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
                 match?.SaveOfflineQuick();
             }
 
-            if (ChipButton(new Rect(bx + bw * 0.52f, y, bw * 0.48f, bh), "Load"))
+            if (ChipButton(new Rect(bx + bw * 0.52f, y, bw * 0.48f, bh), "Load (F9)"))
             {
                 AsterraAudio.PlayUiClick();
-                var match = Object.FindFirstObjectByType<MatchBootstrap>();
+                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
                 match?.LoadOfflineQuick();
             }
 
             y += gap;
-            if (ChipButton(new Rect(bx, y, bw * 0.48f, bh), "Options"))
+            if (ChipButton(new Rect(bx, y, bw, bh), "Options"))
             {
                 AsterraAudio.PlayUiClick();
                 navigateTo = Overlay.Options;
-                return false;
-            }
-
-            if (ChipButton(new Rect(bx + bw * 0.52f, y, bw * 0.48f, bh), "Controls"))
-            {
-                AsterraAudio.PlayUiClick();
-                PrepareControls(Overlay.Pause);
-                navigateTo = Overlay.Controls;
                 return false;
             }
 
@@ -354,61 +280,6 @@ namespace Asterra.Gameplay
                 quitMainMenu = true;
                 navigateTo = Overlay.None;
                 return true;
-            }
-
-            return false;
-        }
-
-        private static bool DrawControls(Rect box, out Overlay navigateTo)
-        {
-            navigateTo = Overlay.Controls;
-            GUI.Label(new Rect(box.x, box.y + HudStyle.S(12f), box.width, HudStyle.S(28f)), "CONTROLS", HudStyle.Title);
-            GUI.Label(
-                new Rect(box.x + HudStyle.S(20f), box.y + HudStyle.S(40f), box.width - HudStyle.S(40f), HudStyle.S(22f)),
-                "Keyboard & mouse bindings.",
-                HudStyle.Caption);
-
-            float pad = HudStyle.S(18f);
-            float footer = HudStyle.S(52f);
-            float header = HudStyle.S(68f);
-            var view = new Rect(box.x + pad, box.y + header, box.width - pad * 2f, box.height - header - footer);
-            float keyW = HudStyle.S(150f);
-            float rowH = HudStyle.S(22f);
-            float contentH = ControlRows.Length * rowH + HudStyle.S(8f);
-
-            _controlsScroll = GUI.BeginScrollView(view, _controlsScroll, new Rect(0f, 0f, view.width - HudStyle.S(18f), contentH));
-            float y = 0f;
-            for (int i = 0; i < ControlRows.Length; i++)
-            {
-                var row = ControlRows[i];
-                if (string.IsNullOrEmpty(row.key) && string.IsNullOrEmpty(row.action))
-                {
-                    y += HudStyle.S(8f);
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(row.action))
-                {
-                    GUI.Label(new Rect(0f, y, view.width - HudStyle.S(20f), rowH), row.key.ToUpperInvariant(), HudStyle.Label);
-                    y += rowH;
-                    continue;
-                }
-
-                GUI.Label(new Rect(0f, y, keyW, rowH), row.key, HudStyle.Caption);
-                GUI.Label(new Rect(keyW + HudStyle.S(8f), y, view.width - keyW - HudStyle.S(28f), rowH), row.action, HudStyle.Caption);
-                y += rowH;
-            }
-
-            GUI.EndScrollView();
-
-            if (ChipButton(
-                    new Rect(box.x + pad, box.yMax - HudStyle.S(42f), HudStyle.S(120f), HudStyle.S(32f)),
-                    "Back"))
-            {
-                AsterraAudio.PlayUiClick();
-                navigateTo = _controlsReturn != Overlay.None ? _controlsReturn : Overlay.None;
-                _controlsReturn = Overlay.None;
-                return navigateTo == Overlay.None;
             }
 
             return false;

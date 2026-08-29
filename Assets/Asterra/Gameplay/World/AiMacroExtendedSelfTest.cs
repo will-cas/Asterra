@@ -31,16 +31,16 @@ namespace Asterra.Gameplay
         {
             return RunUntil(
                 AiDifficulty.Hard,
-                FactionDefaultContent.VeiledInheritance,
+                FactionDefaultContent.IronCovenant,
                 seedActiveProducer: true,
-                wantDef: FactionDefaultContent.VeiledInheritance.ProducerBuildingId,
+                wantDef: FactionDefaultContent.IronCovenant.ProducerBuildingId,
                 wantCount: 2,
                 ticks: 550);
         }
 
         private static bool EasyNeverAttachesTowers()
         {
-            var roster = FactionDefaultContent.VeiledInheritance;
+            var roster = FactionDefaultContent.IronCovenant;
             SetupCamp(
                 roster,
                 AiDifficulty.Easy,
@@ -57,7 +57,7 @@ namespace Asterra.Gameplay
 
         private static bool PlaceBlocksGatherSameTick()
         {
-            var roster = FactionDefaultContent.MundorCrown;
+            var roster = FactionDefaultContent.VerdantCourt;
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = new DefinitionRegistry();
@@ -104,7 +104,7 @@ namespace Asterra.Gameplay
 
         private static bool AssistMovesToSite()
         {
-            var roster = FactionDefaultContent.VeiledInheritance;
+            var roster = FactionDefaultContent.IronCovenant;
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = new DefinitionRegistry();
@@ -137,7 +137,7 @@ namespace Asterra.Gameplay
 
         private static bool TrainsCombatAfterProducer()
         {
-            var roster = FactionDefaultContent.VeiledInheritance;
+            var roster = FactionDefaultContent.IronCovenant;
             SetupCamp(
                 roster,
                 AiDifficulty.Normal,
@@ -161,7 +161,7 @@ namespace Asterra.Gameplay
 
         private static bool PlacesWatchtowerAfterTurrets()
         {
-            var roster = FactionDefaultContent.VeiledInheritance;
+            var roster = FactionDefaultContent.IronCovenant;
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = new DefinitionRegistry();
@@ -204,9 +204,9 @@ namespace Asterra.Gameplay
         {
             return RunUntil(
                 AiDifficulty.Insane,
-                FactionDefaultContent.VeiledInheritance,
+                FactionDefaultContent.IronCovenant,
                 seedActiveProducer: false,
-                wantDef: FactionDefaultContent.VeiledInheritance.ProducerBuildingId,
+                wantDef: FactionDefaultContent.IronCovenant.ProducerBuildingId,
                 wantCount: 1,
                 ticks: 350);
         }
@@ -215,9 +215,9 @@ namespace Asterra.Gameplay
         {
             return RunUntil(
                 AiDifficulty.Normal,
-                FactionDefaultContent.Outcast,
+                FactionDefaultContent.AshenLegion,
                 seedActiveProducer: false,
-                wantDef: FactionDefaultContent.Outcast.ProducerBuildingId,
+                wantDef: FactionDefaultContent.AshenLegion.ProducerBuildingId,
                 wantCount: 1,
                 ticks: 400);
         }

@@ -19,9 +19,9 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "capture progresses with unit", CaptureProgresses());
             Expect(ref fails, sb, "wall links and reject stack", WallBlocksPath());
             Expect(ref fails, sb, "palisade snap grids", PalisadeSnap());
-            Expect(ref fails, sb, "second leader trains while one lives", LeaderSecondWhileAlive());
+            Expect(ref fails, sb, "leader unique while alive", LeaderUniqueAlive());
             Expect(ref fails, sb, "leader trainable after death", LeaderAfterDeath());
-            Expect(ref fails, sb, "leaders can queue", LeaderCanQueue());
+            Expect(ref fails, sb, "leader not double-queued", LeaderNotDoubleQueued());
 
             sb.Append(fails == 0 ? "EcoFortLeaderSelfTest: OK" : $"EcoFortLeaderSelfTest: FAIL ({fails})");
             return sb.ToString();
@@ -40,7 +40,7 @@ namespace Asterra.Gameplay
             sim.AddTerritory(tid, 0f, 0f, 40f, goldPerSecond: 5);
             // Force controlled — capture loop would take long; set via damage-free approach:
             // spawn unit and tick capture.
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
             for (int i = 0; i < 250; i++)
                 sim.Tick(0.25f);
             bool controlled = false;
@@ -87,7 +87,7 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             var tid = ids.Next();
             sim.AddTerritory(tid, 10f, 10f, 40f, goldPerSecond: 1);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 10f, 10f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 10f, 10f);
             float prog0 = 0f;
             for (int i = 0; i < sim.Territories.Count; i++)
             {
@@ -147,7 +147,7 @@ namespace Asterra.Gameplay
             return Abs(x % 14f) < 0.01f || Abs(Abs(x) - 14f) < 0.01f || Abs(x) < 0.01f;
         }
 
-        private static bool LeaderSecondWhileAlive()
+        private static bool LeaderUniqueAlive()
         {
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
@@ -157,18 +157,18 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledHeirId, 5f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.LucienLeaderId, 5f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new TrainUnitCommand
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.VeiledHeirId,
+                    UnitDefId = FactionDefaultContent.LucienLeaderId,
                 },
             });
-            return keep.IsProducing;
+            return !keep.IsProducing;
         }
 
         private static bool LeaderAfterDeath()
@@ -181,9 +181,9 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
             var leader = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledHeirId, 5f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.LucienLeaderId, 5f, 0f);
             sim.ApplyWorldDamage(leader.Id, 9999f, vsStructure: false);
             sim.Tick(0.05f);
             sim.ApplyCommands(new GameCommand[]
@@ -192,13 +192,13 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.VeiledHeirId,
+                    UnitDefId = FactionDefaultContent.LucienLeaderId,
                 },
             });
             return keep.IsProducing;
         }
 
-        private static bool LeaderCanQueue()
+        private static bool LeaderNotDoubleQueued()
         {
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
@@ -208,14 +208,14 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new TrainUnitCommand
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.VeiledHeirId,
+                    UnitDefId = FactionDefaultContent.LucienLeaderId,
                 },
             });
             sim.ApplyCommands(new GameCommand[]
@@ -224,10 +224,10 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.VeiledHeirId,
+                    UnitDefId = FactionDefaultContent.LucienLeaderId,
                 },
             });
-            return keep.IsProducing && keep.QueueCount >= 1;
+            return keep.IsProducing && keep.QueueCount == 0;
         }
 
         private static float Abs(float v) => v < 0f ? -v : v;
