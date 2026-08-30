@@ -54,5 +54,6 @@ namespace Asterra.Core
         TerritoryState State { get; }
         PlayerId? Controller { get; }
         float CaptureProgress { get; }
+        TerritoryJob Job { get; }
     }
 }

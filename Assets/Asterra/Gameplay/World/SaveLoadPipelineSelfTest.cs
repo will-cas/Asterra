@@ -68,7 +68,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep,
-                    UnitDefId = FactionDefaultContent.IronBuilderId,
+                    UnitDefId = FactionDefaultContent.VeiledBuilderId,
                 },
             });
             var data = OfflineMatchSaveService.CaptureSim(live, wallet, nextEntityId: ids.PeekNext);
@@ -121,7 +121,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = p,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = -280f,
                     Z = 40f,
                 },
@@ -130,7 +130,7 @@ namespace Asterra.Gameplay
             var restored = RestoreLikeBootstrap(data, out _, out _);
             for (int i = 0; i < restored.Buildings.Count; i++)
             {
-                if (restored.Buildings[i].DefinitionId == FactionDefaultContent.BarracksId
+                if (restored.Buildings[i].DefinitionId == FactionDefaultContent.ArcaneAcademyId
                     && restored.Buildings[i].State == BuildingState.Constructing)
                     return true;
             }
@@ -147,7 +147,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < live.Buildings.Count; i++)
             {
                 if (live.Buildings[i].Owner == p
-                    && live.Buildings[i].DefinitionId == FactionDefaultContent.BarracksId)
+                    && live.Buildings[i].DefinitionId == FactionDefaultContent.ArcaneAcademyId)
                 {
                     barracks = live.Buildings[i].Id;
                     break;
@@ -160,7 +160,7 @@ namespace Asterra.Gameplay
                     ids.Next(),
                     p,
                     new FactionId(0),
-                    FactionDefaultContent.BarracksId,
+                    FactionDefaultContent.ArcaneAcademyId,
                     -290f,
                     30f,
                     startActive: true);
@@ -173,7 +173,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = barracks,
-                    UpgradeDefId = FactionDefaultContent.HeavyArmourId,
+                    UpgradeDefId = FactionDefaultContent.VeiledMailId,
                 },
             });
             for (int i = 0; i < 120; i++)
@@ -183,14 +183,14 @@ namespace Asterra.Gameplay
                 new UnlockPowerCommand
                 {
                     Issuer = p,
-                    PowerDefId = FactionDefaultContent.LucienIronWallAbilityId,
+                    PowerDefId = FactionDefaultContent.WrathOfSkiesAbilityId,
                 },
             });
 
             var data = OfflineMatchSaveService.CaptureSim(live, wallet, nextEntityId: ids.PeekNext);
             var restored = RestoreLikeBootstrap(data, out _, out _);
-            return restored.HasUpgrade(p, FactionDefaultContent.HeavyArmourId)
-                   && restored.HasPower(p, FactionDefaultContent.LucienIronWallAbilityId);
+            return restored.HasUpgrade(p, FactionDefaultContent.VeiledMailId)
+                   && restored.HasPower(p, FactionDefaultContent.WrathOfSkiesAbilityId);
         }
 
         private static bool NextIdSought()
@@ -215,8 +215,8 @@ namespace Asterra.Gameplay
             SkirmishDefaultContent.PopulateInitialWorld(
                 sim,
                 ids,
-                FactionDefaultContent.IronCovenant,
-                FactionDefaultContent.VerdantCourt);
+                FactionDefaultContent.VeiledInheritance,
+                FactionDefaultContent.Outcast);
             return sim;
         }
 
@@ -242,7 +242,7 @@ namespace Asterra.Gameplay
             {
                 var b = sim.Buildings[i];
                 if (b.Owner == p
-                    && (b.DefinitionId == FactionDefaultContent.IronKeepId
+                    && (b.DefinitionId == FactionDefaultContent.ArcaneumId
                         || (b.CanProduce && b.DefinitionId.Contains("keep"))))
                     return b.Id;
             }

@@ -9,6 +9,7 @@ namespace Asterra.Gameplay
         public TerritoryState State { get; private set; } = TerritoryState.Neutral;
         public PlayerId? Controller { get; private set; }
         public float CaptureProgress { get; private set; }
+        public TerritoryJob Job { get; private set; }
 
         public void Initialize(SimEntityId id)
         {

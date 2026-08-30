@@ -30,6 +30,8 @@ namespace Asterra.Gameplay.Presentation
         private Collider _pickCollider;
         private Color _baseColor = Color.gray;
         private Color _factionColor = Color.gray;
+        private Texture2D _albedo;
+        private float _uvScale = 0.18f;
         private float _hitFlashUntil;
         private Transform _hpRoot;
         private Transform _hpFill;
@@ -80,8 +82,7 @@ namespace Asterra.Gameplay.Presentation
             else
             {
                 _squadSize = 1;
-                if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
-                    visualScale *= 1.65f;
+                visualScale *= AsterraMeshLibrary.BuildingVisualMultiplier(definitionId, factionIndex);
             }
 
             transform.localScale = Vector3.one * visualScale;
@@ -93,9 +94,11 @@ namespace Asterra.Gameplay.Presentation
 
             Mesh mesh = isUnit
                 ? AsterraMeshLibrary.GetUnitMesh(definitionId)
-                : AsterraMeshLibrary.GetBuildingMesh(definitionId);
+                : AsterraMeshLibrary.GetBuildingMesh(definitionId, factionIndex);
 
-            _baseColor = AsterraMeshLibrary.FactionBodyColor(factionIndex, isUnit, definitionId);
+            _baseColor = Color.Lerp(Color.white, AsterraMeshLibrary.FactionBodyColor(factionIndex, isUnit, definitionId), 0.55f);
+            _albedo = AsterraMeshLibrary.GetBodyAlbedo(isUnit, definitionId, factionIndex);
+            _uvScale = AsterraMeshLibrary.BodyUvScale(isUnit);
             BuildTroopMeshes(mesh, isUnit);
 
             EnsurePickCollider(isUnit, mesh);
@@ -136,7 +139,7 @@ namespace Asterra.Gameplay.Presentation
                 filter.sharedMesh = mesh;
                 var rend = host.gameObject.AddComponent<MeshRenderer>();
                 // Unique material instance per troop so hit-flash does not tint siblings wrong.
-                rend.material = CreateColorMaterial(_baseColor);
+                rend.material = CreateColorMaterial(_baseColor, _albedo, _uvScale);
                 _troopRenderers[i] = rend;
             }
 
@@ -827,6 +830,11 @@ namespace Asterra.Gameplay.Presentation
 
         private static Material CreateColorMaterial(Color color)
         {
+            return CreateColorMaterial(color, null, 0.18f);
+        }
+
+        private static Material CreateColorMaterial(Color color, Texture2D albedo, float uvScale)
+        {
             var shader = Shader.Find("Asterra/UnlitColor");
             if (shader == null)
                 shader = Shader.Find("Universal Render Pipeline/Unlit");
@@ -845,6 +853,10 @@ namespace Asterra.Gameplay.Presentation
 
             var mat = new Material(shader);
             SetMatColor(mat, color);
+            if (albedo != null)
+                mat.SetTexture("_MainTex", albedo);
+            mat.SetFloat("_UvScale", uvScale);
+            mat.SetFloat("_TexBlend", albedo != null ? 0.72f : 0f);
             return mat;
         }
     }

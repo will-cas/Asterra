@@ -40,15 +40,15 @@ namespace Asterra.Gameplay
             for (uint i = 1; i <= 12; i++)
             {
                 combat.Add(new SimEntityId(i));
-                defs.Add(i % 3 == 0 ? "unit_iron_archer" : "unit_militia");
+                defs.Add(i % 3 == 0 ? "unit_veiled_rune_caster" : "unit_veiled_apprentice");
             }
 
             var sense = new ArmyGroupUtility.Sense(12, 0, false, true, 1f, 3, 2, 6, true);
             ArmyGroupUtility.Allocate(
                 combat,
                 defs,
-                "unit_iron_archer",
-                "unit_iron_knight",
+                "unit_veiled_rune_caster",
+                "unit_veiled_priest_guard",
                 in sense,
                 out var guard,
                 out var main,

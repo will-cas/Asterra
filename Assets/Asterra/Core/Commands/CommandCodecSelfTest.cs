@@ -42,7 +42,7 @@ namespace Asterra.Core
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
                         BuildingId = new SimEntityId(7),
-                        UnitDefId = "unit_militia",
+                        UnitDefId = "unit_veiled_apprentice",
                     },
                     new CaptureTerritoryCommand
                     {
@@ -111,7 +111,7 @@ namespace Asterra.Core
                     {
                         Issuer = new PlayerId(3),
                         IssueTick = new Tick(42),
-                        PowerDefId = "ability_lucien_iron_wall",
+                        PowerDefId = "ability_wrath_of_skies",
                     },
                     new AttachBuildingCommand
                     {
@@ -120,6 +120,13 @@ namespace Asterra.Core
                         ParentBuildingId = new SimEntityId(7),
                         SlotIndex = 1,
                         BuildingDefId = "building_keep_turret",
+                    },
+                    new SetTerritoryJobCommand
+                    {
+                        Issuer = new PlayerId(3),
+                        IssueTick = new Tick(42),
+                        TerritoryId = new SimEntityId(99),
+                        Job = TerritoryJob.Vision,
                     },
                 },
             };

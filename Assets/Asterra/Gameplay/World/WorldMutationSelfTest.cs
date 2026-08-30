@@ -342,7 +342,7 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 100);
             wallet.Seed(p, ResourceType.Timber, 100);
             builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 0f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
         }
 
         private static void Expect(ref int fails, StringBuilder sb, string name, bool ok)

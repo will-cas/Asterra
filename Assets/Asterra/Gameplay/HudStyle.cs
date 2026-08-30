@@ -581,8 +581,8 @@ namespace Asterra.Gameplay
                 FillRect(tex, 14, 12, 34, 36, body);
                 FillRect(tex, 30, 16, 40, 24, Color.Lerp(body, Color.yellow, 0.3f));
             }
-            else if (id.Contains("lucien") || id.Contains("captain") || id.Contains("hierophant") || id.Contains("leader")
-                     || id.Contains("vale") || id.Contains("flame"))
+            else if (id.Contains("heir") || id.Contains("captain") || id.Contains("leader")
+                     || id.Contains("king") || id.Contains("priest"))
             {
                 FillRect(tex, 14, 12, 34, 38, body);
                 FillRect(tex, 12, 6, 36, 14, Color.Lerp(faction, Color.yellow, 0.55f));

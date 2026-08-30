@@ -50,9 +50,9 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "cavalry squad size 6",
                 UnitSquadVisual.DefaultForRole(UnitRole.Cavalry) == 6);
             Expect(ref fails, sb, "builder stays solo",
-                UnitSquadVisual.ResolveSquadSize("unit_iron_builder") == 1);
-            Expect(ref fails, sb, "militia is company",
-                UnitSquadVisual.ResolveSquadSize("unit_militia") == 16);
+                UnitSquadVisual.ResolveSquadSize("unit_veiled_builder") == 1);
+            Expect(ref fails, sb, "apprentice is company",
+                UnitSquadVisual.ResolveSquadSize("unit_veiled_apprentice") == 16);
 
             sb.Append(fails == 0 ? "MenuUiSelfTest: OK" : $"MenuUiSelfTest: FAIL ({fails})");
             return sb.ToString();

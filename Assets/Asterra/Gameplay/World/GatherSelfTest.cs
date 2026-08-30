@@ -5,7 +5,7 @@ using Asterra.Gameplay.Sim;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Gather, deposit, and resource-node economy.</summary>
+    /// <summary>Keep trickle and resource-building gold (harvest nodes are disabled).</summary>
     public static class GatherSelfTest
     {
         public static string Run()
@@ -13,29 +13,15 @@ namespace Asterra.Gameplay
             var sb = new StringBuilder();
             int fails = 0;
 
-            Expect(ref fails, sb, "gather assigns target", GatherAssigns());
-            Expect(ref fails, sb, "combat unit cannot gather", CombatCannotGather());
-            Expect(ref fails, sb, "gather fills carry", GatherFillsCarry());
-            Expect(ref fails, sb, "deposit increases wallet", DepositIncreasesWallet());
-            Expect(ref fails, sb, "node depletes", NodeDepletes());
-            Expect(ref fails, sb, "depleted gather rejected", DepletedGatherRejected());
+            Expect(ref fails, sb, "gather command ignored", GatherIgnored());
+            Expect(ref fails, sb, "keep pays gold per second", KeepPaysGold());
+            Expect(ref fails, sb, "resource building pays gold", OutpostPaysGold());
 
             sb.Append(fails == 0 ? "GatherSelfTest: OK" : $"GatherSelfTest: FAIL ({fails})");
             return sb.ToString();
         }
 
-        private static bool GatherAssigns()
-        {
-            Setup(out var sim, out _, out var wallet, out var p, out var builder, out var nodeId);
-            _ = wallet;
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
-            });
-            return builder.GatherTargetId.HasValue && builder.GatherTargetId.Value.Value == nodeId.Value;
-        }
-
-        private static bool CombatCannotGather()
+        private static bool GatherIgnored()
         {
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
@@ -43,47 +29,34 @@ namespace Asterra.Gameplay
             FactionDefaultContent.RegisterAll(defs);
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
-            var grunt = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
+            var builder = sim.SpawnUnit(
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
             var nodeId = ids.Next();
             sim.AddResourceNode(nodeId, ResourceType.Gold, 500, 10f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
-                new GatherCommand { Issuer = p, UnitIds = new[] { grunt.Id }, ResourceNodeId = nodeId },
-            });
-            return !grunt.GatherTargetId.HasValue;
-        }
-
-        private static bool GatherFillsCarry()
-        {
-            Setup(out var sim, out _, out _, out var p, out var builder, out var nodeId);
-            PlaceOnNode(sim, builder, nodeId);
-            sim.ApplyCommands(new GameCommand[]
-            {
                 new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
             });
-            for (int i = 0; i < 80; i++)
-                sim.Tick(0.25f);
-            return builder.CarryAmount > 0 || builder.ReturningToDeposit;
+            return !builder.GatherTargetId.HasValue && !builder.CanGather;
         }
 
-        private static bool DepositIncreasesWallet()
+        private static bool KeepPaysGold()
         {
-            Setup(out var sim, out var ids, out var wallet, out var p, out var builder, out var nodeId);
+            var ids = new SequentialIdFactory();
+            var wallet = new ResourceWallet();
+            var defs = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs);
+            var sim = new SkirmishWorldSim(wallet, ids, defs);
+            var p = new PlayerId(0);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            PlaceOnNode(sim, builder, nodeId);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 0);
-            int g0 = wallet.Get(p, ResourceType.Gold);
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
-            });
-            for (int i = 0; i < 200; i++)
+            for (int i = 0; i < 8; i++)
                 sim.Tick(0.25f);
-            return wallet.Get(p, ResourceType.Gold) > g0;
+            return wallet.Get(p, ResourceType.Gold) >= 2;
         }
 
-        private static bool NodeDepletes()
+        private static bool OutpostPaysGold()
         {
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
@@ -92,94 +65,11 @@ namespace Asterra.Gameplay
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            var nodeId = ids.Next();
-            sim.AddResourceNode(nodeId, ResourceType.Gold, 8, 12f, 0f);
-            var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 12f, 0f);
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
-            });
-            for (int i = 0; i < 400; i++)
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.OutpostId, 40f, 0f, startActive: true);
+            wallet.Seed(p, ResourceType.Gold, 0);
+            for (int i = 0; i < 8; i++)
                 sim.Tick(0.25f);
-            return !FindNode(sim, nodeId, out int rem) || rem <= 0;
-        }
-
-        private static bool DepletedGatherRejected()
-        {
-            var ids = new SequentialIdFactory();
-            var wallet = new ResourceWallet();
-            var defs = new DefinitionRegistry();
-            FactionDefaultContent.RegisterAll(defs);
-            var sim = new SkirmishWorldSim(wallet, ids, defs);
-            var p = new PlayerId(0);
-            var nodeId = ids.Next();
-            sim.AddResourceNode(nodeId, ResourceType.Gold, 1, 20f, 20f);
-            var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 20f, 20f);
-            sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = nodeId },
-            });
-            for (int i = 0; i < 500; i++)
-                sim.Tick(0.25f);
-
-            var other = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 25f, 25f);
-            sim.ApplyCommands(new GameCommand[]
-            {
-                new GatherCommand { Issuer = p, UnitIds = new[] { other.Id }, ResourceNodeId = nodeId },
-            });
-            return !other.GatherTargetId.HasValue;
-        }
-
-        private static void Setup(
-            out SkirmishWorldSim sim,
-            out SequentialIdFactory ids,
-            out ResourceWallet wallet,
-            out PlayerId p,
-            out SimUnit builder,
-            out SimEntityId nodeId)
-        {
-            ids = new SequentialIdFactory();
-            wallet = new ResourceWallet();
-            var defs = new DefinitionRegistry();
-            FactionDefaultContent.RegisterAll(defs);
-            sim = new SkirmishWorldSim(wallet, ids, defs);
-            p = new PlayerId(0);
-            nodeId = ids.Next();
-            sim.AddResourceNode(nodeId, ResourceType.Gold, 500, 40f, 0f);
-            builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 30f, 0f);
-        }
-
-        private static void PlaceOnNode(SkirmishWorldSim sim, SimUnit builder, SimEntityId nodeId)
-        {
-            for (int i = 0; i < sim.Resources.Count; i++)
-            {
-                if (sim.Resources[i].Id.Value != nodeId.Value)
-                    continue;
-                builder.X = sim.Resources[i].X;
-                builder.Z = sim.Resources[i].Z;
-                return;
-            }
-        }
-
-        private static bool FindNode(SkirmishWorldSim sim, SimEntityId nodeId, out int remaining)
-        {
-            remaining = 0;
-            for (int i = 0; i < sim.Resources.Count; i++)
-            {
-                if (sim.Resources[i].Id.Value != nodeId.Value)
-                    continue;
-                remaining = sim.Resources[i].Remaining;
-                return true;
-            }
-
-            return false;
+            return wallet.Get(p, ResourceType.Gold) >= 8;
         }
 
         private static void Expect(ref int fails, StringBuilder sb, string name, bool ok)

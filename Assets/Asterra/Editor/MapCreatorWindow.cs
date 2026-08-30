@@ -17,6 +17,7 @@ namespace Asterra.EditorTools
         private enum Tool
         {
             Terrain,
+            Texture,
             Blocked,
             KeepWest,
             KeepEast,
@@ -35,7 +36,10 @@ namespace Asterra.EditorTools
         private MapDefinition _map = NewBlank();
         private Tool _tool = Tool.Terrain;
         private ushort _brushTerrain = DefaultTerrainCatalog.GrassShort;
+        private string _brushTexture = TerrainSplat.Dirt;
         private float _brushRadius = 20f;
+        private float _lastPaintX = float.NaN;
+        private float _lastPaintZ;
         private Vector2 _scroll;
         private string _status = "Paint terrain, place keeps (west/east), save, then pick the map in Offline Skirmish.";
         private Texture2D _preview;
@@ -114,15 +118,17 @@ namespace Asterra.EditorTools
                 (int)_tool,
                 new[]
                 {
-                    "Terrain", "Blocked", "Keep W", "Keep E", "Gold", "Timber",
+                    "Terrain", "Texture", "Blocked", "Keep W", "Keep E", "Gold", "Timber",
                     "Territory", "Tree", "Rock", "Bridge", "Traversal", "Unit W",
                     "Unit E", "Erase",
                 },
-                2);
+                3);
 
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Terrain brush", EditorStyles.boldLabel);
             _brushTerrain = DrawTerrainPicker(_brushTerrain);
+            EditorGUILayout.LabelField("Texture brush", EditorStyles.boldLabel);
+            _brushTexture = DrawTexturePicker(_brushTexture);
             _brushRadius = EditorGUILayout.Slider("Radius", _brushRadius, 8f, 80f);
 
             EditorGUILayout.Space(8);
@@ -168,6 +174,7 @@ namespace Asterra.EditorTools
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Counts", EditorStyles.boldLabel);
             EditorGUILayout.LabelField($"Terrain strokes: {_map.terrain?.Length ?? 0}");
+            EditorGUILayout.LabelField($"Texture strokes: {_map.texturePaint?.Length ?? 0}");
             EditorGUILayout.LabelField($"Keeps: {_map.keeps?.Length ?? 0}");
             EditorGUILayout.LabelField($"Units: {_map.units?.Length ?? 0}");
             EditorGUILayout.LabelField($"Resources: {_map.resources?.Length ?? 0}");
@@ -193,6 +200,12 @@ namespace Asterra.EditorTools
             if (GUILayout.Button("Clear terrain strokes"))
             {
                 _map.terrain = Array.Empty<MapTerrainPaint>();
+                _previewDirty = true;
+            }
+
+            if (GUILayout.Button("Clear texture strokes"))
+            {
+                _map.texturePaint = Array.Empty<MapTexturePaint>();
                 _previewDirty = true;
             }
 
@@ -232,12 +245,35 @@ namespace Asterra.EditorTools
             if (!rect.Contains(e.mousePosition))
                 return;
 
-            if (e.type == EventType.MouseDown && e.button == 0)
+            if ((e.type == EventType.MouseDown || e.type == EventType.MouseDrag) && e.button == 0)
             {
                 WorldFromGui(rect, e.mousePosition, out float wx, out float wz);
+                bool strokeTool = _tool == Tool.Terrain || _tool == Tool.Texture;
+                if (e.type == EventType.MouseDrag && !strokeTool)
+                    return;
+                if (strokeTool && e.type == EventType.MouseDrag)
+                {
+                    float dx = wx - _lastPaintX;
+                    float dz = wz - _lastPaintZ;
+                    float spacing = _brushRadius * 0.4f;
+                    if (!float.IsNaN(_lastPaintX) && dx * dx + dz * dz < spacing * spacing)
+                        return;
+                }
+
                 ApplyClick(wx, wz, e.shift);
+                if (strokeTool)
+                {
+                    _lastPaintX = wx;
+                    _lastPaintZ = wz;
+                }
+
                 e.Use();
                 Repaint();
+            }
+
+            if (e.type == EventType.MouseUp && e.button == 0)
+            {
+                _lastPaintX = float.NaN;
             }
         }
 
@@ -249,6 +285,18 @@ namespace Asterra.EditorTools
                 case Tool.Terrain:
                     AddTerrainDisk(wx, wz, _brushRadius, _brushTerrain);
                     _status = $"Terrain {_brushTerrain} @ ({wx:0},{wz:0})";
+                    break;
+                case Tool.Texture:
+                    Append(ref _map.texturePaint, new MapTexturePaint
+                    {
+                        shape = "disk",
+                        x = wx,
+                        z = wz,
+                        radius = _brushRadius,
+                        layer = _brushTexture,
+                        strength = 0.85f,
+                    });
+                    _status = $"Texture {_brushTexture} @ ({wx:0},{wz:0})";
                     break;
                 case Tool.Blocked:
                     float r = _brushRadius;
@@ -386,6 +434,7 @@ namespace Asterra.EditorTools
             _map.resources = Filter(_map.resources, r => !Near(r.x, r.z));
             _map.territories = Filter(_map.territories, t => !Near(t.x, t.z));
             _map.destructibles = Filter(_map.destructibles, d => !Near(d.x, d.z));
+            _map.texturePaint = Filter(_map.texturePaint, t => !Near(t.x, t.z));
             if (_map.traversalLinks != null && _map.traversalLinks.Length > 0)
             {
                 var kept = new List<MapTraversalLink>();
@@ -530,6 +579,18 @@ namespace Asterra.EditorTools
             for (int i = 0; i < cells.Length; i++)
                 pixels[i] = TerrainColor(cells[i]);
 
+            if (_map.texturePaint != null)
+            {
+                for (int i = 0; i < _map.texturePaint.Length; i++)
+                {
+                    var paint = _map.texturePaint[i];
+                    if (paint == null)
+                        continue;
+                    var tint = TerrainSplat.PreviewTint(paint.layer);
+                    StampTexturePreview(pixels, paint, tint);
+                }
+            }
+
             // Blocked overlay
             for (int i = 0; i < _map.blocked.Length; i++)
             {
@@ -600,6 +661,51 @@ namespace Asterra.EditorTools
             gy = rect.y + v * rect.height;
         }
 
+        private static string DrawTexturePicker(string current)
+        {
+            var labels = new[] { "grass", "dirt", "rock", "sand" };
+            int idx = 1;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                if (labels[i] == current)
+                    idx = i;
+            }
+
+            idx = GUILayout.SelectionGrid(idx, labels, 4);
+            return labels[Mathf.Clamp(idx, 0, labels.Length - 1)];
+        }
+
+        private void StampTexturePreview(Color32[] pixels, MapTexturePaint paint, Color32 tint)
+        {
+            float radius = paint.radius > 0.5f ? paint.radius : 16f;
+            bool disk = string.IsNullOrEmpty(paint.shape) || paint.shape.ToLowerInvariant() != "rect";
+            float minX = disk ? paint.x - radius : paint.minX;
+            float minZ = disk ? paint.z - radius : paint.minZ;
+            float maxX = disk ? paint.x + radius : paint.maxX;
+            float maxZ = disk ? paint.z + radius : paint.maxZ;
+            float r2 = radius * radius;
+            ForCellsInRect(minX, minZ, maxX, maxZ, (cx, cz) =>
+            {
+                if (disk)
+                {
+                    float wx = -Half + (cx + 0.5f) * Cell;
+                    float wz = -Half + (cz + 0.5f) * Cell;
+                    float dx = wx - paint.x;
+                    float dz = wz - paint.z;
+                    if (dx * dx + dz * dz > r2)
+                        return;
+                }
+
+                int idx = cz * Res + cx;
+                var c = pixels[idx];
+                pixels[idx] = new Color32(
+                    (byte)((c.r + tint.r) / 2),
+                    (byte)((c.g + tint.g) / 2),
+                    (byte)((c.b + tint.b) / 2),
+                    255);
+            });
+        }
+
         private static ushort DrawTerrainPicker(ushort current)
         {
             var labels = new[]
@@ -607,9 +713,11 @@ namespace Asterra.EditorTools
                 "Bare", "Short", "Long", "Rock", "Swamp", "Forest", "Tree", "Beach",
                 "Mtn", "Hill", "River", "Lake", "Ocean", "Fall", "Ice+", "Ice-",
                 "Trench", "NoEnt", "Shallow", "Deep", "Fast",
+                "Berm", "Spike", "Debris", "Crater", "Scorch", "Gap",
+                "Road", "Mud", "Rubble", "Snow",
             };
             int idx = Mathf.Clamp(current, 0, labels.Length - 1);
-            idx = GUILayout.SelectionGrid(idx, labels, 3);
+            idx = GUILayout.SelectionGrid(idx, labels, 4);
             return (ushort)idx;
         }
 

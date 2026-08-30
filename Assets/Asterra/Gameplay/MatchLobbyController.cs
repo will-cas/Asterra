@@ -1,5 +1,6 @@
 using Asterra.Core;
 using Asterra.Gameplay;
+using Asterra.Gameplay.Content;
 using Asterra.Net;
 using UnityEngine;
 

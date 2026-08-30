@@ -93,6 +93,12 @@ namespace Asterra.Gameplay.Content
             for (int i = 0; i < map.terrain.Length; i++)
                 ApplyPaint(grid, map.terrain[i]);
 
+            if (map.texturePaint != null)
+            {
+                for (int i = 0; i < map.texturePaint.Length; i++)
+                    ApplyTextureAsTerrain(grid, map.texturePaint[i]);
+            }
+
             for (int i = 0; i < map.blocked.Length; i++)
             {
                 var b = map.blocked[i];
@@ -151,6 +157,22 @@ namespace Asterra.Gameplay.Content
                 default:
                     return TraversalLinkType.Bridge;
             }
+        }
+
+        private static void ApplyTextureAsTerrain(WorldTerrainGrid grid, MapTexturePaint paint)
+        {
+            if (paint == null)
+                return;
+            ushort def = TerrainSplat.DefIndexForLayer(paint.layer);
+            string shape = string.IsNullOrEmpty(paint.shape) ? "disk" : paint.shape.ToLowerInvariant();
+            if (shape == "disk")
+            {
+                float r = paint.radius > 0.5f ? paint.radius : 16f;
+                grid.FillWorldRect(paint.x - r, paint.z - r, paint.x + r, paint.z + r, def);
+                return;
+            }
+
+            grid.FillWorldRect(paint.minX, paint.minZ, paint.maxX, paint.maxZ, def);
         }
 
         private static void ApplyPaint(WorldTerrainGrid grid, MapTerrainPaint paint)
@@ -241,15 +263,7 @@ namespace Asterra.Gameplay.Content
                     t.goldPerSecond > 0 ? t.goldPerSecond : 8);
             }
 
-            for (int i = 0; i < map.resources.Length; i++)
-            {
-                var r = map.resources[i];
-                var type = string.Equals(r.type, "timber", StringComparison.OrdinalIgnoreCase)
-                    ? ResourceType.Timber
-                    : ResourceType.Gold;
-                int amount = r.amount > 0 ? r.amount : 500;
-                world.AddResourceNode(ids.Next(), type, amount, r.x, r.z);
-            }
+            // Map harvest nodes are ignored; gold comes from keeps and resource buildings.
         }
 
         private static void ApplyDestructibles(SkirmishWorldSim world, IIdFactory ids, MapDefinition map)

@@ -210,6 +210,7 @@ namespace Asterra.Core
         public readonly PlayerId Controller;
         public readonly bool HasController;
         public readonly float CaptureProgress;
+        public readonly TerritoryJob Job;
 
         public TerritorySnapshot(
             SimEntityId id,
@@ -219,7 +220,8 @@ namespace Asterra.Core
             TerritoryState state,
             PlayerId controller,
             bool hasController,
-            float captureProgress)
+            float captureProgress,
+            TerritoryJob job = TerritoryJob.Gold)
         {
             Id = id;
             X = x;
@@ -229,6 +231,7 @@ namespace Asterra.Core
             Controller = controller;
             HasController = hasController;
             CaptureProgress = captureProgress;
+            Job = job;
         }
     }
 

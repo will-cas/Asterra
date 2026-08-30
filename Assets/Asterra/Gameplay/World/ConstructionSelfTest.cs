@@ -13,8 +13,8 @@ namespace Asterra.Gameplay
             var sb = new StringBuilder();
             int fails = 0;
 
-            Expect(ref fails, sb, "place spends gold+timber", PlaceSpendsCosts());
-            Expect(ref fails, sb, "timber fail refunds gold", TimberFailRefundsGold());
+            Expect(ref fails, sb, "place spends gold", PlaceSpendsCosts());
+            Expect(ref fails, sb, "gold fail rejects place", GoldFailRejectsPlace());
             Expect(ref fails, sb, "place attracts distant builder", PlaceAttractsBuilder());
             Expect(ref fails, sb, "construction finishes with builder", ConstructionFinishes());
             Expect(ref fails, sb, "no progress outside work radius", NoProgressFarAway());
@@ -32,31 +32,28 @@ namespace Asterra.Gameplay
             wallet.Seed(player, ResourceType.Gold, 500);
             wallet.Seed(player, ResourceType.Timber, 500);
             int g0 = wallet.Get(player, ResourceType.Gold);
-            int t0 = wallet.Get(player, ResourceType.Timber);
-            if (!defs.TryGetBuilding(FactionDefaultContent.BarracksId, out var def))
+            if (!defs.TryGetBuilding(FactionDefaultContent.ArcaneAcademyId, out var def))
                 return false;
             sim.ApplyCommands(new GameCommand[]
             {
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = 40f,
                     Z = 40f,
                 },
             });
             return wallet.Get(player, ResourceType.Gold) == g0 - def.GoldCost
-                   && wallet.Get(player, ResourceType.Timber) == t0 - def.TimberCost
-                   && CountConstructing(sim, player, FactionDefaultContent.BarracksId) == 1;
+                   && CountConstructing(sim, player, FactionDefaultContent.ArcaneAcademyId) == 1;
         }
 
         private static DefinitionRegistry defs;
 
-        private static bool TimberFailRefundsGold()
+        private static bool GoldFailRejectsPlace()
         {
             Setup(out var sim, out var wallet, out _, out var player);
-            wallet.Seed(player, ResourceType.Gold, 500);
-            wallet.Seed(player, ResourceType.Timber, 0);
+            wallet.Seed(player, ResourceType.Gold, 0);
             int g0 = wallet.Get(player, ResourceType.Gold);
             int before = sim.Buildings.Count;
             sim.ApplyCommands(new GameCommand[]
@@ -64,7 +61,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = 50f,
                     Z = -50f,
                 },
@@ -78,13 +75,13 @@ namespace Asterra.Gameplay
             wallet.Seed(player, ResourceType.Gold, 500);
             wallet.Seed(player, ResourceType.Timber, 500);
             var builder = sim.SpawnUnit(
-                ids.Next(), player, new FactionId(0), FactionDefaultContent.IronBuilderId, 0f, 0f);
+                ids.Next(), player, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new PlaceBuildingCommand
                 {
                     Issuer = player,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = 80f,
                     Z = 0f,
                 },
@@ -101,12 +98,12 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.BarracksId,
+                FactionDefaultContent.ArcaneAcademyId,
                 30f,
                 -30f,
                 startActive: false);
             sim.SpawnUnit(
-                ids.Next(), player, new FactionId(0), FactionDefaultContent.IronBuilderId, 31f, -29f);
+                ids.Next(), player, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 31f, -29f);
             for (int i = 0; i < 80; i++)
                 sim.Tick(0.25f);
             return site.State == BuildingState.Active;
@@ -119,7 +116,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.BarracksId,
+                FactionDefaultContent.ArcaneAcademyId,
                 0f,
                 0f,
                 startActive: false);
@@ -127,7 +124,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.IronBuilderId,
+                FactionDefaultContent.VeiledBuilderId,
                 80f,
                 80f);
             float before = site.BuildSecondsRemaining;
@@ -145,14 +142,13 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.IronKeepId,
+                FactionDefaultContent.ArcaneumId,
                 -60f,
                 -60f,
                 startActive: true);
             if (!defs.TryGetBuilding(FactionDefaultContent.KeepTurretId, out var def))
                 return false;
             int g0 = wallet.Get(player, ResourceType.Gold);
-            int t0 = wallet.Get(player, ResourceType.Timber);
             sim.ApplyCommands(new GameCommand[]
             {
                 new AttachBuildingCommand
@@ -164,8 +160,7 @@ namespace Asterra.Gameplay
                 },
             });
             return keep.AttachmentOccupantIds[0] != 0
-                   && wallet.Get(player, ResourceType.Gold) == g0 - def.GoldCost
-                   && wallet.Get(player, ResourceType.Timber) == t0 - def.TimberCost;
+                   && wallet.Get(player, ResourceType.Gold) == g0 - def.GoldCost;
         }
 
         private static bool SecondAttachSlot()
@@ -177,7 +172,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.IronKeepId,
+                FactionDefaultContent.ArcaneumId,
                 90f,
                 -90f,
                 startActive: true);
@@ -207,7 +202,7 @@ namespace Asterra.Gameplay
                 ids.Next(),
                 player,
                 new FactionId(0),
-                FactionDefaultContent.IronKeepId,
+                FactionDefaultContent.ArcaneumId,
                 -120f,
                 40f,
                 startActive: true);

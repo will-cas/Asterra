@@ -73,6 +73,26 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "land blocked by lake", !env.CanUnitEnter(60f, 60f, TraversalCapability.Land));
             Expect(ref fails, sb, "boat enters lake", env.CanUnitEnter(60f, 60f, TraversalCapability.Water));
 
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.Trench);
+            Expect(ref fails, sb, "trench cover bites", env.Grid.GetCoverBonus(0f, 0f) >= 0.45f);
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.Road);
+            Expect(ref fails, sb, "road faster than grass", env.Grid.GetMovementModifier(0f, 0f, TraversalCapability.Land) > 1.15f);
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.Mud);
+            Expect(ref fails, sb, "mud slower than swamp-adjacent", env.Grid.GetMovementModifier(0f, 0f, TraversalCapability.Land) < 0.7f);
+
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.GrassShort);
+            var dummy = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.VeiledApprenticeId, 80f, 80f);
+            dummy.X = 0f;
+            dummy.Z = 0f;
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.Trench);
+            float before = dummy.Health;
+            sim.ApplyWorldDamage(dummy.Id, 40f, vsStructure: false);
+            float trenchHp = dummy.Health;
+            dummy.Health = dummy.MaxHealth;
+            env.Grid.FillWorldRect(-20f, -20f, 20f, 20f, DefaultTerrainCatalog.Road);
+            sim.ApplyWorldDamage(dummy.Id, 40f, vsStructure: false);
+            Expect(ref fails, sb, "cover cuts damage vs road", (before - trenchHp) < (dummy.MaxHealth - dummy.Health) - 1f);
+
             sb.Append(fails == 0 ? "WorldEnvironmentSelfTest: OK" : $"WorldEnvironmentSelfTest: FAIL ({fails})");
             return sb.ToString();
         }

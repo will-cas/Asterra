@@ -26,5 +26,6 @@ namespace Asterra.Core
         TerrainWork = 22,
         RepairBridge = 23,
         UpgradeBuilding = 24,
+        SetTerritoryJob = 25,
     }
 }

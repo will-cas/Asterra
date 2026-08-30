@@ -616,73 +616,10 @@ namespace Asterra.AI
 
         private void IssueGather(List<GameCommand> commands, IWorldQuery world, in Perception sense, int tick)
         {
-            if (sense.IdleBuilders.Count == 0 || tick - _lastGatherTick < _tuning.GatherIntervalTicks)
-                return;
-            // Same-tick move/place must win over gather (command apply order).
-            if (BlocksGather(LastDecision))
-                return;
-
-            // Leave workers free for construction assists / on-site progress.
-            int reserve = sense.Constructing.Count > 0 ? Math.Min(2, sense.IdleBuilders.Count) : 0;
-            int available = sense.IdleBuilders.Count - reserve;
-            if (available <= 0)
-                return;
-
-            // Split idle workers: some to expand gold when we have an outpost or second producer.
-            bool pushExpand = sense.HasExpandGold
-                              && (sense.OutpostCount > 0 || sense.ActiveProducerCount >= 2)
-                              && available >= 2;
-            if (pushExpand)
-            {
-                int expandCount = Math.Min(
-                    available / 2,
-                    Math.Max(1, _tuning.TargetWorkersPerNode));
-                var expandIds = new SimEntityId[expandCount];
-                for (int i = 0; i < expandCount; i++)
-                    expandIds[i] = sense.IdleBuilders[i];
-                commands.Add(new GatherCommand
-                {
-                    Issuer = Player,
-                    UnitIds = expandIds,
-                    ResourceNodeId = sense.ExpandGoldId,
-                });
-
-                if (expandCount < available
-                    && TryFindNearestResource(world, sense.KeepX, sense.KeepZ, out var homeNode))
-                {
-                    int homeCount = available - expandCount;
-                    var homeIds = new SimEntityId[homeCount];
-                    for (int i = 0; i < homeCount; i++)
-                        homeIds[i] = sense.IdleBuilders[expandCount + i];
-                    commands.Add(new GatherCommand
-                    {
-                        Issuer = Player,
-                        UnitIds = homeIds,
-                        ResourceNodeId = homeNode,
-                    });
-                }
-
-                _lastGatherTick = tick;
-                if (LastDecision == "idle")
-                    LastDecision = "gather_expand";
-                return;
-            }
-
-            if (!TryFindNearestResource(world, sense.KeepX, sense.KeepZ, out var nodeId))
-                return;
-
-            var gatherIds = new SimEntityId[available];
-            for (int i = 0; i < available; i++)
-                gatherIds[i] = sense.IdleBuilders[i];
-            commands.Add(new GatherCommand
-            {
-                Issuer = Player,
-                UnitIds = gatherIds,
-                ResourceNodeId = nodeId,
-            });
-            _lastGatherTick = tick;
-            if (LastDecision == "idle")
-                LastDecision = "gather";
+            _ = commands;
+            _ = world;
+            _ = sense;
+            _ = tick;
         }
 
         private static bool BlocksGather(string decision)

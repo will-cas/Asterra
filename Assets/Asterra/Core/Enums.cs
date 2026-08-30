@@ -30,4 +30,12 @@ namespace Asterra.Core
         Contested = 1,
         Controlled = 2,
     }
+
+    /// <summary>Captured camp specialization (DoW point / BFME camp job).</summary>
+    public enum TerritoryJob : byte
+    {
+        Gold = 0,
+        Vision = 1,
+        PowerShave = 2,
+    }
 }

@@ -214,6 +214,11 @@ namespace Asterra.Core
                     writer.Write(upgradeBuilding.BuildingId.Value);
                     WriteString(writer, upgradeBuilding.UpgradeDefId);
                     break;
+                case SetTerritoryJobCommand campJob:
+                    writer.Write((byte)CommandType.SetTerritoryJob);
+                    writer.Write(campJob.TerritoryId.Value);
+                    writer.Write((byte)campJob.Job);
+                    break;
                 default:
                     throw new NotSupportedException($"Unsupported command type: {command.GetType().Name}");
             }
@@ -404,6 +409,13 @@ namespace Asterra.Core
                     {
                         BuildingId = new SimEntityId(reader.ReadUInt32()),
                         UpgradeDefId = ReadString(reader),
+                    };
+                    break;
+                case CommandType.SetTerritoryJob:
+                    command = new SetTerritoryJobCommand
+                    {
+                        TerritoryId = new SimEntityId(reader.ReadUInt32()),
+                        Job = (TerritoryJob)reader.ReadByte(),
                     };
                     break;
                 default:

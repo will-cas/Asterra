@@ -58,6 +58,12 @@ namespace Asterra.Gameplay.Content
             for (int i = 0; i < cells.Length; i++)
                 pixels[i] = TerrainColor(cells[i]);
 
+            if (map.texturePaint != null)
+            {
+                for (int i = 0; i < map.texturePaint.Length; i++)
+                    StampTextureOverlay(pixels, map.texturePaint[i]);
+            }
+
             for (int i = 0; i < map.blocked.Length; i++)
             {
                 var b = map.blocked[i];
@@ -252,6 +258,40 @@ namespace Asterra.Gameplay.Content
                 maxZ = maxZ,
                 terrainIndex = terrain,
             };
+        }
+
+        private static void StampTextureOverlay(Color32[] pixels, MapTexturePaint paint)
+        {
+            if (paint == null || pixels == null)
+                return;
+            var tint = TerrainSplat.PreviewTint(paint.layer);
+            float radius = paint.radius > 0.5f ? paint.radius : 16f;
+            bool disk = string.IsNullOrEmpty(paint.shape) || paint.shape.ToLowerInvariant() != "rect";
+            float minX = disk ? paint.x - radius : paint.minX;
+            float minZ = disk ? paint.z - radius : paint.minZ;
+            float maxX = disk ? paint.x + radius : paint.maxX;
+            float maxZ = disk ? paint.z + radius : paint.maxZ;
+            float r2 = radius * radius;
+            ForCellsInRect(minX, minZ, maxX, maxZ, (cx, cz) =>
+            {
+                if (disk)
+                {
+                    float wx = -Half + (cx + 0.5f) * Cell;
+                    float wz = -Half + (cz + 0.5f) * Cell;
+                    float dx = wx - paint.x;
+                    float dz = wz - paint.z;
+                    if (dx * dx + dz * dz > r2)
+                        return;
+                }
+
+                int idx = cz * Resolution + cx;
+                var c = pixels[idx];
+                pixels[idx] = new Color32(
+                    (byte)((c.r + tint.r) / 2),
+                    (byte)((c.g + tint.g) / 2),
+                    (byte)((c.b + tint.b) / 2),
+                    255);
+            });
         }
 
         private static void StampPaint(ushort[] cells, MapTerrainPaint paint)

@@ -116,7 +116,7 @@ namespace Asterra.Gameplay
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
             var barracks = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.BarracksId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneAcademyId, 0f, 0f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new SetRallyCommand
@@ -142,7 +142,7 @@ namespace Asterra.Gameplay
             var sim = new SkirmishWorldSim(wallet, ids, defs);
             var p = new PlayerId(0);
             var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 0f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 0f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new AttackMoveCommand
@@ -198,7 +198,7 @@ namespace Asterra.Gameplay
             FactionDefaultContent.RegisterAll(defs);
             sim = new SkirmishWorldSim(wallet, ids, defs);
             p = new PlayerId(0);
-            unit = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
+            unit = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
         }
 
         private static bool Near(float a, float b, float eps) => Abs(a - b) <= eps;

@@ -18,7 +18,7 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "attack", ApplyAttack());
             Expect(ref fails, sb, "place", ApplyPlace());
             Expect(ref fails, sb, "train", ApplyTrain());
-            Expect(ref fails, sb, "gather", ApplyGather());
+            Expect(ref fails, sb, "gather ignored", ApplyGather());
             Expect(ref fails, sb, "rally", ApplyRally());
             Expect(ref fails, sb, "stance", ApplyStance());
             Expect(ref fails, sb, "stop", ApplyStop());
@@ -52,7 +52,7 @@ namespace Asterra.Gameplay
         {
             Setup(out var sim, out var ids, out _, out var p, out var unit, out _);
             var foe = sim.SpawnUnit(
-                ids.Next(), new PlayerId(1), new FactionId(1), FactionDefaultContent.DryadId, 8f, 0f);
+                ids.Next(), new PlayerId(1), new FactionId(1), FactionDefaultContent.OutcastVillagerId, 8f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new AttackCommand { Issuer = p, UnitIds = new[] { unit.Id }, TargetId = foe.Id },
@@ -71,7 +71,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = p,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = 55f,
                     Z = 20f,
                 },
@@ -89,7 +89,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.IronBuilderId,
+                    UnitDefId = FactionDefaultContent.VeiledBuilderId,
                 },
             });
             return keep.IsProducing;
@@ -99,14 +99,14 @@ namespace Asterra.Gameplay
         {
             Setup(out var sim, out var ids, out var wallet, out var p, out _, out _);
             var builder = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronBuilderId, 20f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledBuilderId, 20f, 0f);
             var node = ids.Next();
             sim.AddResourceNode(node, ResourceType.Gold, 100, 25f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new GatherCommand { Issuer = p, UnitIds = new[] { builder.Id }, ResourceNodeId = node },
             });
-            return builder.GatherTargetId.HasValue;
+            return builder.GatherTargetId.HasValue == false;
         }
 
         private static bool ApplyRally()
@@ -114,7 +114,7 @@ namespace Asterra.Gameplay
             Setup(out var sim, out var ids, out var wallet, out var p, out _, out _);
             wallet.Seed(p, ResourceType.Gold, 500);
             var barracks = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.BarracksId, 30f, 30f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneAcademyId, 30f, 30f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new SetRallyCommand
@@ -196,7 +196,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.IronBuilderId,
+                    UnitDefId = FactionDefaultContent.VeiledBuilderId,
                 },
             });
             sim.ApplyCommands(new GameCommand[]
@@ -269,14 +269,14 @@ namespace Asterra.Gameplay
             Setup(out var sim, out var ids, out var wallet, out var p, out _, out _);
             wallet.Seed(p, ResourceType.Gold, 2000);
             var barracks = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.BarracksId, 20f, -20f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneAcademyId, 20f, -20f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new ChooseUpgradeCommand
                 {
                     Issuer = p,
                     BuildingId = barracks.Id,
-                    UpgradeDefId = FactionDefaultContent.HeavyArmourId,
+                    UpgradeDefId = FactionDefaultContent.VeiledMailId,
                 },
             });
             return barracks.IsResearching;
@@ -291,22 +291,22 @@ namespace Asterra.Gameplay
                 new UnlockPowerCommand
                 {
                     Issuer = p,
-                    PowerDefId = FactionDefaultContent.LucienIronWallAbilityId,
+                    PowerDefId = FactionDefaultContent.WrathOfSkiesAbilityId,
                 },
             });
-            if (!sim.HasPower(p, FactionDefaultContent.LucienIronWallAbilityId))
+            if (!sim.HasPower(p, FactionDefaultContent.WrathOfSkiesAbilityId))
                 return false;
             sim.ApplyCommands(new GameCommand[]
             {
                 new ActivateCommanderAbilityCommand
                 {
                     Issuer = p,
-                    PowerDefId = FactionDefaultContent.LucienIronWallAbilityId,
+                    PowerDefId = FactionDefaultContent.WrathOfSkiesAbilityId,
                 },
             });
             return sim.TryGetCommanderAbilityStatus(
                 p,
-                FactionDefaultContent.LucienIronWallAbilityId,
+                FactionDefaultContent.WrathOfSkiesAbilityId,
                 out float cd,
                 out _) && cd > 0f;
         }
@@ -348,7 +348,7 @@ namespace Asterra.Gameplay
                         Issuer = new PlayerId(0),
                         IssueTick = new Tick(7),
                         BuildingId = new SimEntityId(3),
-                        UnitDefId = "unit_militia",
+                        UnitDefId = "unit_veiled_apprentice",
                     },
                     new CaptureTerritoryCommand
                     {
@@ -418,7 +418,7 @@ namespace Asterra.Gameplay
                     {
                         Issuer = new PlayerId(0),
                         IssueTick = new Tick(7),
-                        PowerDefId = "ability_lucien_iron_wall",
+                        PowerDefId = "ability_wrath_of_skies",
                     },
                     new EnterGarrisonCommand
                     {
@@ -444,7 +444,7 @@ namespace Asterra.Gameplay
                     {
                         Issuer = new PlayerId(0),
                         IssueTick = new Tick(7),
-                        PowerDefId = "ability_lucien_iron_wall",
+                        PowerDefId = "ability_wrath_of_skies",
                     },
                     new AttachBuildingCommand
                     {
@@ -491,8 +491,8 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 200);
             wallet.Seed(p, ResourceType.Timber, 100);
             keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            unit = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 10f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+            unit = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 10f, 0f);
         }
 
         private static void Expect(ref int fails, StringBuilder sb, string name, bool ok)

@@ -31,8 +31,8 @@ namespace Asterra.Gameplay
         [SerializeField] private string mapKey = MapCatalog.BlackridgePassId;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
-        [SerializeField] private int startingGold = 500;
-        [SerializeField] private int startingTimber = 300;
+        [SerializeField] private int startingGold = 700;
+        [SerializeField] private int startingTimber = 0;
         [SerializeField] private int enemyStartingGold = 500;
         [SerializeField] private AiDifficulty aiDifficulty = AiDifficulty.Normal;
         [SerializeField] [Range(0, 1)] private int localSpawnSeat;
@@ -520,6 +520,7 @@ namespace Asterra.Gameplay
                     gameObject.AddComponent<WeatherAtmospherePresenter>();
                 if (FindFirstObjectByType<TerrainGridPresenter>() == null)
                     gameObject.AddComponent<TerrainGridPresenter>();
+                BindTerrainTexturePaint();
             }
 
             if (attachLocalOrders)
@@ -565,6 +566,17 @@ namespace Asterra.Gameplay
 
             IsMatchRunning = true;
             Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} map={MapKey} players={_participants.Count}");
+        }
+
+        private void BindTerrainTexturePaint()
+        {
+            var terrain = FindFirstObjectByType<TerrainGridPresenter>();
+            if (terrain == null)
+                return;
+            if (MapCatalog.TryLoad(MapKey, out var custom) && custom.texturePaint != null)
+                terrain.SetTextureStrokes(custom.texturePaint);
+            else
+                terrain.SetTextureStrokes(null);
         }
 
         private void ResolveCameraFocus(out float focusX, out float focusZ)

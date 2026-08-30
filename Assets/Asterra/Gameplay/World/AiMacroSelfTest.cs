@@ -26,7 +26,7 @@ namespace Asterra.Gameplay
 
         private static bool VerdantPlacesProducer()
         {
-            var roster = FactionDefaultContent.VerdantCourt;
+            var roster = FactionDefaultContent.Outcast;
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = new DefinitionRegistry();
@@ -73,7 +73,7 @@ namespace Asterra.Gameplay
 
         private static bool DecisionIsPlaceProducer()
         {
-            var roster = FactionDefaultContent.IronCovenant;
+            var roster = FactionDefaultContent.VeiledInheritance;
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = new DefinitionRegistry();
@@ -123,11 +123,11 @@ namespace Asterra.Gameplay
             float keepX = 120f;
             float keepZ = 80f;
             sim.SpawnBuilding(
-                ids.Next(), ai, new FactionId(1), FactionDefaultContent.HeartwoodId, keepX, keepZ, startActive: true);
+                ids.Next(), ai, new FactionId(1), FactionDefaultContent.OutcastGreatCampId, keepX, keepZ, startActive: true);
             sim.SpawnUnit(
-                ids.Next(), ai, new FactionId(1), FactionDefaultContent.VerdantBuilderId, keepX + 8f, keepZ + 8f);
+                ids.Next(), ai, new FactionId(1), FactionDefaultContent.OutcastBuilderId, keepX + 8f, keepZ + 8f);
 
-            var roster = FactionDefaultContent.VerdantCourt;
+            var roster = FactionDefaultContent.Outcast;
             var brain = new SkirmishOpponentBrain(
                 ai,
                 roster.KeepBuildingId,
@@ -178,20 +178,20 @@ namespace Asterra.Gameplay
             float keepX = -100f;
             float keepZ = -60f;
             sim.SpawnBuilding(
-                ids.Next(), ai, new FactionId(0), FactionDefaultContent.IronKeepId, keepX, keepZ, startActive: true);
+                ids.Next(), ai, new FactionId(0), FactionDefaultContent.ArcaneumId, keepX, keepZ, startActive: true);
             // Active producer so macro moves past opening into towers.
             sim.SpawnBuilding(
                 ids.Next(),
                 ai,
                 new FactionId(0),
-                FactionDefaultContent.BarracksId,
+                FactionDefaultContent.ArcaneAcademyId,
                 keepX + 40f,
                 keepZ + 20f,
                 startActive: true);
             sim.SpawnUnit(
-                ids.Next(), ai, new FactionId(0), FactionDefaultContent.IronBuilderId, keepX + 6f, keepZ + 6f);
+                ids.Next(), ai, new FactionId(0), FactionDefaultContent.VeiledBuilderId, keepX + 6f, keepZ + 6f);
 
-            var roster = FactionDefaultContent.IronCovenant;
+            var roster = FactionDefaultContent.VeiledInheritance;
             var brain = new SkirmishOpponentBrain(
                 ai,
                 roster.KeepBuildingId,
@@ -248,11 +248,11 @@ namespace Asterra.Gameplay
             float keepX = 80f;
             float keepZ = -80f;
             sim.SpawnBuilding(
-                ids.Next(), ai, new FactionId(0), FactionDefaultContent.IronKeepId, keepX, keepZ, startActive: true);
+                ids.Next(), ai, new FactionId(0), FactionDefaultContent.ArcaneumId, keepX, keepZ, startActive: true);
             sim.SpawnUnit(
-                ids.Next(), ai, new FactionId(0), FactionDefaultContent.IronBuilderId, keepX + 5f, keepZ);
+                ids.Next(), ai, new FactionId(0), FactionDefaultContent.VeiledBuilderId, keepX + 5f, keepZ);
 
-            var roster = FactionDefaultContent.IronCovenant;
+            var roster = FactionDefaultContent.VeiledInheritance;
             var brain = new SkirmishOpponentBrain(
                 ai,
                 roster.KeepBuildingId,

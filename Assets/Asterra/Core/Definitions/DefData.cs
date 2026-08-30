@@ -66,8 +66,8 @@ namespace Asterra.Core
         public float CollisionRadius = 2.2f;
         /// <summary>
         /// How many troop meshes to show for this unit (presentation only).
-        /// 0 = use role default (infantry 16, ranged 12, cavalry 6, else 1).
-        /// Leaders, builders, and siege stay single regardless.
+        /// 0 = <see cref="BattalionRules"/> role default (infantry 16, ranged 12, cavalry 6, else 1).
+        /// Leaders, builders, and siege stay a single figure.
         /// </summary>
         public int SquadSize;
         /// <summary>Wind-riders and similar: flying only after launching from height / perch.</summary>
@@ -158,6 +158,15 @@ namespace Asterra.Core
         public int ResolvedEquipGoldCost =>
             EquipGoldCost > 0 ? EquipGoldCost : System.Math.Max(25, GoldCost / 4);
 
+        /// <summary>Field-banner price: researched cost, or a premium if the tech is still locked.</summary>
+        public int FieldEquipGoldCost(bool researched)
+        {
+            int cost = ResolvedEquipGoldCost;
+            if (researched)
+                return cost;
+            return cost + System.Math.Max(15, cost / 2);
+        }
+
         public bool FitsUnit(string unitDefId, UnitRole role)
         {
             if (CompatibleUnitIds != null && CompatibleUnitIds.Length > 0)
@@ -237,6 +246,8 @@ namespace Asterra.Core
         /// Commander kit: one passive + one or more actives.
         /// </summary>
         public bool IsPassive;
+        /// <summary>Named map-scale chapter (Halo Wars / BFME hero beat). HUD highlights this.</summary>
+        public bool HeroMoment;
         /// <summary>Optional unit spawned by <see cref="PowerEffectKind.SpawnScouts"/>.</summary>
         public string SpawnUnitDefinitionId;
     }

@@ -127,16 +127,16 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var barracks = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.BarracksId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneAcademyId, 0f, 0f, startActive: true);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, -40f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -40f, 0f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new ChooseUpgradeCommand
                 {
                     Issuer = p,
                     BuildingId = barracks.Id,
-                    UpgradeDefId = FactionDefaultContent.HeavyArmourId,
+                    UpgradeDefId = FactionDefaultContent.VeiledMailId,
                 },
             });
             for (int i = 0; i < 120; i++)
@@ -146,7 +146,7 @@ namespace Asterra.Gameplay
                 new UnlockPowerCommand
                 {
                     Issuer = p,
-                    PowerDefId = FactionDefaultContent.LucienIronWallAbilityId,
+                    PowerDefId = FactionDefaultContent.WrathOfSkiesAbilityId,
                 },
             });
 
@@ -155,8 +155,8 @@ namespace Asterra.Gameplay
 
             var sim2 = new SkirmishWorldSim(new ResourceWallet(), new SequentialIdFactory(), defs);
             sim2.RestoreFrom(data);
-            return sim2.HasUpgrade(p, FactionDefaultContent.HeavyArmourId)
-                   && sim2.HasPower(p, FactionDefaultContent.LucienIronWallAbilityId);
+            return sim2.HasUpgrade(p, FactionDefaultContent.VeiledMailId)
+                   && sim2.HasPower(p, FactionDefaultContent.WrathOfSkiesAbilityId);
         }
 
         private static bool BadPathFails()
@@ -185,8 +185,8 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 200);
             wallet.Seed(p, ResourceType.Timber, 100);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 15f, 5f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 15f, 5f);
             sim.AddResourceNode(ids.Next(), ResourceType.Gold, 400, 30f, 0f);
             return sim;
         }

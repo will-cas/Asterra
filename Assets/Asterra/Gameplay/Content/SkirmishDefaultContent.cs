@@ -17,11 +17,6 @@ namespace Asterra.Gameplay.Content
     /// </summary>
     public static class SkirmishDefaultContent
     {
-        public const string MilitiaId = FactionDefaultContent.VeiledApprenticeId;
-        public const string BarracksId = FactionDefaultContent.ArcaneAcademyId;
-        public const string KeepId = FactionDefaultContent.ArcaneumId;
-        public const string MilitiaTrainingId = FactionDefaultContent.ForbiddenCurriculumId;
-
         public const byte PlayerFaction = 0;
         public const byte EnemyFaction = 1;
 
@@ -152,22 +147,6 @@ namespace Asterra.Gameplay.Content
             world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
-
-            // Center-ish nodes (shared contest)
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2000, -80f, 60f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1500, -100f, -70f);
-
-            // West base (player seat)
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2500, -280f, 70f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, -290f, -80f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1800, -240f, -40f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1600, -250f, 50f);
-
-            // East base (enemy seat)
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2500, 280f, -70f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 290f, 80f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1800, 240f, 40f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1600, 250f, -50f);
         }
 
         private static void PopulateRiverCrossing(
@@ -189,23 +168,6 @@ namespace Asterra.Gameplay.Content
 
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
 
-            // River band near z = 0
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2200, -120f, 8f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1800, -40f, -12f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2000, 50f, 10f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1700, 130f, -8f);
-
-            // Near SW base
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, -250f, -160f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, -220f, -180f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1700, -180f, -140f);
-
-            // Near NE base
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 250f, 160f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 220f, 180f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 1700, 180f, 140f);
-
-            // Shared river boats start on water near each shore.
             world.SpawnUnit(
                 ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.RiverBoatId, -390f, 0f);
             world.SpawnUnit(
@@ -258,24 +220,6 @@ namespace Asterra.Gameplay.Content
             world.AddTerritory(ids.Next(), 0f, 0f, radius: 36f, goldPerSecond: 10);
             world.AddTerritory(ids.Next(), 0f, 110f, radius: 28f, goldPerSecond: 6);
             world.AddTerritory(ids.Next(), 0f, -110f, radius: 28f, goldPerSecond: 6);
-
-            // Iron / stone / timber along the choke (trade-route feel via gold nodes)
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2800, -40f, 0f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2800, 40f, 0f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 0f, 35f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 2000, 0f, -35f);
-
-            // High-ground flanks
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2200, -20f, 120f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1800, 20f, 125f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2200, 20f, -120f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1800, -20f, -125f);
-
-            // Base economy pads
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, -280f, 60f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, -290f, -70f);
-            world.AddResourceNode(ids.Next(), ResourceType.Gold, 2400, 280f, -60f);
-            world.AddResourceNode(ids.Next(), ResourceType.Timber, 1900, 290f, 70f);
         }
 
         public static void ApplyMapEnvironmentOnly(SkirmishWorldSim world, string mapKey)

@@ -189,6 +189,13 @@ namespace Asterra.Core
         public string UpgradeDefId;
     }
 
+    /// <summary>Specialize a captured camp (gold / vision / power cooldown).</summary>
+    public sealed class SetTerritoryJobCommand : GameCommand
+    {
+        public SimEntityId TerritoryId;
+        public TerritoryJob Job;
+    }
+
     /// <summary>Envelope for one player's inputs for a future simulation tick.</summary>
     public sealed class CommandFrame
     {

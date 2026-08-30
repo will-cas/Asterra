@@ -242,10 +242,13 @@ namespace Asterra.Gameplay
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = AsterraMeshLibrary.GetResourceMesh(snap.Type);
             var rend = go.AddComponent<MeshRenderer>();
-            rend.sharedMaterial = CreateColorMaterial(AsterraMeshLibrary.ResourceColor(snap.Type));
+            bool gold = snap.Type == ResourceType.Gold;
+            rend.sharedMaterial = CreateColorMaterial(
+                AsterraMeshLibrary.ResourceColor(snap.Type),
+                AsterraMeshLibrary.GetPropAlbedo(gold ? "gold" : "timber"),
+                0.2f);
 
             // Gold nugget vs timber log: different world scales for silhouette.
-            bool gold = snap.Type == ResourceType.Gold;
             go.transform.localScale = gold
                 ? new Vector3(7.5f, 7.5f, 7.5f)
                 : new Vector3(6.5f, 6.5f, 6.5f);
@@ -305,8 +308,13 @@ namespace Asterra.Gameplay
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = AsterraMeshLibrary.GetDestructibleMesh(snap.DefinitionId);
             var color = AsterraMeshLibrary.DestructibleColor(snap.DefinitionId);
+            string texKey = "rock";
+            if (snap.DefinitionId != null && snap.DefinitionId.Contains("bridge"))
+                texKey = "bridge";
+            else if (snap.DefinitionId != null && snap.DefinitionId.Contains("tree"))
+                texKey = "leaf";
             var rend = go.AddComponent<MeshRenderer>();
-            rend.sharedMaterial = CreateColorMaterial(color);
+            rend.sharedMaterial = CreateColorMaterial(color, AsterraMeshLibrary.GetPropAlbedo(texKey), 0.14f);
 
             float scale = snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 1.15f : 1.35f;
             go.transform.localScale = new Vector3(scale, scale, scale);
@@ -442,6 +450,11 @@ namespace Asterra.Gameplay
 
         private static Material CreateColorMaterial(Color color)
         {
+            return CreateColorMaterial(color, null, 0.18f);
+        }
+
+        private static Material CreateColorMaterial(Color color, Texture2D albedo, float uvScale)
+        {
             var shader = Shader.Find("Asterra/UnlitColor")
                          ?? Shader.Find("Universal Render Pipeline/Unlit")
                          ?? Shader.Find("Unlit/Color")
@@ -451,6 +464,15 @@ namespace Asterra.Gameplay
                 mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Color"))
                 mat.SetColor("_Color", color);
+            if (albedo != null)
+            {
+                mat.SetTexture("_MainTex", albedo);
+                if (mat.HasProperty("_BaseMap"))
+                    mat.SetTexture("_BaseMap", albedo);
+            }
+
+            mat.SetFloat("_UvScale", uvScale);
+            mat.SetFloat("_TexBlend", albedo != null ? 0.72f : 0f);
             return mat;
         }
     }

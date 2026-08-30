@@ -17,6 +17,7 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "research equipment at barracks", ResearchEquipment());
             Expect(ref fails, sb, "research equipment at keep", ResearchEquipmentAtKeep());
             Expect(ref fails, sb, "research does not auto-equip", ResearchDoesNotAutoEquip());
+            Expect(ref fails, sb, "field banner without research", FieldBannerWithoutResearch());
             Expect(ref fails, sb, "apply equipment boosts armor", ApplyEquipmentBoosts());
             Expect(ref fails, sb, "equip costs gold per unit", EquipCostsGold());
             Expect(ref fails, sb, "fire swords skip ranged", FireSwordsSkipRanged());
@@ -44,7 +45,7 @@ namespace Asterra.Gameplay
 
         private static bool ResearchEquipment()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
             wallet.Seed(p, ResourceType.Gold, 2000);
             sim.ApplyCommands(new GameCommand[]
             {
@@ -63,7 +64,7 @@ namespace Asterra.Gameplay
 
         private static bool ResearchEquipmentAtKeep()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out _);
             var keep = sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -40f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 2000);
@@ -83,7 +84,7 @@ namespace Asterra.Gameplay
 
         private static bool ResearchDoesNotAutoEquip()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
             wallet.Seed(p, ResourceType.Gold, 2000);
             float armor0 = unit.Armor;
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.VeiledMailId);
@@ -91,9 +92,32 @@ namespace Asterra.Gameplay
                    && sim.HasUpgrade(p, FactionDefaultContent.VeiledMailId);
         }
 
+        private static bool FieldBannerWithoutResearch()
+        {
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out var unit);
+            wallet.Seed(p, ResourceType.Gold, 2000);
+            if (sim.HasUpgrade(p, FactionDefaultContent.VeiledMailId))
+                return false;
+            float armor0 = unit.Armor;
+            int g0 = wallet.Get(p, ResourceType.Gold);
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new ApplyUnitUpgradeCommand
+                {
+                    Issuer = p,
+                    UnitIds = new[] { unit.Id },
+                    UpgradeDefId = FactionDefaultContent.VeiledMailId,
+                },
+            });
+            return unit.Armor > armor0
+                   && unit.AppliedEquipmentCount >= 1
+                   && wallet.Get(p, ResourceType.Gold) < g0
+                   && !sim.HasUpgrade(p, FactionDefaultContent.VeiledMailId);
+        }
+
         private static bool ApplyEquipmentBoosts()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
             wallet.Seed(p, ResourceType.Gold, 2000);
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.VeiledMailId);
             float armor0 = unit.Armor;
@@ -111,7 +135,7 @@ namespace Asterra.Gameplay
 
         private static bool EquipCostsGold()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
             wallet.Seed(p, ResourceType.Gold, 2000);
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.VeiledMailId);
             int g0 = wallet.Get(p, ResourceType.Gold);
@@ -129,7 +153,7 @@ namespace Asterra.Gameplay
 
         private static bool FireSwordsSkipRanged()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
             wallet.Seed(p, ResourceType.Gold, 5000);
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.FineSteelId);
             var archer = sim.SpawnUnit(
@@ -150,7 +174,7 @@ namespace Asterra.Gameplay
 
         private static bool PassiveUnlockApplies()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out var unit);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out var unit);
             sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -30f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 500);
@@ -169,7 +193,7 @@ namespace Asterra.Gameplay
 
         private static bool DuplicateEquipmentRejected()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out var unit);
             wallet.Seed(p, ResourceType.Gold, 2000);
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.VeiledMailId);
             var cmd = new ApplyUnitUpgradeCommand
@@ -187,7 +211,7 @@ namespace Asterra.Gameplay
 
         private static bool BuilderCannotEquip()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out var barracks, out _);
             wallet.Seed(p, ResourceType.Gold, 2000);
             ResearchNow(sim, wallet, p, barracks, FactionDefaultContent.VeiledMailId);
             var builder = sim.SpawnUnit(
@@ -232,7 +256,7 @@ namespace Asterra.Gameplay
 
         private static bool UnlockPowerSpends()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out _);
             sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -30f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 500);
@@ -251,7 +275,7 @@ namespace Asterra.Gameplay
 
         private static bool ActivatePowerCooldown()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out _);
             sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -30f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 500);
@@ -306,7 +330,7 @@ namespace Asterra.Gameplay
 
         private static bool WrongFactionPowerRejected()
         {
-            SetupIron(out var sim, out var ids, out var wallet, out var p, out _, out _);
+            SetupUncrowned(out var sim, out var ids, out var wallet, out var p, out _, out _);
             sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, -30f, 0f, startActive: true);
             wallet.Seed(p, ResourceType.Gold, 500);
@@ -470,7 +494,7 @@ namespace Asterra.Gameplay
             return gates >= 2;
         }
 
-        private static void SetupIron(
+        private static void SetupUncrowned(
             out SkirmishWorldSim sim,
             out SequentialIdFactory ids,
             out ResourceWallet wallet,

@@ -15,6 +15,8 @@ namespace Asterra.Gameplay
             int fails = 0;
 
             Expect(ref fails, sb, "territory income pays controller", TerritoryIncome());
+            Expect(ref fails, sb, "vision camp pays less gold", VisionCampPaysLess());
+            Expect(ref fails, sb, "signature building near keep", SignatureNearKeep());
             Expect(ref fails, sb, "outpost passive gold", OutpostIncome());
             Expect(ref fails, sb, "capture progresses with unit", CaptureProgresses());
             Expect(ref fails, sb, "wall links and reject stack", WallBlocksPath());
@@ -40,7 +42,7 @@ namespace Asterra.Gameplay
             sim.AddTerritory(tid, 0f, 0f, 40f, goldPerSecond: 5);
             // Force controlled — capture loop would take long; set via damage-free approach:
             // spawn unit and tick capture.
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
             for (int i = 0; i < 250; i++)
                 sim.Tick(0.25f);
             bool controlled = false;
@@ -58,6 +60,64 @@ namespace Asterra.Gameplay
             for (int i = 0; i < 20; i++)
                 sim.Tick(1f);
             return wallet.Get(p, ResourceType.Gold) > g0;
+        }
+
+        private static bool VisionCampPaysLess()
+        {
+            var ids = new SequentialIdFactory();
+            var wallet = new ResourceWallet();
+            var defs = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs);
+            var sim = new SkirmishWorldSim(wallet, ids, defs);
+            var p = new PlayerId(0);
+            wallet.Seed(p, ResourceType.Gold, 80);
+            var tid = ids.Next();
+            sim.AddTerritory(tid, 0f, 0f, 40f, goldPerSecond: 5);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
+            for (int i = 0; i < 250; i++)
+                sim.Tick(0.25f);
+            bool controlled = false;
+            for (int i = 0; i < sim.Territories.Count; i++)
+            {
+                if (sim.Territories[i].Id.Value == tid.Value
+                    && sim.Territories[i].HasController
+                    && sim.Territories[i].Controller.Value == p.Value)
+                    controlled = true;
+            }
+
+            if (!controlled)
+                return false;
+
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new SetTerritoryJobCommand
+                {
+                    Issuer = p,
+                    TerritoryId = tid,
+                    Job = TerritoryJob.Vision,
+                },
+            });
+            int g0 = wallet.Get(p, ResourceType.Gold);
+            for (int i = 0; i < 5; i++)
+                sim.Tick(1f);
+            int gained = wallet.Get(p, ResourceType.Gold) - g0;
+            return gained >= 8 && gained <= 16;
+        }
+
+        private static bool SignatureNearKeep()
+        {
+            var ids = new SequentialIdFactory();
+            var wallet = new ResourceWallet();
+            var defs = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs);
+            var sim = new SkirmishWorldSim(wallet, ids, defs);
+            var p = new PlayerId(0);
+            wallet.Seed(p, ResourceType.Gold, 8000);
+            sim.SpawnBuilding(
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+            bool near = sim.CanPreviewPlaceBuilding(FactionDefaultContent.PortalGateId, 50f, 0f, 0f, p);
+            bool far = sim.CanPreviewPlaceBuilding(FactionDefaultContent.PortalGateId, 120f, 0f, 0f, p);
+            return near && !far;
         }
 
         private static bool OutpostIncome()
@@ -87,7 +147,7 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             var tid = ids.Next();
             sim.AddTerritory(tid, 10f, 10f, 40f, goldPerSecond: 1);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 10f, 10f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 10f, 10f);
             float prog0 = 0f;
             for (int i = 0; i < sim.Territories.Count; i++)
             {
@@ -157,15 +217,15 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.LucienLeaderId, 5f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledHeirId, 5f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
                 new TrainUnitCommand
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.LucienLeaderId,
+                    UnitDefId = FactionDefaultContent.VeiledHeirId,
                 },
             });
             return !keep.IsProducing;
@@ -181,9 +241,9 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
             var leader = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.LucienLeaderId, 5f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledHeirId, 5f, 0f);
             sim.ApplyWorldDamage(leader.Id, 9999f, vsStructure: false);
             sim.Tick(0.05f);
             sim.ApplyCommands(new GameCommand[]
@@ -192,7 +252,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.LucienLeaderId,
+                    UnitDefId = FactionDefaultContent.VeiledHeirId,
                 },
             });
             return keep.IsProducing;
@@ -208,14 +268,14 @@ namespace Asterra.Gameplay
             var p = new PlayerId(0);
             wallet.Seed(p, ResourceType.Gold, 5000);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
             sim.ApplyCommands(new GameCommand[]
             {
                 new TrainUnitCommand
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.LucienLeaderId,
+                    UnitDefId = FactionDefaultContent.VeiledHeirId,
                 },
             });
             sim.ApplyCommands(new GameCommand[]
@@ -224,7 +284,7 @@ namespace Asterra.Gameplay
                 {
                     Issuer = p,
                     BuildingId = keep.Id,
-                    UnitDefId = FactionDefaultContent.LucienLeaderId,
+                    UnitDefId = FactionDefaultContent.VeiledHeirId,
                 },
             });
             return keep.IsProducing && keep.QueueCount == 0;

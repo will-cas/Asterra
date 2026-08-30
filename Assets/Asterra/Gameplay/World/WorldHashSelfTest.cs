@@ -85,7 +85,7 @@ namespace Asterra.Gameplay
                 new PlaceBuildingCommand
                 {
                     Issuer = p,
-                    BuildingDefId = FactionDefaultContent.BarracksId,
+                    BuildingDefId = FactionDefaultContent.ArcaneAcademyId,
                     X = 40f,
                     Z = 40f,
                 },
@@ -174,8 +174,8 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 500);
             wallet.Seed(p, ResourceType.Timber, 200);
             sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
-            var u = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 12f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
+            var u = sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 12f, 0f);
             sim.AddResourceNode(ids.Next(), ResourceType.Gold, 200, 30f, 0f);
             seedCmds = new GameCommand[]
             {

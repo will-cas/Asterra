@@ -126,7 +126,7 @@ namespace Asterra.Gameplay
                             Issuer = p0,
                             IssueTick = new Tick(t),
                             BuildingId = keep,
-                            UnitDefId = FactionDefaultContent.IronBuilderId,
+                            UnitDefId = FactionDefaultContent.VeiledBuilderId,
                         },
                     };
                 }
@@ -189,8 +189,8 @@ namespace Asterra.Gameplay
             SkirmishDefaultContent.PopulateInitialWorld(
                 sim,
                 ids,
-                FactionDefaultContent.IronCovenant,
-                FactionDefaultContent.VerdantCourt);
+                FactionDefaultContent.VeiledInheritance,
+                FactionDefaultContent.Outcast);
             return sim;
         }
 

@@ -17,6 +17,7 @@ namespace Asterra.Gameplay
         public float EffectMagnitude = 3f;
         public float BuildingMitigation;
         public bool IsPassive;
+        public bool HeroMoment;
 
         public PowerDefData ToData()
         {
@@ -31,6 +32,7 @@ namespace Asterra.Gameplay
                 EffectMagnitude = EffectMagnitude,
                 BuildingMitigation = BuildingMitigation,
                 IsPassive = IsPassive,
+                HeroMoment = HeroMoment,
             };
         }
     }
@@ -44,7 +46,7 @@ namespace Asterra.Gameplay
         public static FactionRoster ToRoster(this FactionDefinition def)
         {
             if (def == null)
-                return FactionDefaultContent.IronCovenant;
+                return FactionDefaultContent.VeiledInheritance;
 
             var fallback = FactionDefaultContent.Get(new FactionId(def.FactionIndex));
             var roster = new FactionRoster
@@ -73,6 +75,8 @@ namespace Asterra.Gameplay
                 PowerId = fallback.PowerId,
                 PowerDisplayName = fallback.PowerDisplayName,
                 PowerIds = fallback.PowerIds,
+                ExtraBuildingIds = fallback.ExtraBuildingIds,
+                SignatureBuildingId = fallback.SignatureBuildingId,
             };
 
             if (def.DefaultCommander != null && !string.IsNullOrEmpty(def.DefaultCommander.ActiveAbilityId))

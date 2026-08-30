@@ -111,7 +111,7 @@ namespace Asterra.Gameplay.Sim
                 ? def.TraversalCapabilities
                 : TraversalCapability.Land;
             SightRadius = def.SightRadius > 1f ? def.SightRadius : 110f;
-            CollisionRadius = def.CollisionRadius > 0.1f ? def.CollisionRadius : 1.6f;
+            CollisionRadius = BattalionRules.CollisionRadius(def);
             X = x;
             Z = z;
         }
@@ -483,6 +483,7 @@ namespace Asterra.Gameplay.Sim
         public TerritoryState State { get; set; } = TerritoryState.Neutral;
         public PlayerId? Controller { get; set; }
         public float CaptureProgress { get; set; }
+        public TerritoryJob Job { get; set; }
 
         public float X;
         public float Z;
@@ -508,7 +509,8 @@ namespace Asterra.Gameplay.Sim
                 State,
                 has ? Controller.Value : new PlayerId(0),
                 has,
-                CaptureProgress);
+                CaptureProgress,
+                Job);
         }
     }
 

@@ -19,6 +19,8 @@ namespace Asterra.Core.World
         public float cameraFocusZ = 0f;
 
         public MapTerrainPaint[] terrain = Array.Empty<MapTerrainPaint>();
+        /// <summary>Cosmetic splat overlays (grass/dirt/rock/sand). Presentation only.</summary>
+        public MapTexturePaint[] texturePaint = Array.Empty<MapTexturePaint>();
         public MapBlockedRect[] blocked = Array.Empty<MapBlockedRect>();
         public MapKeepSpawn[] keeps = Array.Empty<MapKeepSpawn>();
         public MapUnitSpawn[] units = Array.Empty<MapUnitSpawn>();
@@ -31,6 +33,7 @@ namespace Asterra.Core.World
         public void EnsureArrays()
         {
             terrain ??= Array.Empty<MapTerrainPaint>();
+            texturePaint ??= Array.Empty<MapTexturePaint>();
             blocked ??= Array.Empty<MapBlockedRect>();
             keeps ??= Array.Empty<MapKeepSpawn>();
             units ??= Array.Empty<MapUnitSpawn>();
@@ -59,6 +62,23 @@ namespace Asterra.Core.World
         public ushort terrainIndex = 1;
         /// <summary>Optional def id e.g. terrain_water_deep — resolved at load.</summary>
         public string terrainId = string.Empty;
+    }
+
+    [Serializable]
+    public class MapTexturePaint
+    {
+        /// <summary>"disk" or "rect".</summary>
+        public string shape = "disk";
+        public float x;
+        public float z;
+        public float radius = 20f;
+        public float minX;
+        public float minZ;
+        public float maxX;
+        public float maxZ;
+        /// <summary>grass | dirt | rock | sand</summary>
+        public string layer = "dirt";
+        public float strength = 0.85f;
     }
 
     [Serializable]

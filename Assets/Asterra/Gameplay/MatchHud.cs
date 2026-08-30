@@ -102,6 +102,7 @@ namespace Asterra.Gameplay
 
             DrawResources(player);
             DrawPowerButton();
+            DrawCampJobs(player);
             DrawFeedbackToast();
 
             if (showDebugHud)
@@ -117,8 +118,6 @@ namespace Asterra.Gameplay
                 if (next == AsterraMenuPanels.Overlay.Profile)
                     next = AsterraMenuPanels.Overlay.Pause; // Profile is lobby-only
                 if (prior == AsterraMenuPanels.Overlay.Pause && next == AsterraMenuPanels.Overlay.Options)
-                    _overlayReturn = AsterraMenuPanels.Overlay.Pause;
-                if (prior == AsterraMenuPanels.Overlay.Pause && next == AsterraMenuPanels.Overlay.Controls)
                     _overlayReturn = AsterraMenuPanels.Overlay.Pause;
                 if (prior == AsterraMenuPanels.Overlay.Options
                     && next == AsterraMenuPanels.Overlay.None
@@ -182,28 +181,21 @@ namespace Asterra.Gameplay
                 HudStyle.AccentSoft);
 
             string gold = "0";
-            string timber = "0";
             if (match.Wallet != null)
             {
                 int income = EstimateGoldIncomePerSecond(player);
                 gold = match.Wallet.Get(player, ResourceType.Gold).ToString();
                 if (income > 0)
                     gold += $"  +{income}/s";
-                timber = match.Wallet.Get(player, ResourceType.Timber).ToString();
             }
 
             float pillH = HudStyle.S(28f);
             float pillY = strip.y + HudStyle.S(8f);
             HudStyle.ResourcePill(
-                new Rect(strip.x + HudStyle.S(8f), pillY, HudStyle.S(150f), pillH),
+                new Rect(strip.x + HudStyle.S(8f), pillY, HudStyle.S(210f), pillH),
                 "gold",
                 gold,
                 HudStyle.Gold);
-            HudStyle.ResourcePill(
-                new Rect(strip.x + HudStyle.S(166f), pillY, HudStyle.S(120f), pillH),
-                "timber",
-                timber,
-                HudStyle.Timber);
 
             if (showForecast)
             {
@@ -268,15 +260,20 @@ namespace Asterra.Gameplay
                 bool canClick = !unlocked || (!powerDef.IsPassive && buff <= 0.05f && cd <= 0.05f);
                 string tip = DescribePower(powerDef, unlocked, buff, cd);
                 string shortName = ShortPowerName(powerDef.DisplayName);
+                bool hero = powerDef.HeroMoment;
+                float thisW = hero ? HudStyle.S(80f) : cardW;
+                float thisH = hero ? HudStyle.S(70f) : cardH;
                 string status = !unlocked ? $"{powerDef.UnlockGoldCost}g"
                     : powerDef.IsPassive ? "On"
                     : buff > 0.05f ? $"{buff:0}s"
                     : cd > 0.05f ? $"{cd:0}s"
                     : IsPrimaryActivePower(roster.PowerIds, i, powerId) ? "Ready"
                     : "Use";
+                if (hero && unlocked)
+                    status = "HERO\n" + status;
                 string label = $"{shortName}\n{status}";
 
-                var rect = new Rect(x, y, cardW, cardH);
+                var rect = new Rect(x - (thisW - cardW), y, thisW, thisH);
                 if (HudStyle.CommandCard(rect, "power", label, HudStyle.Accent, out bool hovered, canClick && !faded, selected: buff > 0.05f))
                 {
                     AsterraAudio.PlayUiClick();
@@ -288,7 +285,68 @@ namespace Asterra.Gameplay
 
                 if (hovered)
                     _hoverTip = tip;
+                y += thisH + gap;
+            }
+        }
+
+        private void DrawCampJobs(PlayerId player)
+        {
+            if (orders == null || match.World == null)
+                return;
+            var territories = match.World.Territories;
+            if (territories == null || territories.Count == 0)
+                return;
+
+            float cardW = HudStyle.S(52f);
+            float cardH = HudStyle.S(40f);
+            float gap = HudStyle.S(4f);
+            float x = HudStyle.S(12f);
+            float y = HudStyle.S(72f);
+            int drawn = 0;
+            for (int i = 0; i < territories.Count; i++)
+            {
+                var camp = territories[i];
+                if (!camp.HasController || camp.Controller != player || camp.State != TerritoryState.Controlled)
+                    continue;
+                DrawOneCampJob(camp, x, y, cardW, cardH, gap);
                 y += cardH + gap;
+                drawn++;
+                if (drawn >= 4)
+                    break;
+            }
+        }
+
+        private void DrawOneCampJob(TerritorySnapshot camp, float x, float y, float cardW, float cardH, float gap)
+        {
+            DrawCampJobCard(camp, TerritoryJob.Gold, "Gold", x, y, cardW, cardH);
+            DrawCampJobCard(camp, TerritoryJob.Vision, "Watch", x + cardW + gap, y, cardW, cardH);
+            DrawCampJobCard(camp, TerritoryJob.PowerShave, "Power", x + (cardW + gap) * 2f, y, cardW, cardH);
+        }
+
+        private void DrawCampJobCard(
+            TerritorySnapshot camp,
+            TerritoryJob job,
+            string label,
+            float x,
+            float y,
+            float w,
+            float h)
+        {
+            bool selected = camp.Job == job;
+            var rect = new Rect(x, y, w, h);
+            if (HudStyle.CommandCard(rect, "outpost", selected ? $"{label}\nOn" : $"{label}\n25g", HudStyle.Accent, out bool hovered, !selected, selected: selected))
+            {
+                AsterraAudio.PlayUiClick();
+                orders.SetTerritoryJob(camp.Id, job);
+            }
+
+            if (hovered)
+            {
+                _hoverTip = job == TerritoryJob.Gold
+                    ? "Camp job: extra gold"
+                    : job == TerritoryJob.Vision
+                        ? "Camp job: wide sight, less gold"
+                        : "Camp job: faster commander cooldowns";
             }
         }
 
@@ -365,7 +423,7 @@ namespace Asterra.Gameplay
             }
 
             if (orders.HasBuilderSelected)
-                DrawBuilderCommands();
+                DrawBuilderCommands(player);
             else if (orders.HasCombatUnitSelected)
                 DrawCombatCommands(player);
         }
@@ -469,24 +527,25 @@ namespace Asterra.Gameplay
             for (int i = 0; i < equip.Length; i++)
             {
                 string upId = equip[i];
-                if (!match.World.HasUpgrade(player, upId))
-                    continue;
                 if (match.Definitions == null || !match.Definitions.TryGetUpgrade(upId, out var up))
                     continue;
-                int equipCost = up.ResolvedEquipGoldCost;
+                bool researched = match.World.HasUpgrade(player, upId);
+                int equipCost = up.FieldEquipGoldCost(researched);
                 string tip = DescribeUpgrade(up);
+                if (!researched)
+                    tip += "\nField banner: extra gold until researched.";
                 bool done = SelectionAllHaveEquipment(upId);
                 PushCard(
                     "gear",
-                    done ? "Done" : $"{equipCost}g",
+                    done ? "Done" : $"{ShortName(up.DisplayName)}\n{equipCost}g",
                     tip,
-                    HudStyle.Accent,
+                    researched ? HudStyle.Accent : HudStyle.AccentSoft,
                     done ? null : () => orders.ApplyUpgradeToSelected(upId),
                     enabled: !done);
             }
         }
 
-        private void DrawBuilderCommands()
+        private void DrawBuilderCommands(PlayerId player)
         {
             var roster = match.PlayerRoster;
             if (roster == null)
@@ -511,6 +570,12 @@ namespace Asterra.Gameplay
                         extraIcon = extra.GoldPerSecond > 0
                             ? "outpost"
                             : extra.Kind == BuildingKind.Special ? "power" : "hammer";
+                    }
+
+                    if (!string.IsNullOrEmpty(roster.SignatureBuildingId) && extraId == roster.SignatureBuildingId)
+                    {
+                        extraIcon = "keep";
+                        extraLabel = "Keep " + extraLabel;
                     }
 
                     PushBuildCard(extraIcon, extraLabel, extraId);
@@ -654,7 +719,7 @@ namespace Asterra.Gameplay
                     () => orders.DemolishSelectedBuilding());
 
             if (b.Owner == player && (b.Kind == BuildingKind.Wall || b.Kind == BuildingKind.Gate))
-                PushCard("timber", "Salvage", "Raze wall for timber", HudStyle.Timber,
+                PushCard("gold", "Salvage", "Raze wall for gold", HudStyle.Gold,
                     () => orders.RazeSelectedWall());
 
             if (b.Owner == player
@@ -675,10 +740,15 @@ namespace Asterra.Gameplay
                     bool occupied = (b.AttachmentOccupiedMask & (1 << slot)) != 0;
                     string slotName = slot == 0 ? "N" : slot == 1 ? "E" : slot == 2 ? "S" : "W";
                     byte captured = slot;
+                    int gold = 120;
+                    if (match.Definitions != null
+                        && match.Definitions.TryGetBuilding(attachDef, out var turretDef)
+                        && turretDef.GoldCost > 0)
+                        gold = turretDef.GoldCost;
                     PushCard(
                         "turret",
-                        occupied ? $"{slotName}✓" : slotName,
-                        occupied ? "Turret pad occupied" : $"Mount keep turret ({slotName})",
+                        occupied ? $"{slotName}✓" : $"Turret\n{gold}g",
+                        occupied ? "Turret pad occupied" : $"Mount keep turret {slotName} ({gold}g)",
                         HudStyle.Accent,
                         occupied ? null : () => orders.AttachToKeep(captured, attachDef),
                         enabled: !occupied);
@@ -736,7 +806,7 @@ namespace Asterra.Gameplay
 
             PushCard(
                 "research",
-                $"{up.GoldCost}g",
+                $"{ShortName(up.DisplayName)}\n{up.GoldCost}g",
                 tip,
                 new Color(0.35f, 0.7f, 1f),
                 busy ? null : () => orders.ResearchUpgrade(upId),
@@ -779,10 +849,15 @@ namespace Asterra.Gameplay
             if (string.IsNullOrEmpty(unitId))
                 return;
             string tip = label;
+            string cardLabel = label;
             if (match.Definitions != null && match.Definitions.TryGetUnit(unitId, out var def))
+            {
                 tip = DescribeUnit(def) + $" ({def.GoldCost}g)";
+                if (def.GoldCost > 0)
+                    cardLabel = $"{label}\n{def.GoldCost}g";
+            }
 
-            PushCard(icon, label, tip, HudStyle.Accent, () => orders.TrainUnit(unitId));
+            PushCard(icon, cardLabel, tip, HudStyle.Accent, () => orders.TrainUnit(unitId));
         }
 
         private void PushCard(string icon, string label, string tip, Color accent, System.Action onClick, bool enabled = true)
@@ -1299,15 +1374,13 @@ namespace Asterra.Gameplay
             if (def.IsLeader)
                 return $"{def.DisplayName}: commander hero";
             if (def.IsBuilder)
-                return $"{def.DisplayName}: gathers and constructs buildings";
+                return $"{def.DisplayName}: constructs buildings";
             return $"{def.DisplayName}: {def.AttackDamage:0} dmg · range {def.AttackRange:0.#} · {def.MaxHealth:0} HP";
         }
 
         private static string DescribeBuilding(BuildingDefData def)
         {
-            string cost = def.TimberCost > 0
-                ? $"{def.GoldCost}g / {def.TimberCost} timber"
-                : $"{def.GoldCost}g";
+            string cost = $"{def.GoldCost}g";
             string time = def.BuildSeconds > 0.1f ? $" · {def.BuildSeconds:0.#}s build" : string.Empty;
             if (def.GoldPerSecond > 0)
                 return $"{def.DisplayName}: +{def.GoldPerSecond} gold/sec when complete ({cost})";

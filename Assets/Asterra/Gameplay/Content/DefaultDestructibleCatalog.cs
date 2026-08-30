@@ -23,8 +23,8 @@ namespace Asterra.Gameplay.Content
                 BlocksLos = true,
                 ClearsTerrainOnDestroy = true,
                 ReplaceTerrainDefIndex = DefaultTerrainCatalog.GrassShort,
-                ResourceDropType = ResourceType.Timber,
-                ResourceDropAmount = 25,
+                ResourceDropType = null,
+                ResourceDropAmount = 0,
                 FootprintRadius = 5f,
                 ProvidesCover = true,
             };

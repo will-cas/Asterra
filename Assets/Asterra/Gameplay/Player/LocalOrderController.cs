@@ -425,6 +425,18 @@ namespace Asterra.Gameplay.Player
                 MatchFeedback.Show($"Unlocking {def.DisplayName}");
         }
 
+        public void SetTerritoryJob(SimEntityId territoryId, TerritoryJob job)
+        {
+            if (_commands == null)
+                return;
+            _commands.SubmitLocal(new SetTerritoryJobCommand
+            {
+                Issuer = _local,
+                TerritoryId = territoryId,
+                Job = job,
+            });
+        }
+
         public void ResearchUpgrade()
         {
             if (_roster == null)
@@ -505,12 +517,6 @@ namespace Asterra.Gameplay.Player
         {
             if (_commands == null || _world == null)
                 return;
-            if (!_world.HasUpgrade(_local, upgradeDefId))
-            {
-                MatchFeedback.Show("Research equipment at barracks first", AsterraSfx.Invalid);
-                return;
-            }
-
             if (_selection == null || _selection.Selected.Count == 0)
             {
                 MatchFeedback.Show("Select combat units to equip", AsterraSfx.Invalid);
@@ -1099,22 +1105,6 @@ namespace Asterra.Gameplay.Player
                 if (unitIds.Length == 0)
                     return;
 
-                if (TryPickResource(out var resource))
-                {
-                    var builders = GetSelectedBuilderIds();
-                    if (builders.Length > 0)
-                    {
-                        _commands.SubmitLocal(new GatherCommand
-                        {
-                            Issuer = _local,
-                            UnitIds = builders,
-                            ResourceNodeId = resource.Id,
-                        });
-                        MatchFeedback.Show("Gathering...", AsterraSfx.OrderGather);
-                        return;
-                    }
-                }
-
                 if (TryPickDestructible(out var propView))
                 {
                     _commands.SubmitLocal(new AttackCommand
@@ -1372,7 +1362,7 @@ namespace Asterra.Gameplay.Player
                 BuildingId = _selectedBuilding.Value,
                 RazeForMaterials = true,
             });
-            MatchFeedback.Show("Raze for timber", AsterraSfx.OrderBuild);
+            MatchFeedback.Show("Raze for gold", AsterraSfx.OrderBuild);
             _selectedBuilding = null;
         }
 
@@ -1975,12 +1965,6 @@ namespace Asterra.Gameplay.Player
 
             if (_selection != null && _selection.Selected.Count > 0)
             {
-                if (HasSelectedBuilder() && TryPickResource(out _))
-                {
-                    CurrentCursorMode = OrderCursorMode.Gather;
-                    return;
-                }
-
                 if (TryPickEntity(out var hover) && hover.IsRevealed)
                 {
                     if (hover.Owner != _local)

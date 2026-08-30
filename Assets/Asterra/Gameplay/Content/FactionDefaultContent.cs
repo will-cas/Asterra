@@ -3,7 +3,7 @@ using Asterra.Gameplay.Sim;
 
 namespace Asterra.Gameplay.Content
 {
-    /// <summary>Plain-data roster for one of the three launch factions.</summary>
+    /// <summary>Plain-data roster for one launch faction.</summary>
     public sealed class FactionRoster
     {
         public FactionId Id;
@@ -15,7 +15,7 @@ namespace Asterra.Gameplay.Content
         public string BuilderUnitId;
         public string RangedUnitId;
         public string CavalryUnitId;
-        /// <summary>Faction specialty (e.g. Iron Guard, Fire Mage). Empty = none.</summary>
+        /// <summary>Faction specialty unit. Empty = none.</summary>
         public string EliteUnitId;
         public string SiegeUnitId;
         /// <summary>Shared scout (Pathfinder). Trainable at producer.</summary>
@@ -27,6 +27,8 @@ namespace Asterra.Gameplay.Content
         public string OutpostBuildingId;
         /// <summary>Additional placeable buildings (extra producers, unique economy, portals).</summary>
         public string[] ExtraBuildingIds = System.Array.Empty<string>();
+        /// <summary>Keep-adjacent signature building (BFME citadel unique).</summary>
+        public string SignatureBuildingId;
         public string BasicUpgradeId;
         /// <summary>Keep-only techs (bastion, keepward, etc.).</summary>
         public string[] KeepUpgradeIds = System.Array.Empty<string>();
@@ -345,6 +347,7 @@ namespace Asterra.Gameplay.Content
                 HighTempleId,
                 PortalGateId,
             },
+            SignatureBuildingId = PortalGateId,
             BasicUpgradeId = VeiledMailId,
             KeepUpgradeIds = new[]
             {
@@ -402,6 +405,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = RoyalWallId,
             OutpostBuildingId = RoyalFarmId,
             ExtraBuildingIds = new[] { RoyalCourtId },
+            SignatureBuildingId = RoyalCourtId,
             BasicUpgradeId = MundorArmourId,
             KeepUpgradeIds = new[] { MusterRollsId, TombRightsId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[]
@@ -450,6 +454,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = OutcastGroundWorksId,
             OutpostBuildingId = OutcastMineId,
             ExtraBuildingIds = new[] { OutcastAerieId, OutcastVillageHallId },
+            SignatureBuildingId = OutcastAerieId,
             BasicUpgradeId = CloakedUpgradeId,
             KeepUpgradeIds = new[] { GreatPerchUpgradeId, RollingFogUpgradeId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[]
@@ -496,6 +501,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = FreetownBarricadesId,
             OutpostBuildingId = FreetownBlackMarketId,
             ExtraBuildingIds = new[] { FreetownHutId },
+            SignatureBuildingId = FreetownHutId,
             BasicUpgradeId = RageUpgradeId,
             KeepUpgradeIds = new[] { RareLootUpgradeId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[]
@@ -543,6 +549,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = UniversityMoatId,
             OutpostBuildingId = UniversityObservatoryId,
             ExtraBuildingIds = new[] { UniversityLibraryId, UniversityAlchemistId, UniversityWeatherRodsId },
+            SignatureBuildingId = UniversityWeatherRodsId,
             BasicUpgradeId = AdvancedCogsUpgradeId,
             KeepUpgradeIds = new[] { GreatSpyglassUpgradeId, AdvancedConstructionUpgradeId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[]
@@ -587,6 +594,7 @@ namespace Asterra.Gameplay.Content
             WallBuildingId = ChurchSacredWallsId,
             OutpostBuildingId = ChurchShrineId,
             ExtraBuildingIds = new[] { ChurchSunTempleId, ChurchSacredSiteId },
+            SignatureBuildingId = ChurchSunTempleId,
             BasicUpgradeId = SolarVestmentsUpgradeId,
             KeepUpgradeIds = new[] { SacredMasonryUpgradeId, StoneWallsUpgradeId },
             EquipmentUpgradeIds = new[]
@@ -769,8 +777,8 @@ namespace Asterra.Gameplay.Content
                 Id = KeepTurretId,
                 DisplayName = "Keep Turret",
                 MaxHealth = 320f,
-                GoldCost = 70,
-                TimberCost = 50,
+                GoldCost = 120,
+                TimberCost = 0,
                 BuildSeconds = 3.5f,
                 FootprintX = 2.5f,
                 FootprintZ = 2.5f,
@@ -837,8 +845,8 @@ namespace Asterra.Gameplay.Content
                 Id = WatchtowerId,
                 DisplayName = "Watchtower",
                 MaxHealth = 450f,
-                GoldCost = 90,
-                TimberCost = 70,
+                GoldCost = 160,
+                TimberCost = 0,
                 BuildSeconds = 5f,
                 FootprintX = 5f,
                 FootprintZ = 5f,
@@ -856,8 +864,8 @@ namespace Asterra.Gameplay.Content
                 Id = PalisadeId,
                 DisplayName = "Palisade",
                 MaxHealth = 700f,
-                GoldCost = 40,
-                TimberCost = 90,
+                GoldCost = 130,
+                TimberCost = 0,
                 BuildSeconds = 4f,
                 FootprintX = 14f,
                 FootprintZ = 4f,
@@ -872,8 +880,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutpostId,
                 DisplayName = "Gold Mine",
                 MaxHealth = 420f,
-                GoldCost = 100,
-                TimberCost = 40,
+                GoldCost = 140,
+                TimberCost = 0,
                 BuildSeconds = 5.5f,
                 FootprintX = 6f,
                 FootprintZ = 6f,
@@ -887,8 +895,8 @@ namespace Asterra.Gameplay.Content
                 Id = BridgeId,
                 DisplayName = "Timber Bridge",
                 MaxHealth = 380f,
-                GoldCost = 80,
-                TimberCost = 140,
+                GoldCost = 220,
+                TimberCost = 0,
                 BuildSeconds = 8f,
                 FootprintX = 12f,
                 FootprintZ = 36f,
@@ -901,8 +909,8 @@ namespace Asterra.Gameplay.Content
                 Id = TrenchWorksId,
                 DisplayName = "Trench Works",
                 MaxHealth = 80f,
-                GoldCost = 45,
-                TimberCost = 20,
+                GoldCost = 65,
+                TimberCost = 0,
                 BuildSeconds = 9f,
                 FootprintX = 14f,
                 FootprintZ = 10f,
@@ -910,21 +918,21 @@ namespace Asterra.Gameplay.Content
                 Category = BuildingCategory.Wall,
                 SightRadius = 20f,
             });
-            RegisterEarthworkSite(registry, BermWorksId, "Berm Works", gold: 50, timber: 18, seconds: 10f, fx: 14f, fz: 10f);
-            RegisterEarthworkSite(registry, MoatWorksId, "Moat Works", gold: 55, timber: 22, seconds: 12f, fx: 14f, fz: 10f);
-            RegisterEarthworkSite(registry, FillWorksId, "Fill Works", gold: 30, timber: 12, seconds: 7f, fx: 12f, fz: 12f);
+            RegisterEarthworkSite(registry, BermWorksId, "Berm Works", gold: 68, timber: 0, seconds: 10f, fx: 14f, fz: 10f);
+            RegisterEarthworkSite(registry, MoatWorksId, "Moat Works", gold: 77, timber: 0, seconds: 12f, fx: 14f, fz: 10f);
+            RegisterEarthworkSite(registry, FillWorksId, "Fill Works", gold: 42, timber: 0, seconds: 7f, fx: 12f, fz: 12f);
             RegisterEarthworkSite(registry, ClearWorksId, "Clear Works", gold: 25, timber: 0, seconds: 8f, fx: 14f, fz: 14f);
-            RegisterEarthworkSite(registry, BurnWorksId, "Burn Works", gold: 30, timber: 5, seconds: 8f, fx: 14f, fz: 14f);
-            RegisterEarthworkSite(registry, QuarryWorksId, "Quarry Works", gold: 20, timber: 10, seconds: 9f, fx: 12f, fz: 12f);
-            RegisterEarthworkSite(registry, SpikesWorksId, "Spike Works", gold: 55, timber: 30, seconds: 8f, fx: 10f, fz: 10f);
+            RegisterEarthworkSite(registry, BurnWorksId, "Burn Works", gold: 35, timber: 0, seconds: 8f, fx: 14f, fz: 14f);
+            RegisterEarthworkSite(registry, QuarryWorksId, "Quarry Works", gold: 30, timber: 0, seconds: 9f, fx: 12f, fz: 12f);
+            RegisterEarthworkSite(registry, SpikesWorksId, "Spike Works", gold: 85, timber: 0, seconds: 8f, fx: 10f, fz: 10f);
             RegisterEarthworkSite(registry, DebrisWorksId, "Clear Debris", gold: 15, timber: 0, seconds: 6f, fx: 12f, fz: 12f);
             registry.Register(new BuildingDefData
             {
                 Id = BarricadeId,
                 DisplayName = "Barricade",
                 MaxHealth = 220f,
-                GoldCost = 30,
-                TimberCost = 55,
+                GoldCost = 85,
+                TimberCost = 0,
                 BuildSeconds = 3f,
                 FootprintX = 10f,
                 FootprintZ = 4f,
@@ -939,8 +947,8 @@ namespace Asterra.Gameplay.Content
                 Id = FerryDockId,
                 DisplayName = "Ferry Dock",
                 MaxHealth = 280f,
-                GoldCost = 90,
-                TimberCost = 110,
+                GoldCost = 200,
+                TimberCost = 0,
                 BuildSeconds = 7f,
                 FootprintX = 8f,
                 FootprintZ = 8f,
@@ -953,8 +961,8 @@ namespace Asterra.Gameplay.Content
                 Id = StoneWallId,
                 DisplayName = "Stone Wall",
                 MaxHealth = 1400f,
-                GoldCost = 90,
-                TimberCost = 40,
+                GoldCost = 130,
+                TimberCost = 0,
                 BuildSeconds = 6f,
                 FootprintX = 14f,
                 FootprintZ = 4.5f,
@@ -1003,7 +1011,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 30,
                 TrainSeconds = 2.8f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 14,
                 GatherRate = 5.5f,
                 Role = UnitRole.Builder,
@@ -1253,8 +1261,8 @@ namespace Asterra.Gameplay.Content
                 Id = ArcaneAcademyId,
                 DisplayName = "Arcane Academy",
                 MaxHealth = 580f,
-                GoldCost = 130,
-                TimberCost = 70,
+                GoldCost = 200,
+                TimberCost = 0,
                 BuildSeconds = 6.2f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1279,8 +1287,8 @@ namespace Asterra.Gameplay.Content
                 Id = AncientRuinsId,
                 DisplayName = "Ancient Ruins",
                 MaxHealth = 640f,
-                GoldCost = 150,
-                TimberCost = 90,
+                GoldCost = 240,
+                TimberCost = 0,
                 BuildSeconds = 7f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1296,8 +1304,8 @@ namespace Asterra.Gameplay.Content
                 Id = ConjuringHallId,
                 DisplayName = "Conjuring Hall",
                 MaxHealth = 560f,
-                GoldCost = 135,
-                TimberCost = 80,
+                GoldCost = 215,
+                TimberCost = 0,
                 BuildSeconds = 6.5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1313,8 +1321,8 @@ namespace Asterra.Gameplay.Content
                 Id = HighTempleId,
                 DisplayName = "High Temple",
                 MaxHealth = 700f,
-                GoldCost = 160,
-                TimberCost = 70,
+                GoldCost = 230,
+                TimberCost = 0,
                 BuildSeconds = 7.5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1330,8 +1338,8 @@ namespace Asterra.Gameplay.Content
                 Id = BlackrootConservatoryId,
                 DisplayName = "Blackroot Conservatory",
                 MaxHealth = 450f,
-                GoldCost = 140,
-                TimberCost = 50,
+                GoldCost = 190,
+                TimberCost = 0,
                 BuildSeconds = 6f,
                 FootprintX = 8f,
                 FootprintZ = 8f,
@@ -1345,8 +1353,8 @@ namespace Asterra.Gameplay.Content
                 Id = PortalGateId,
                 DisplayName = "Portal Gate",
                 MaxHealth = 380f,
-                GoldCost = 180,
-                TimberCost = 40,
+                GoldCost = 220,
+                TimberCost = 0,
                 BuildSeconds = 8f,
                 FootprintX = 8f,
                 FootprintZ = 8f,
@@ -1377,6 +1385,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 160f,
                 FootprintX = 18f,
                 FootprintZ = 18f,
@@ -1542,6 +1551,7 @@ namespace Asterra.Gameplay.Content
                 DurationSeconds = 18f,
                 Effect = PowerEffectKind.ForceWeather,
                 EffectMagnitude = 1f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {
@@ -1633,7 +1643,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 32,
                 TrainSeconds = 2.8f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 15,
                 GatherRate = 5.6f,
                 Role = UnitRole.Builder,
@@ -1854,8 +1864,8 @@ namespace Asterra.Gameplay.Content
                 Id = RoyalBarracksId,
                 DisplayName = "Barracks",
                 MaxHealth = 620f,
-                GoldCost = 120,
-                TimberCost = 80,
+                GoldCost = 200,
+                TimberCost = 0,
                 BuildSeconds = 6f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1881,8 +1891,8 @@ namespace Asterra.Gameplay.Content
                 Id = RoyalCourtId,
                 DisplayName = "Royal Court",
                 MaxHealth = 640f,
-                GoldCost = 145,
-                TimberCost = 85,
+                GoldCost = 230,
+                TimberCost = 0,
                 BuildSeconds = 6.5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -1905,8 +1915,8 @@ namespace Asterra.Gameplay.Content
                 Id = RoyalFarmId,
                 DisplayName = "Farm",
                 MaxHealth = 430f,
-                GoldCost = 110,
-                TimberCost = 45,
+                GoldCost = 155,
+                TimberCost = 0,
                 BuildSeconds = 5.5f,
                 FootprintX = 8f,
                 FootprintZ = 8f,
@@ -1920,8 +1930,8 @@ namespace Asterra.Gameplay.Content
                 Id = RoyalOutpostTowerId,
                 DisplayName = "Royal Outpost",
                 MaxHealth = 480f,
-                GoldCost = 100,
-                TimberCost = 75,
+                GoldCost = 175,
+                TimberCost = 0,
                 BuildSeconds = 5.2f,
                 FootprintX = 5f,
                 FootprintZ = 5f,
@@ -1939,8 +1949,8 @@ namespace Asterra.Gameplay.Content
                 Id = RoyalWallId,
                 DisplayName = "Royal Walls",
                 MaxHealth = 860f,
-                GoldCost = 50,
-                TimberCost = 100,
+                GoldCost = 150,
+                TimberCost = 0,
                 BuildSeconds = 4.5f,
                 FootprintX = 14f,
                 FootprintZ = 4.2f,
@@ -1958,6 +1968,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 165f,
                 FootprintX = 18f,
                 FootprintZ = 18f,
@@ -2093,6 +2104,7 @@ namespace Asterra.Gameplay.Content
                 Effect = PowerEffectKind.ArmorAura,
                 EffectMagnitude = 3f,
                 BuildingMitigation = 3f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {
@@ -2158,9 +2170,6 @@ namespace Asterra.Gameplay.Content
             });
         }
 
-            });
-        }
-
         private static void RegisterOutcast(DefinitionRegistry registry)
         {
             registry.Register(new UnitDefData
@@ -2189,7 +2198,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 28,
                 TrainSeconds = 2.6f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 16,
                 GatherRate = 5.8f,
                 Role = UnitRole.Builder,
@@ -2412,8 +2421,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastBurrowsId,
                 DisplayName = "Burrows",
                 MaxHealth = 560f,
-                GoldCost = 115,
-                TimberCost = 90,
+                GoldCost = 205,
+                TimberCost = 0,
                 BuildSeconds = 5.8f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -2438,8 +2447,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastAerieId,
                 DisplayName = "Aerie",
                 MaxHealth = 520f,
-                GoldCost = 130,
-                TimberCost = 70,
+                GoldCost = 200,
+                TimberCost = 0,
                 BuildSeconds = 6.2f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -2455,8 +2464,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastVillageHallId,
                 DisplayName = "Village Hall",
                 MaxHealth = 600f,
-                GoldCost = 125,
-                TimberCost = 85,
+                GoldCost = 210,
+                TimberCost = 0,
                 BuildSeconds = 6f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -2478,8 +2487,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastMineId,
                 DisplayName = "Mine",
                 MaxHealth = 440f,
-                GoldCost = 105,
-                TimberCost = 40,
+                GoldCost = 145,
+                TimberCost = 0,
                 BuildSeconds = 5.5f,
                 FootprintX = 7f,
                 FootprintZ = 7f,
@@ -2493,8 +2502,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastTreetopWatchId,
                 DisplayName = "Treetopped Watch",
                 MaxHealth = 400f,
-                GoldCost = 95,
-                TimberCost = 80,
+                GoldCost = 175,
+                TimberCost = 0,
                 BuildSeconds = 5f,
                 FootprintX = 5f,
                 FootprintZ = 5f,
@@ -2512,8 +2521,8 @@ namespace Asterra.Gameplay.Content
                 Id = OutcastGroundWorksId,
                 DisplayName = "Ground Works",
                 MaxHealth = 720f,
-                GoldCost = 35,
-                TimberCost = 85,
+                GoldCost = 120,
+                TimberCost = 0,
                 BuildSeconds = 4f,
                 FootprintX = 14f,
                 FootprintZ = 4f,
@@ -2531,6 +2540,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 155f,
                 FootprintX = 18f,
                 FootprintZ = 18f,
@@ -2652,6 +2662,7 @@ namespace Asterra.Gameplay.Content
                 DurationSeconds = 0f,
                 Effect = PowerEffectKind.SpawnRandomBeasts,
                 EffectMagnitude = 8f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {
@@ -2705,9 +2716,6 @@ namespace Asterra.Gameplay.Content
             });
         }
 
-            });
-        }
-
         private static void RegisterFreetown(DefinitionRegistry registry)
         {
             registry.Register(new UnitDefData
@@ -2736,7 +2744,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 30,
                 TrainSeconds = 2.7f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 16,
                 GatherRate = 5.7f,
                 Role = UnitRole.Builder,
@@ -3021,8 +3029,8 @@ namespace Asterra.Gameplay.Content
                 Id = FreetownSmugglersDenId,
                 DisplayName = "Smugglers Den",
                 MaxHealth = 580f,
-                GoldCost = 120,
-                TimberCost = 70,
+                GoldCost = 190,
+                TimberCost = 0,
                 BuildSeconds = 6f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -3052,8 +3060,8 @@ namespace Asterra.Gameplay.Content
                 Id = FreetownHutId,
                 DisplayName = "Hut",
                 MaxHealth = 420f,
-                GoldCost = 80,
-                TimberCost = 50,
+                GoldCost = 130,
+                TimberCost = 0,
                 BuildSeconds = 4.5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -3075,8 +3083,8 @@ namespace Asterra.Gameplay.Content
                 Id = FreetownBlackMarketId,
                 DisplayName = "Black Market",
                 MaxHealth = 400f,
-                GoldCost = 115,
-                TimberCost = 35,
+                GoldCost = 150,
+                TimberCost = 0,
                 BuildSeconds = 5.2f,
                 FootprintX = 7f,
                 FootprintZ = 7f,
@@ -3090,8 +3098,8 @@ namespace Asterra.Gameplay.Content
                 Id = FreetownCrowsNestId,
                 DisplayName = "Crows Nest",
                 MaxHealth = 380f,
-                GoldCost = 90,
-                TimberCost = 75,
+                GoldCost = 165,
+                TimberCost = 0,
                 BuildSeconds = 4.8f,
                 FootprintX = 4.5f,
                 FootprintZ = 4.5f,
@@ -3109,8 +3117,8 @@ namespace Asterra.Gameplay.Content
                 Id = FreetownBarricadesId,
                 DisplayName = "Barricades",
                 MaxHealth = 640f,
-                GoldCost = 30,
-                TimberCost = 70,
+                GoldCost = 100,
+                TimberCost = 0,
                 BuildSeconds = 3.5f,
                 FootprintX = 12f,
                 FootprintZ = 3.8f,
@@ -3128,6 +3136,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 150f,
                 FootprintX = 16f,
                 FootprintZ = 16f,
@@ -3250,6 +3259,7 @@ namespace Asterra.Gameplay.Content
                 DurationSeconds = 0f,
                 Effect = PowerEffectKind.ExplosiveStrip,
                 EffectMagnitude = 5f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {
@@ -3332,7 +3342,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 32,
                 TrainSeconds = 2.8f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 16,
                 GatherRate = 5.5f,
                 Role = UnitRole.Builder,
@@ -3515,8 +3525,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityWorkshopId,
                 DisplayName = "Workshop",
                 MaxHealth = 600f,
-                GoldCost = 125,
-                TimberCost = 80,
+                GoldCost = 205,
+                TimberCost = 0,
                 BuildSeconds = 6.2f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -3540,8 +3550,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityLibraryId,
                 DisplayName = "Forbidden Library",
                 MaxHealth = 480f,
-                GoldCost = 110,
-                TimberCost = 70,
+                GoldCost = 180,
+                TimberCost = 0,
                 BuildSeconds = 5.5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -3562,8 +3572,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityAlchemistId,
                 DisplayName = "Alchemist",
                 MaxHealth = 440f,
-                GoldCost = 100,
-                TimberCost = 55,
+                GoldCost = 155,
+                TimberCost = 0,
                 BuildSeconds = 5f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -3583,8 +3593,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityObservatoryId,
                 DisplayName = "Grand Observatory",
                 MaxHealth = 420f,
-                GoldCost = 130,
-                TimberCost = 45,
+                GoldCost = 175,
+                TimberCost = 0,
                 BuildSeconds = 5.8f,
                 FootprintX = 8f,
                 FootprintZ = 8f,
@@ -3598,8 +3608,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityClockworkTowerId,
                 DisplayName = "Clockwork Tower",
                 MaxHealth = 400f,
-                GoldCost = 95,
-                TimberCost = 80,
+                GoldCost = 175,
+                TimberCost = 0,
                 BuildSeconds = 5f,
                 FootprintX = 4.5f,
                 FootprintZ = 4.5f,
@@ -3617,8 +3627,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityMoatId,
                 DisplayName = "College Moat",
                 MaxHealth = 580f,
-                GoldCost = 40,
-                TimberCost = 55,
+                GoldCost = 95,
+                TimberCost = 0,
                 BuildSeconds = 4.2f,
                 FootprintX = 14f,
                 FootprintZ = 8f,
@@ -3633,8 +3643,8 @@ namespace Asterra.Gameplay.Content
                 Id = UniversityWeatherRodsId,
                 DisplayName = "Weather Rods",
                 MaxHealth = 280f,
-                GoldCost = 90,
-                TimberCost = 40,
+                GoldCost = 130,
+                TimberCost = 0,
                 BuildSeconds = 4.5f,
                 FootprintX = 5f,
                 FootprintZ = 5f,
@@ -3664,6 +3674,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 155f,
                 FootprintX = 16f,
                 FootprintZ = 16f,
@@ -3757,6 +3768,7 @@ namespace Asterra.Gameplay.Content
                 DurationSeconds = 0f,
                 Effect = PowerEffectKind.RelocateSight,
                 EffectMagnitude = 1f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {
@@ -3849,7 +3861,7 @@ namespace Asterra.Gameplay.Content
                 GoldCost = 32,
                 TrainSeconds = 2.8f,
                 IsBuilder = true,
-                CanGather = true,
+                CanGather = false,
                 CarryCapacity = 16,
                 GatherRate = 5.4f,
                 Role = UnitRole.Builder,
@@ -4041,8 +4053,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchMonasteryId,
                 DisplayName = "Warrior Monastery",
                 MaxHealth = 600f,
-                GoldCost = 125,
-                TimberCost = 75,
+                GoldCost = 200,
+                TimberCost = 0,
                 BuildSeconds = 6.2f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -4067,8 +4079,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchSunTempleId,
                 DisplayName = "Sun Temple",
                 MaxHealth = 500f,
-                GoldCost = 115,
-                TimberCost = 70,
+                GoldCost = 185,
+                TimberCost = 0,
                 BuildSeconds = 5.6f,
                 CanProduce = true,
                 QueueCapacity = 3,
@@ -4089,8 +4101,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchSacredSiteId,
                 DisplayName = "Sacred Site",
                 MaxHealth = 380f,
-                GoldCost = 85,
-                TimberCost = 45,
+                GoldCost = 130,
+                TimberCost = 0,
                 BuildSeconds = 4.4f,
                 CanProduce = true,
                 QueueCapacity = 2,
@@ -4110,8 +4122,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchShrineId,
                 DisplayName = "Offering Shrine",
                 MaxHealth = 400f,
-                GoldCost = 120,
-                TimberCost = 35,
+                GoldCost = 155,
+                TimberCost = 0,
                 BuildSeconds = 5.2f,
                 FootprintX = 7f,
                 FootprintZ = 7f,
@@ -4125,8 +4137,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchScorchedTowerId,
                 DisplayName = "Scorched Tower",
                 MaxHealth = 390f,
-                GoldCost = 95,
-                TimberCost = 78,
+                GoldCost = 173,
+                TimberCost = 0,
                 BuildSeconds = 5f,
                 FootprintX = 4.5f,
                 FootprintZ = 4.5f,
@@ -4144,8 +4156,8 @@ namespace Asterra.Gameplay.Content
                 Id = ChurchSacredWallsId,
                 DisplayName = "Sacred Walls",
                 MaxHealth = 680f,
-                GoldCost = 35,
-                TimberCost = 75,
+                GoldCost = 110,
+                TimberCost = 0,
                 BuildSeconds = 3.8f,
                 FootprintX = 12f,
                 FootprintZ = 3.8f,
@@ -4163,6 +4175,7 @@ namespace Asterra.Gameplay.Content
                 CanProduce = true,
                 QueueCapacity = 3,
                 Kind = BuildingKind.Keep,
+                GoldPerSecond = 2,
                 SightRadius = 155f,
                 FootprintX = 16f,
                 FootprintZ = 16f,
@@ -4241,6 +4254,7 @@ namespace Asterra.Gameplay.Content
                 DurationSeconds = 0f,
                 Effect = PowerEffectKind.SunRay,
                 EffectMagnitude = 55f,
+                HeroMoment = true,
             });
             registry.Register(new PowerDefData
             {

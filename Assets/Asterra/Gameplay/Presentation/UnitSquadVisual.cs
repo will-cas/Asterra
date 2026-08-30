@@ -14,18 +14,7 @@ namespace Asterra.Gameplay.Presentation
 
         public static int ResolveSquadSize(UnitDefData def)
         {
-            if (def == null)
-                return 1;
-            if (def.IsLeader || def.IsBuilder)
-                return 1;
-            if (def.Role == UnitRole.Siege)
-                return 1;
-            if (def.TraversalCapabilities == TraversalCapability.Water)
-                return 1;
-            if (def.SquadSize > 0)
-                return Mathf.Clamp(def.SquadSize, 1, MaxSquadSize);
-
-            return DefaultForRole(def.Role);
+            return BattalionRules.MemberCount(def);
         }
 
         public static int ResolveSquadSize(string definitionId)
@@ -33,9 +22,7 @@ namespace Asterra.Gameplay.Presentation
             if (string.IsNullOrEmpty(definitionId))
                 return 1;
             if (definitionId.Contains("builder")
-                || definitionId.Contains("lucien")
                 || definitionId.Contains("captain")
-                || definitionId.Contains("hierophant")
                 || definitionId.Contains("leader")
                 || definitionId.Contains("boat")
                 || definitionId.Contains("catapult")
@@ -46,23 +33,10 @@ namespace Asterra.Gameplay.Presentation
                 return 1;
 
             var role = AsterraMeshLibrary.InferRole(definitionId);
-            return DefaultForRole(role);
+            return BattalionRules.DefaultMembers(role);
         }
 
-        public static int DefaultForRole(UnitRole role)
-        {
-            switch (role)
-            {
-                case UnitRole.Infantry:
-                    return 16;
-                case UnitRole.Ranged:
-                    return 12;
-                case UnitRole.Cavalry:
-                    return 6;
-                default:
-                    return 1;
-            }
-        }
+        public static int DefaultForRole(UnitRole role) => BattalionRules.DefaultMembers(role);
 
         /// <summary>Local body-space offset for troop index (wide rank formation, easy to read).</summary>
         public static Vector3 TroopOffset(int index, int squadSize)

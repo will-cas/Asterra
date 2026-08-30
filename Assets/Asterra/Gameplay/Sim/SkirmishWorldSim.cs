@@ -92,6 +92,7 @@ namespace Asterra.Gameplay
             public float Damage;
             public SimEntityId TargetId;
             public bool VsBuilding;
+            public UnitRole AttackerRole;
         }
 
         public SkirmishWorldSim(
@@ -325,6 +326,9 @@ namespace Asterra.Gameplay
                     case UpgradeBuildingCommand upgradeBuilding:
                         ApplyUpgradeBuilding(upgradeBuilding);
                         break;
+                    case SetTerritoryJobCommand campJob:
+                        ApplySetTerritoryJob(campJob);
+                        break;
                     default:
                         break;
                 }
@@ -352,7 +356,6 @@ namespace Asterra.Gameplay
             TickPendingTerrainWork();
             TickProduction(deltaSeconds);
             TickResearch(deltaSeconds);
-            TickGather(deltaSeconds);
             TickMovement(deltaSeconds);
             TickCombat(deltaSeconds);
             TickTowers(deltaSeconds);
@@ -609,26 +612,7 @@ namespace Asterra.Gameplay
 
         private void ApplyGather(GatherCommand gather)
         {
-            if (gather.UnitIds == null)
-                return;
-            if (!_resourcesById.TryGetValue(gather.ResourceNodeId.Value, out var node) || node.IsDepleted)
-                return;
-
-            for (int i = 0; i < gather.UnitIds.Length; i++)
-            {
-                if (!_unitsById.TryGetValue(gather.UnitIds[i].Value, out var unit))
-                    continue;
-                if (unit.Owner != gather.Issuer || !unit.IsAlive || !unit.CanGather)
-                    continue;
-                unit.GatherTargetId = gather.ResourceNodeId;
-                unit.AttackTargetId = null;
-                unit.ReturningToDeposit = unit.CarryAmount >= unit.CarryCapacity;
-                unit.MoveTargetX = null;
-                unit.MoveTargetZ = null;
-                unit.AttackMoving = false;
-                unit.Patrolling = false;
-                _mutationCounter ^= unit.Id.Value * 911ul;
-            }
+            _ = gather;
         }
 
         private void ApplySetRally(SetRallyCommand rally)
@@ -713,6 +697,9 @@ namespace Asterra.Gameplay
                 && !IsVisibleTo(place.Issuer, x, z))
                 return;
 
+            if (!SignaturePlacementAllowed(place.Issuer, place.BuildingDefId, x, z))
+                return;
+
             // Earthwork scaffolds may sit close together for drag-paint lines.
             if (!FactionDefaultContent.IsEarthworkBuildingId(place.BuildingDefId)
                 && OverlapsAnyBuilding(x, z, MathF.Max(def.FootprintX, def.FootprintZ) * 0.5f))
@@ -790,12 +777,11 @@ namespace Asterra.Gameplay
                 if (cmd.RazeForMaterials
                     && (building.Kind == BuildingKind.Wall || building.Kind == BuildingKind.Gate))
                 {
-                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost);
+                    _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost);
                 }
                 else if (building.State == BuildingState.Active)
                 {
                     _wallet.Add(cmd.Issuer, ResourceType.Gold, def.GoldCost / 2);
-                    _wallet.Add(cmd.Issuer, ResourceType.Timber, def.TimberCost / 2);
                 }
             }
 
@@ -1184,11 +1170,6 @@ namespace Asterra.Gameplay
                        | ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.GrassLong, to);
             if (burn && any)
                 MarkCellFlags(x, z, half, TerrainCell.FlagOnFire, set: true);
-            if (any && !burn)
-            {
-                // Timber salvage from cleared stands.
-                AddResourceNode(_ids.Next(), ResourceType.Timber, 40, x + 2f, z + 2f);
-            }
 
             return any;
         }
@@ -1197,7 +1178,6 @@ namespace Asterra.Gameplay
         {
             if (!ReplaceTerrainCategoryAt(x, z, half, TerrainCategory.Rock, DefaultTerrainCatalog.GrassBare))
                 return false;
-            AddResourceNode(_ids.Next(), ResourceType.Gold, 35, x, z);
             return true;
         }
 
@@ -1392,6 +1372,9 @@ namespace Asterra.Gameplay
                 return CanPreviewTerrainWork(earthKind, x, z, half);
             }
 
+            if (issuer.HasValue && !SignaturePlacementAllowed(issuer.Value, buildingDefId, x, z))
+                return false;
+
             return _environment.CanPlaceBuilding(x, z);
         }
 
@@ -1403,6 +1386,61 @@ namespace Asterra.Gameplay
             if (roster.DefinitionId != FactionDefaultContent.UniversityId)
                 return true;
             return _upgrades.Has(issuer, FactionDefaultContent.AdvancedConstructionUpgradeId);
+        }
+
+        private bool SignaturePlacementAllowed(PlayerId issuer, string buildingDefId, float x, float z)
+        {
+            if (string.IsNullOrEmpty(buildingDefId) || !TryResolvePlayerFaction(issuer, out var faction))
+                return true;
+            var roster = FactionDefaultContent.Get(faction);
+            if (string.IsNullOrEmpty(roster.SignatureBuildingId) || roster.SignatureBuildingId != buildingDefId)
+                return true;
+
+            const float keepRadius = 88f;
+            float maxSq = keepRadius * keepRadius;
+            for (int i = 0; i < _buildings.Count; i++)
+            {
+                var b = _buildings[i];
+                if (b.Owner != issuer || b.State == BuildingState.Destroyed)
+                    continue;
+                if (b.Kind != BuildingKind.Keep && !FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                    continue;
+                float dx = x - b.X;
+                float dz = z - b.Z;
+                if (dx * dx + dz * dz <= maxSq)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool PlayerHasTerritoryJob(PlayerId player, TerritoryJob job)
+        {
+            for (int i = 0; i < _territories.Count; i++)
+            {
+                var node = _territories[i];
+                if (!node.Controller.HasValue || node.Controller.Value != player)
+                    continue;
+                if (node.State != TerritoryState.Controlled || node.Job != job)
+                    continue;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int CampGoldPerSecond(SimTerritory node)
+        {
+            int gps = Math.Max(0, node.GoldPerSecondWhenControlled);
+            switch (node.Job)
+            {
+                case TerritoryJob.Vision:
+                    return Math.Max(1, gps / 2);
+                case TerritoryJob.PowerShave:
+                    return gps;
+                default:
+                    return gps + Math.Max(2, gps / 2);
+            }
         }
 
         private void RelocateFarGlass(PlayerId owner, FactionId faction, float x, float z)
@@ -1964,6 +2002,25 @@ namespace Asterra.Gameplay
             _mutationCounter ^= capture.TerritoryNodeId.Value * 541ul;
         }
 
+        private void ApplySetTerritoryJob(SetTerritoryJobCommand cmd)
+        {
+            if (!_territoriesById.TryGetValue(cmd.TerritoryId.Value, out var node))
+                return;
+            if (!node.Controller.HasValue || node.Controller.Value != cmd.Issuer)
+                return;
+            if (node.State != TerritoryState.Controlled)
+                return;
+            if (cmd.Job > TerritoryJob.PowerShave)
+                return;
+            if (node.Job == cmd.Job)
+                return;
+            const int cost = 25;
+            if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, cost))
+                return;
+            node.Job = cmd.Job;
+            _mutationCounter ^= node.Id.Value * 419ul;
+        }
+
         private void ApplyUpgrade(ChooseUpgradeCommand upgrade)
         {
             if (!_defs.TryGetUpgrade(upgrade.UpgradeDefId, out var def))
@@ -2043,10 +2100,8 @@ namespace Asterra.Gameplay
                 return;
             if (def.Kind != UpgradeKind.Equipment)
                 return;
-            if (!_upgrades.Has(cmd.Issuer, def.Id))
-                return;
-
-            int equipCost = def.ResolvedEquipGoldCost;
+            bool researched = _upgrades.Has(cmd.Issuer, def.Id);
+            int equipCost = def.FieldEquipGoldCost(researched);
             for (int i = 0; i < cmd.UnitIds.Length; i++)
             {
                 if (!_unitsById.TryGetValue(cmd.UnitIds[i].Value, out var unit))
@@ -2967,7 +3022,12 @@ namespace Asterra.Gameplay
                 bool changed = false;
                 if (state.CooldownRemaining > 0f)
                 {
-                    state.CooldownRemaining = Math.Max(0f, state.CooldownRemaining - dt);
+                    float rate = 1f;
+                    int colonCd = pair.Key.IndexOf(':');
+                    if (colonCd > 0 && byte.TryParse(pair.Key.Substring(0, colonCd), out var ownerByte)
+                        && PlayerHasTerritoryJob(new PlayerId(ownerByte), TerritoryJob.PowerShave))
+                        rate = 1.35f;
+                    state.CooldownRemaining = Math.Max(0f, state.CooldownRemaining - dt * rate);
                     changed = true;
                 }
 
@@ -3726,6 +3786,7 @@ namespace Asterra.Gameplay
                     damage *= unit.BuildingDamageMultiplier;
                 else if (targetUnit != null)
                     damage *= CombatMath.RoleMultiplier(unit.Role, targetUnit.Role);
+                damage *= GroundAttackModifier(unit);
 
                 if (unit.ProjectileSpeed > 0.1f)
                 {
@@ -3737,11 +3798,12 @@ namespace Asterra.Gameplay
                         Damage = damage,
                         TargetId = unit.AttackTargetId.Value,
                         VsBuilding = isStructure,
+                        AttackerRole = unit.Role,
                     });
                 }
                 else
                 {
-                    DealDamage(unit.AttackTargetId.Value, damage, isStructure);
+                    DealDamage(unit.AttackTargetId.Value, damage, isStructure, unit.Role);
                 }
 
                 unit.AttackCooldownRemaining = unit.AttackCooldown;
@@ -3790,6 +3852,7 @@ namespace Asterra.Gameplay
                     Damage = b.AttackDamage,
                     TargetId = target.Value,
                     VsBuilding = false,
+                    AttackerRole = UnitRole.Siege,
                 });
                 b.AttackCooldownRemaining = b.AttackCooldown;
             }
@@ -3812,7 +3875,7 @@ namespace Asterra.Gameplay
                 float step = p.Speed * dt;
                 if (dist <= step || dist < 0.001f)
                 {
-                    DealDamage(p.TargetId, p.Damage, p.VsBuilding);
+                    DealDamage(p.TargetId, p.Damage, p.VsBuilding, p.AttackerRole);
                     _projectiles.RemoveAt(i);
                     continue;
                 }
@@ -3894,6 +3957,7 @@ namespace Asterra.Gameplay
                                 _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureLost, node.Id, node.X, node.Z, false));
                             node.Controller = capturer;
                             node.State = TerritoryState.Controlled;
+                            node.Job = TerritoryJob.Gold;
                             _combatEvents.Add(new CombatEvent(CombatEventKind.CaptureCompleted, node.Id, node.X, node.Z, false));
                             _mutationCounter ^= node.Id.Value * 101ul;
                         }
@@ -3916,7 +3980,7 @@ namespace Asterra.Gameplay
                 var node = _territories[i];
                 if (!node.Controller.HasValue || node.State != TerritoryState.Controlled)
                     continue;
-                _wallet.Add(node.Controller.Value, ResourceType.Gold, node.GoldPerSecondWhenControlled);
+                _wallet.Add(node.Controller.Value, ResourceType.Gold, CampGoldPerSecond(node));
             }
 
             for (int i = 0; i < _buildings.Count; i++)
@@ -4028,7 +4092,7 @@ namespace Asterra.Gameplay
                 unit.AttackTargetId = bestId;
         }
 
-        private void DealDamage(SimEntityId targetId, float damage, bool preferBuilding)
+        private void DealDamage(SimEntityId targetId, float damage, bool preferBuilding, UnitRole attackerRole = UnitRole.Infantry)
         {
             if (preferBuilding
                 && _buildingsById.TryGetValue(targetId.Value, out var preferredBuilding)
@@ -4050,10 +4114,11 @@ namespace Asterra.Gameplay
             {
                 if (targetUnit.IsGarrisoned && targetUnit.GarrisonBuildingId.HasValue)
                 {
-                    DealDamage(targetUnit.GarrisonBuildingId.Value, damage, preferBuilding: true);
+                    DealDamage(targetUnit.GarrisonBuildingId.Value, damage, preferBuilding: true, attackerRole);
                     return;
                 }
 
+                damage *= GroundCoverMitigation(targetUnit, attackerRole);
                 float applied = CombatMath.ApplyArmor(damage, targetUnit.Armor);
                 targetUnit.Health -= applied;
                 _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetUnit.Id, targetUnit.X, targetUnit.Z, false));
@@ -4080,6 +4145,33 @@ namespace Asterra.Gameplay
                     OnBuildingDestroyed(targetBuilding);
                 }
             }
+        }
+
+        private float GroundAttackModifier(SimUnit attacker)
+        {
+            if (attacker == null || _environment?.Grid == null)
+                return 1f;
+            if ((attacker.TraversalCapabilities & TraversalCapability.Flying) != 0)
+                return 1f;
+            return _environment.Grid.GetCombatModifier(attacker.X, attacker.Z);
+        }
+
+        private float GroundCoverMitigation(SimUnit defender, UnitRole attackerRole)
+        {
+            if (defender == null || _environment?.Grid == null)
+                return 1f;
+            if ((defender.TraversalCapabilities & TraversalCapability.Flying) != 0)
+                return 1f;
+            float cover = _environment.Grid.GetCoverBonus(defender.X, defender.Z);
+            if (cover <= 0.001f)
+                return 1f;
+            if (attackerRole == UnitRole.Siege)
+                cover *= 0.28f;
+            else if (attackerRole == UnitRole.Cavalry)
+                cover *= 0.7f;
+            if (cover > 0.65f)
+                cover = 0.65f;
+            return 1f - cover;
         }
 
         private void ApplyDestructibleDamage(SimDestructible prop, float damage, DamageType damageType)
@@ -4130,15 +4222,7 @@ namespace Asterra.Gameplay
                 _environment.PathDirty.MarkRadius(prop.X, prop.Z, r + 4f, PathDirtyReason.DestructibleCleared);
             }
 
-            if (prop.ResourceDropType.HasValue && prop.ResourceDropAmount > 0)
-            {
-                AddResourceNode(
-                    _ids.Next(),
-                    prop.ResourceDropType.Value,
-                    prop.ResourceDropAmount,
-                    prop.X + 2f,
-                    prop.Z + 2f);
-            }
+            // Harvest nodes removed — gold is keep trickle + resource buildings only.
 
             _mutationCounter ^= prop.Id.Value * 1303ul;
         }
@@ -4272,7 +4356,7 @@ namespace Asterra.Gameplay
             int cols = (int)MathF.Ceiling(MathF.Sqrt(count));
             int row = index / cols;
             int col = index % cols;
-            float spacing = 5.5f;
+            float spacing = BattalionRules.MoveOrderSpacing(count);
             float ox = (col - (cols - 1) * 0.5f) * spacing;
             float oz = (row - (cols - 1) * 0.5f) * spacing;
             x = cx + ox;
@@ -4343,9 +4427,9 @@ namespace Asterra.Gameplay
         /// </summary>
         private float GetEngagementRange(SimUnit attacker, SimEntityId targetId)
         {
-            float range = attacker.AttackRange + attacker.CollisionRadius * 0.5f;
+            float range = attacker.AttackRange + attacker.CollisionRadius;
             if (_unitsById.TryGetValue(targetId.Value, out var targetUnit) && targetUnit.IsAlive)
-                return range + targetUnit.CollisionRadius * 0.5f + 0.75f;
+                return range + targetUnit.CollisionRadius + 0.5f;
 
             if (_buildingsById.TryGetValue(targetId.Value, out var building)
                 && building.State != BuildingState.Destroyed)
@@ -4595,6 +4679,20 @@ namespace Asterra.Gameplay
                 float r = (b.SightRadius > 1f ? b.SightRadius : 85f) * visScale;
                 float dx = x - b.X;
                 float dz = z - b.Z;
+                if (dx * dx + dz * dz <= r * r)
+                    return true;
+            }
+
+            for (int i = 0; i < _territories.Count; i++)
+            {
+                var camp = _territories[i];
+                if (!camp.Controller.HasValue || camp.Controller.Value != player)
+                    continue;
+                if (camp.State != TerritoryState.Controlled || camp.Job != TerritoryJob.Vision)
+                    continue;
+                float r = 140f * visScale;
+                float dx = x - camp.X;
+                float dz = z - camp.Z;
                 if (dx * dx + dz * dz <= r * r)
                     return true;
             }
@@ -5257,6 +5355,7 @@ namespace Asterra.Gameplay
                     hasController = t.Controller.HasValue,
                     controller = t.Controller.HasValue ? t.Controller.Value.Value : (byte)0,
                     captureProgress = t.CaptureProgress,
+                    job = (int)t.Job,
                 };
             }
 
@@ -5395,6 +5494,7 @@ namespace Asterra.Gameplay
                         node.State = (TerritoryState)t.state;
                         node.CaptureProgress = t.captureProgress;
                         node.Controller = t.hasController ? new PlayerId(t.controller) : (PlayerId?)null;
+                        node.Job = (TerritoryJob)t.job;
                     }
                 }
             }

@@ -36,7 +36,7 @@ namespace Asterra.Gameplay
             var sim = NewSim(out var ids, out _, out var defs);
             _ = defs;
             var p = new PlayerId(0);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
             return sim.IsVisibleTo(p, 5f, 0f);
         }
 
@@ -44,7 +44,7 @@ namespace Asterra.Gameplay
         {
             var sim = NewSim(out var ids, out _, out _);
             var p = new PlayerId(0);
-            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 0f, 0f);
+            sim.SpawnUnit(ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 0f, 0f);
             return !sim.IsVisibleTo(p, 400f, 400f);
         }
 
@@ -60,7 +60,7 @@ namespace Asterra.Gameplay
         private static bool EnemyNoShare()
         {
             var sim = NewSim(out var ids, out _, out _);
-            sim.SpawnUnit(ids.Next(), new PlayerId(1), new FactionId(1), FactionDefaultContent.DryadId, 0f, 0f);
+            sim.SpawnUnit(ids.Next(), new PlayerId(1), new FactionId(1), FactionDefaultContent.OutcastVillagerId, 0f, 0f);
             return !sim.IsVisibleTo(new PlayerId(0), 0f, 0f);
         }
 
@@ -73,12 +73,12 @@ namespace Asterra.Gameplay
             var tower = sim.SpawnBuilding(
                 ids.Next(), p, new FactionId(0), FactionDefaultContent.WatchtowerId, 0f, 0f, startActive: true);
             var scout = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 200f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 200f, 0f);
             // Scout provides vision at 200 — then we only check garrisoned unit doesn't provide.
             // Spawn second unit near tower and garrison it; vision at far scout still works.
             // Better: only one unit, garrison it, check far point loses vision from that unit's old pos.
             var only = sim.SpawnUnit(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.MilitiaId, 5f, 0f);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.VeiledApprenticeId, 5f, 0f);
             bool before = sim.IsVisibleTo(p, 8f, 0f);
             sim.ApplyCommands(new GameCommand[]
             {
@@ -104,7 +104,7 @@ namespace Asterra.Gameplay
             wallet.Seed(p, ResourceType.Gold, 500);
             wallet.Seed(p, ResourceType.Timber, 500);
             var keep = sim.SpawnBuilding(
-                ids.Next(), p, new FactionId(0), FactionDefaultContent.IronKeepId, 0f, 0f, startActive: true);
+                ids.Next(), p, new FactionId(0), FactionDefaultContent.ArcaneumId, 0f, 0f, startActive: true);
             // Keep already provides vision; ensure attach doesn't break visibility.
             bool before = sim.IsVisibleTo(p, 10f, 0f);
             sim.ApplyCommands(new GameCommand[]

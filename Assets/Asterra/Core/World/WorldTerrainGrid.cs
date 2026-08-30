@@ -230,6 +230,23 @@ namespace Asterra.Core.World
             return mod;
         }
 
+        public float GetCoverBonus(float worldX, float worldZ)
+        {
+            if (!TryGetCell(worldX, worldZ, out var cell))
+                return 0f;
+            return GetDef(cell.TerrainDefIndex).CoverBonus;
+        }
+
+        public float GetCombatModifier(float worldX, float worldZ)
+        {
+            if (!TryGetCell(worldX, worldZ, out var cell))
+                return 1f;
+            float combat = GetDef(cell.TerrainDefIndex).CombatModifier;
+            if (combat < 0.2f)
+                return 1f;
+            return combat;
+        }
+
         public float GetPathCost(float worldX, float worldZ, TraversalCapability capabilities)
         {
             if (IsBlocked(worldX, worldZ))

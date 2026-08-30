@@ -175,6 +175,7 @@ namespace Asterra.Gameplay.Save
         public byte controller;
         public bool hasController;
         public float captureProgress;
+        public int job;
     }
 
     [Serializable]
