@@ -6,10 +6,13 @@ namespace Asterra.Gameplay.Content
 {
     public enum SkirmishMapId : byte
     {
-        TwinKeeps = 0,
-        RiverCrossing = 1,
-        /// <summary>M1 vertical-slice map: fortress warfare through a mountain pass.</summary>
-        BlackridgePass = 2,
+        MundorCapital = 0,
+        OutcastCamp = 1,
+        RiverCrossing = 2,
+        FrozenWastes = 3,
+        LushForest = 4,
+        TwinCities = 5,
+        AncientRelic = 6,
     }
 
     /// <summary>
@@ -35,14 +38,14 @@ namespace Asterra.Gameplay.Content
         {
             playerFaction ??= FactionDefaultContent.VeiledInheritance;
             enemyFaction ??= FactionDefaultContent.MundorCrown;
-            PopulateTwoPlayer(
+            SkirmishMapLoader.Apply(
                 world,
                 ids,
                 new PlayerId(0),
                 playerFaction,
                 new PlayerId(1),
                 enemyFaction,
-                SkirmishMapId.TwinKeeps);
+                BuiltinMaps.Definition(SkirmishMapId.LushForest));
         }
 
         /// <summary>
@@ -53,12 +56,12 @@ namespace Asterra.Gameplay.Content
             SkirmishWorldSim world,
             IIdFactory ids,
             PlayerSlotState[] slots,
-            SkirmishMapId map = SkirmishMapId.TwinKeeps)
+            SkirmishMapId map = SkirmishMapId.LushForest)
         {
             PopulateFromSlots(world, ids, slots, MapCatalog.BuiltinChoice(map).Id);
         }
 
-        /// <summary>Load built-in or custom map by catalog id (e.g. twin_keeps, my_custom_map).</summary>
+        /// <summary>Load built-in or custom map by catalog id (e.g. lush_forest, my_custom_map).</summary>
         public static void PopulateFromSlots(
             SkirmishWorldSim world,
             IIdFactory ids,
@@ -68,158 +71,16 @@ namespace Asterra.Gameplay.Content
             if (slots == null || slots.Length < 2)
                 throw new System.ArgumentException("Need at least two player slots.", nameof(slots));
 
-            var a = slots[0];
-            var b = slots[1];
-            var westFaction = FactionDefaultContent.Get(new FactionId(a.FactionIndex));
-            var eastFaction = FactionDefaultContent.Get(new FactionId(b.FactionIndex));
-
             if (MapCatalog.TryLoad(mapKey, out var custom))
             {
-                SkirmishMapLoader.Apply(
-                    world, ids, a.Player, westFaction, b.Player, eastFaction, custom);
+                SkirmishMapLoader.Apply(world, ids, slots, custom);
                 return;
             }
 
             if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
-                builtin = SkirmishMapId.TwinKeeps;
+                builtin = SkirmishMapId.LushForest;
 
-            PopulateTwoPlayer(world, ids, a.Player, westFaction, b.Player, eastFaction, builtin);
-        }
-
-        private static void PopulateTwoPlayer(
-            SkirmishWorldSim world,
-            IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction,
-            SkirmishMapId map)
-        {
-            SkirmishMapTerrain.Apply(world.Environment, map);
-            SkirmishMapTraversal.Apply(world.Environment, map);
-
-            switch (map)
-            {
-                case SkirmishMapId.TwinKeeps:
-                    PopulateTwinKeeps(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
-                    break;
-                case SkirmishMapId.RiverCrossing:
-                    PopulateRiverCrossing(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
-                    break;
-                case SkirmishMapId.BlackridgePass:
-                    PopulateBlackridgePass(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
-                    break;
-                default:
-                    throw new System.ArgumentOutOfRangeException(nameof(map), map, null);
-            }
-
-            SkirmishMapDestructibles.Apply(world, ids, map);
-            EnsureBuiltinArmies(world, ids, westPlayer, westFaction, eastPlayer, eastFaction);
-        }
-
-        private static void EnsureBuiltinArmies(
-            SkirmishWorldSim world,
-            IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction)
-        {
-            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, westPlayer, westFaction);
-            SkirmishMapLoader.EnsureMinimumStartingArmy(world, ids, eastPlayer, eastFaction);
-        }
-
-        private static void PopulateTwinKeeps(
-            SkirmishWorldSim world,
-            IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction)
-        {
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.KeepBuildingId, -350f, 0f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 350f, 0f, startActive: true);
-
-            // Workers only — train combat after the match starts.
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 0f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, 0f);
-
-            world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
-        }
-
-        private static void PopulateRiverCrossing(
-            SkirmishWorldSim world,
-            IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction)
-        {
-            // Diagonal keeps across the river band (z ≈ 0).
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.KeepBuildingId, -300f, -220f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 300f, 220f, startActive: true);
-
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -260f, -190f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 260f, 190f);
-
-            world.AddTerritory(ids.Next(), 0f, 0f, radius: 40f, goldPerSecond: 8);
-
-            world.SpawnUnit(
-                ids.Next(), westPlayer, westFaction.Id, FactionDefaultContent.RiverBoatId, -390f, 0f);
-            world.SpawnUnit(
-                ids.Next(), eastPlayer, eastFaction.Id, FactionDefaultContent.RiverBoatId, 390f, 0f);
-        }
-
-        /// <summary>
-        /// Blackridge Pass — east/west fortresses, narrow central choke, high-ground flanks.
-        /// Notion M1 vertical-slice region.
-        /// </summary>
-        private static void PopulateBlackridgePass(
-            SkirmishWorldSim world,
-            IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction)
-        {
-            // Fortresses outside the pass mouth
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.KeepBuildingId, -360f, 0f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.KeepBuildingId, 360f, 0f, startActive: true);
-
-            // Workers only — train combat after the match starts.
-            world.SpawnUnit(ids.Next(), westPlayer, westFaction.Id, westFaction.BuilderUnitId, -300f, 8f);
-            world.SpawnUnit(ids.Next(), eastPlayer, eastFaction.Id, eastFaction.BuilderUnitId, 300f, -8f);
-
-            // West pass mouth fortifications
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.TowerBuildingId, -140f, -55f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.TowerBuildingId, -140f, 55f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.WallBuildingId, -120f, -70f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), westPlayer, westFaction.Id, westFaction.WallBuildingId, -120f, 70f, startActive: true);
-
-            // East pass mouth fortifications
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.TowerBuildingId, 140f, -55f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.TowerBuildingId, 140f, 55f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.WallBuildingId, 120f, -70f, startActive: true);
-            world.SpawnBuilding(
-                ids.Next(), eastPlayer, eastFaction.Id, eastFaction.WallBuildingId, 120f, 70f, startActive: true);
-
-            // Contested pass control + high-ground supply flanks
-            world.AddTerritory(ids.Next(), 0f, 0f, radius: 36f, goldPerSecond: 10);
-            world.AddTerritory(ids.Next(), 0f, 110f, radius: 28f, goldPerSecond: 6);
-            world.AddTerritory(ids.Next(), 0f, -110f, radius: 28f, goldPerSecond: 6);
+            SkirmishMapLoader.Apply(world, ids, slots, BuiltinMaps.Definition(builtin));
         }
 
         public static void ApplyMapEnvironmentOnly(SkirmishWorldSim world, string mapKey)
@@ -235,40 +96,22 @@ namespace Asterra.Gameplay.Content
             }
 
             if (!MapCatalog.TryParseBuiltin(mapKey, out var builtin))
-                builtin = SkirmishMapId.TwinKeeps;
+                builtin = SkirmishMapId.LushForest;
 
-            SkirmishMapTerrain.Apply(world.Environment, builtin);
-            SkirmishMapTraversal.Apply(world.Environment, builtin);
+            var def = BuiltinMaps.Definition(builtin);
+            SkirmishMapLoader.ApplyTerrain(world.Environment, def);
+            SkirmishMapLoader.ApplyTraversal(world.Environment, def);
         }
 
         public static string GetMapDisplayName(SkirmishMapId map)
         {
-            switch (map)
-            {
-                case SkirmishMapId.TwinKeeps:
-                    return "Twin Keeps";
-                case SkirmishMapId.RiverCrossing:
-                    return "River Crossing";
-                case SkirmishMapId.BlackridgePass:
-                    return "Blackridge Pass";
-                default:
-                    return map.ToString();
-            }
+            return BuiltinMaps.Definition(map).displayName;
         }
 
         public static SkirmishMapId NextMap(SkirmishMapId map)
         {
-            switch (map)
-            {
-                case SkirmishMapId.TwinKeeps:
-                    return SkirmishMapId.RiverCrossing;
-                case SkirmishMapId.RiverCrossing:
-                    return SkirmishMapId.BlackridgePass;
-                case SkirmishMapId.BlackridgePass:
-                    return SkirmishMapId.TwinKeeps;
-                default:
-                    return SkirmishMapId.TwinKeeps;
-            }
+            int n = 7;
+            return (SkirmishMapId)(((int)map + 1) % n);
         }
     }
 }

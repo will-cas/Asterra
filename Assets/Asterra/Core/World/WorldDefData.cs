@@ -147,5 +147,7 @@ namespace Asterra.Core.World
         public int ResourceDropAmount;
         public float FootprintRadius = 4f;
         public bool ProvidesCover;
+        /// <summary>Map dressing. Blocks movement, never takes damage, never selected as an attack target.</summary>
+        public bool Invulnerable;
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Asterra.Core;
 using Asterra.Core.World;
 using Asterra.Gameplay.Sim;
@@ -18,15 +19,52 @@ namespace Asterra.Gameplay.Content
             FactionRoster eastFaction,
             MapDefinition map)
         {
+            Apply(
+                world,
+                ids,
+                new[]
+                {
+                    new PlayerSlotState
+                    {
+                        Player = westPlayer,
+                        FactionIndex = westFaction != null ? westFaction.Id.Value : (byte)0,
+                        IsReady = true,
+                    },
+                    new PlayerSlotState
+                    {
+                        Player = eastPlayer,
+                        FactionIndex = eastFaction != null ? eastFaction.Id.Value : (byte)1,
+                        IsReady = true,
+                    },
+                },
+                map);
+        }
+
+        public static void Apply(
+            SkirmishWorldSim world,
+            IIdFactory ids,
+            PlayerSlotState[] seats,
+            MapDefinition map)
+        {
             if (world == null || map == null)
                 throw new ArgumentNullException(map == null ? nameof(map) : nameof(world));
+            if (seats == null || seats.Length < 2)
+                throw new ArgumentException("Need at least two player seats.", nameof(seats));
             map.EnsureArrays();
 
             ApplyTerrain(world.Environment, map);
             ApplyTraversal(world.Environment, map);
-            ApplySpawns(world, ids, westPlayer, westFaction, eastPlayer, eastFaction, map);
-            EnsureMinimumStartingArmy(world, ids, westPlayer, westFaction);
-            EnsureMinimumStartingArmy(world, ids, eastPlayer, eastFaction);
+            ApplySpawns(world, ids, seats, map);
+            var armed = new HashSet<byte>();
+            for (int i = 0; i < seats.Length; i++)
+            {
+                var slot = seats[i];
+                if (!armed.Add(slot.Player.Value))
+                    continue;
+                var faction = FactionDefaultContent.Get(new FactionId(slot.FactionIndex));
+                EnsureMinimumStartingArmy(world, ids, slot.Player, faction);
+            }
+
             ApplyDestructibles(world, ids, map);
         }
 
@@ -41,45 +79,45 @@ namespace Asterra.Gameplay.Content
         {
             if (world == null || faction == null || ids == null)
                 return;
+            if (string.IsNullOrEmpty(faction.BuilderUnitId))
+                return;
 
-            float keepX = 0f;
-            float keepZ = 0f;
-            bool foundKeep = false;
-            for (int i = 0; i < world.Buildings.Count; i++)
+            for (int k = 0; k < world.Buildings.Count; k++)
             {
-                var b = world.Buildings[i];
+                var b = world.Buildings[k];
                 if (b.Owner != player || b.State == BuildingState.Destroyed)
                     continue;
                 if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
                     continue;
-                keepX = b.X;
-                keepZ = b.Z;
-                foundKeep = true;
-                break;
+
+                float keepX = b.X;
+                float keepZ = b.Z;
+                int buildersNear = 0;
+                for (int i = 0; i < world.Units.Count; i++)
+                {
+                    var u = world.Units[i];
+                    if (u.Owner != player || !u.IsAlive || !FactionDefaultContent.IsBuilderUnitId(u.DefinitionId))
+                        continue;
+                    float dx = u.X - keepX;
+                    float dz = u.Z - keepZ;
+                    if (dx * dx + dz * dz <= 48f * 48f)
+                        buildersNear++;
+                }
+
+                if (buildersNear >= 1)
+                    continue;
+
+                float side = keepX < 0f ? 1f : -1f;
+                if (Math.Abs(keepX) < 1f)
+                    side = -1f;
+                world.SpawnUnit(
+                    ids.Next(),
+                    player,
+                    faction.Id,
+                    faction.BuilderUnitId,
+                    keepX + side * 28f,
+                    keepZ);
             }
-
-            if (!foundKeep)
-                return;
-
-            int builders = 0;
-            for (int i = 0; i < world.Units.Count; i++)
-            {
-                var u = world.Units[i];
-                if (u.Owner == player && u.IsAlive && FactionDefaultContent.IsBuilderUnitId(u.DefinitionId))
-                    builders++;
-            }
-
-            if (builders >= 1 || string.IsNullOrEmpty(faction.BuilderUnitId))
-                return;
-
-            float side = keepX < 0f ? 1f : -1f;
-            world.SpawnUnit(
-                ids.Next(),
-                player,
-                faction.Id,
-                faction.BuilderUnitId,
-                keepX + side * 28f,
-                keepZ);
         }
 
         public static void ApplyTerrain(WorldEnvironmentSim environment, MapDefinition map)
@@ -125,7 +163,7 @@ namespace Asterra.Gameplay.Content
                     link.endX,
                     link.endZ,
                     type,
-                    TraversalCapability.Land,
+                    CapabilitiesFor(type),
                     link.durationSeconds > 0.05f ? link.durationSeconds : 1.25f,
                     allowsCombat: false,
                     enabled: link.enabled,
@@ -133,6 +171,21 @@ namespace Asterra.Gameplay.Content
                     canBeBlocked: true,
                     requiresAnimation: false,
                     approachRadius: link.approachRadius > 0.5f ? link.approachRadius : 8f);
+            }
+        }
+
+        private static TraversalCapability CapabilitiesFor(TraversalLinkType type)
+        {
+            switch (type)
+            {
+                case TraversalLinkType.MagicCrossing:
+                    return TraversalCapability.Magic;
+                case TraversalLinkType.JumpUp:
+                    return TraversalCapability.Jump;
+                case TraversalLinkType.ShoreTransition:
+                    return TraversalCapability.Amphibious;
+                default:
+                    return TraversalCapability.Land;
             }
         }
 
@@ -210,17 +263,14 @@ namespace Asterra.Gameplay.Content
         private static void ApplySpawns(
             SkirmishWorldSim world,
             IIdFactory ids,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction,
+            PlayerSlotState[] seats,
             MapDefinition map)
         {
             for (int i = 0; i < map.keeps.Length; i++)
             {
                 var k = map.keeps[i];
-                ResolveSeat(k.seatIndex, westPlayer, westFaction, eastPlayer, eastFaction,
-                    out var player, out var faction);
+                if (!TrySeat(seats, k.seatIndex, out var player, out var faction))
+                    continue;
                 world.SpawnBuilding(
                     ids.Next(), player, faction.Id, faction.KeepBuildingId, k.x, k.z, startActive: true);
             }
@@ -228,24 +278,22 @@ namespace Asterra.Gameplay.Content
             for (int i = 0; i < map.buildings.Length; i++)
             {
                 var b = map.buildings[i];
-                ResolveSeat(b.seatIndex, westPlayer, westFaction, eastPlayer, eastFaction,
-                    out var player, out var faction);
+                if (!TrySeat(seats, b.seatIndex, out var player, out var faction))
+                    continue;
                 string defId = ResolveBuildingRole(b.role, faction);
                 if (string.IsNullOrEmpty(defId))
                     continue;
                 var building = world.SpawnBuilding(
                     ids.Next(), player, faction.Id, defId, b.x, b.z, startActive: true);
                 if (building != null)
-                {
                     building.YawDegrees = b.yawDegrees;
-                }
             }
 
             for (int i = 0; i < map.units.Length; i++)
             {
                 var u = map.units[i];
-                ResolveSeat(u.seatIndex, westPlayer, westFaction, eastPlayer, eastFaction,
-                    out var player, out var faction);
+                if (!TrySeat(seats, u.seatIndex, out var player, out var faction))
+                    continue;
                 string defId = ResolveUnitRole(u.role, faction);
                 if (string.IsNullOrEmpty(defId))
                     continue;
@@ -262,11 +310,9 @@ namespace Asterra.Gameplay.Content
                     t.radius > 1f ? t.radius : 40f,
                     t.goldPerSecond > 0 ? t.goldPerSecond : 8);
             }
-
-            // Map harvest nodes are ignored; gold comes from keeps and resource buildings.
         }
 
-        private static void ApplyDestructibles(SkirmishWorldSim world, IIdFactory ids, MapDefinition map)
+        public static void ApplyDestructibles(SkirmishWorldSim world, IIdFactory ids, MapDefinition map)
         {
             for (int i = 0; i < map.destructibles.Length; i++)
             {
@@ -274,29 +320,36 @@ namespace Asterra.Gameplay.Content
                 var def = ResolveDestructible(d.catalogId);
                 if (def == null)
                     continue;
-                world.SpawnDestructible(ids.Next(), def, d.x, d.z, d.linkedTraversalLinkId);
+                int linkId = d.linkedTraversalLinkId;
+                if (linkId >= 0 && world.Environment?.TraversalGraph != null)
+                {
+                    var links = world.Environment.TraversalGraph.Links;
+                    if (linkId < links.Count)
+                        linkId = links[linkId].Id;
+                    else
+                        linkId = -1;
+                }
+
+                world.SpawnDestructible(ids.Next(), def, d.x, d.z, linkId, d.yawDegrees);
             }
         }
 
-        private static void ResolveSeat(
+        private static bool TrySeat(
+            PlayerSlotState[] seats,
             int seatIndex,
-            PlayerId westPlayer,
-            FactionRoster westFaction,
-            PlayerId eastPlayer,
-            FactionRoster eastFaction,
             out PlayerId player,
             out FactionRoster faction)
         {
-            if (seatIndex <= 0)
-            {
-                player = westPlayer;
-                faction = westFaction;
-            }
-            else
-            {
-                player = eastPlayer;
-                faction = eastFaction;
-            }
+            player = default;
+            faction = null;
+            if (seats == null || seatIndex < 0 || seatIndex >= seats.Length)
+                return false;
+            var slot = seats[seatIndex];
+            faction = FactionDefaultContent.Get(new FactionId(slot.FactionIndex));
+            if (faction == null)
+                return false;
+            player = slot.Player;
+            return true;
         }
 
         private static string ResolveUnitRole(string role, FactionRoster faction)
@@ -359,14 +412,7 @@ namespace Asterra.Gameplay.Content
 
         private static DestructibleDefData ResolveDestructible(string catalogId)
         {
-            if (string.IsNullOrEmpty(catalogId))
-                return DefaultDestructibleCatalog.Rock();
-            string id = catalogId.ToLowerInvariant();
-            if (id.Contains("tree"))
-                return DefaultDestructibleCatalog.Tree();
-            if (id.Contains("bridge"))
-                return DefaultDestructibleCatalog.Bridge();
-            return DefaultDestructibleCatalog.Rock();
+            return DefaultDestructibleCatalog.FromCatalogId(catalogId);
         }
     }
 }

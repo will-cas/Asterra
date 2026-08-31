@@ -38,11 +38,10 @@ namespace Asterra.Editor
             // Sun
             var lightGo = new GameObject("Directional Light");
             var light = lightGo.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.color = new Color(1f, 0.96f, 0.9f);
-            light.intensity = 1.35f;
-            light.shadows = LightShadows.Soft;
-            lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            Asterra.Gameplay.Presentation.AsterraLightingLook.ConfigureSun(light);
+            light.intensity = Asterra.Gameplay.Presentation.AsterraLightingLook.NoonSunIntensity;
+            light.colorTemperature = 5600f;
+            lightGo.transform.rotation = Quaternion.Euler(52f, -32f, 0f);
 
             // Main camera (rig creates one if missing; having it in-scene is clearer for Play)
             var camGo = new GameObject("Main Camera");
@@ -55,7 +54,7 @@ namespace Asterra.Editor
             cam.transform.position = new Vector3(-320f, 200f, -110f);
             cam.transform.LookAt(new Vector3(-320f, 0f, 0f));
             camGo.AddComponent<AudioListener>();
-            camGo.AddComponent<UniversalAdditionalCameraData>();
+            Asterra.Gameplay.Presentation.AsterraLightingLook.ConfigureCamera(cam);
 
             // Fallback flat ground (TerrainGridPresenter hides this once fantasy mesh exists)
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -79,8 +78,8 @@ namespace Asterra.Editor
             so.FindProperty("playMode").enumValueIndex = (int)MatchPlayMode.OfflineVsAi;
             so.FindProperty("playerFactionIndex").intValue = 0;
             so.FindProperty("enemyFactionIndex").intValue = 1;
-            so.FindProperty("mapId").enumValueIndex = (int)Asterra.Gameplay.Content.SkirmishMapId.BlackridgePass;
-            so.FindProperty("mapKey").stringValue = Asterra.Gameplay.Content.MapCatalog.BlackridgePassId;
+            so.FindProperty("mapId").enumValueIndex = (int)Asterra.Gameplay.Content.SkirmishMapId.LushForest;
+            so.FindProperty("mapKey").stringValue = Asterra.Gameplay.Content.MapCatalog.LushForestId;
             so.FindProperty("tickHz").floatValue = 20f;
             so.FindProperty("commandDelayTicks").intValue = 2;
             so.FindProperty("startingGold").intValue = 500;

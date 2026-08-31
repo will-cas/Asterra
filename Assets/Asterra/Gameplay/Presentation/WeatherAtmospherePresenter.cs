@@ -1,5 +1,6 @@
 using UnityEngine;
 using Asterra.Core.World;
+using Asterra.Gameplay.Audio;
 
 namespace Asterra.Gameplay.Presentation
 {
@@ -16,6 +17,7 @@ namespace Asterra.Gameplay.Presentation
         private float _flashRemaining;
         private float _rainRate;
         private float _snowRate;
+        private float _thunderIn = -1f;
         [SerializeField] private float precipEaseSeconds = 3.5f;
 
         private void Awake()
@@ -57,19 +59,26 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < weather.Events.Count; i++)
             {
                 if (weather.Events[i].Kind == WeatherEventKind.Lightning)
-                    TriggerLightningFlash(weather.Events[i].Intensity);
+                    TriggerLightningFlash(weather.Events[i].Intensity, weather.Events[i].X, weather.Events[i].Z);
+            }
+
+            if (_thunderIn > 0f)
+            {
+                _thunderIn -= Time.deltaTime;
+                if (_thunderIn <= 0f)
+                    AsterraAudio.Play(AsterraSfx.Thunder, 0.85f);
             }
 
             if (_flashRemaining > 0f && _flashLight != null)
             {
                 _flashRemaining -= Time.deltaTime;
-                _flashLight.intensity = Mathf.Lerp(0f, 1.6f, Mathf.Clamp01(_flashRemaining / 0.1f));
+                _flashLight.intensity = Mathf.Lerp(0f, 8f, Mathf.Clamp01(_flashRemaining / 0.08f));
                 if (_flashRemaining <= 0f)
                     _flashLight.intensity = 0f;
             }
         }
 
-        private void TriggerLightningFlash(float intensity)
+        private void TriggerLightningFlash(float intensity, float x, float z)
         {
             if (_flashLight == null)
             {
@@ -82,8 +91,19 @@ namespace Asterra.Gameplay.Presentation
                 _flashLight.shadows = LightShadows.None;
             }
 
-            _flashRemaining = 0.06f + intensity * 0.04f;
-            _flashLight.intensity = 0.9f + intensity * 0.7f;
+            _flashRemaining = 0.05f + intensity * 0.05f;
+            _flashLight.intensity = 4.5f + intensity * 6f;
+            _flashLight.useColorTemperature = true;
+            _flashLight.colorTemperature = 9000f;
+            AsterraLightingLook.PulseLightning(intensity);
+            float delay = 0.35f + intensity * 0.25f;
+            if (Camera.main != null)
+            {
+                Vector3 cam = Camera.main.transform.position;
+                float dist = Vector2.Distance(new Vector2(x, z), new Vector2(cam.x, cam.z));
+                delay = Mathf.Clamp(dist / 343f, 0.12f, 4.8f);
+            }
+            _thunderIn = delay;
             if (Camera.main != null)
                 _flashLight.transform.rotation = Quaternion.LookRotation(Vector3.down + Camera.main.transform.forward * 0.2f);
         }

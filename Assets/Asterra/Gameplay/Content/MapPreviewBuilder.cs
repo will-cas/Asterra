@@ -37,7 +37,7 @@ namespace Asterra.Gameplay.Content
         public static Texture2D Build(MapDefinition map)
         {
             if (map == null)
-                map = BuiltinPreview(SkirmishMapId.BlackridgePass);
+                map = BuiltinMaps.Definition(SkirmishMapId.LushForest);
             map.EnsureArrays();
 
             var tex = new Texture2D(Resolution, Resolution, TextureFormat.RGBA32, false)
@@ -149,115 +149,12 @@ namespace Asterra.Gameplay.Content
                 return custom;
             if (MapCatalog.TryParseBuiltin(mapKey, out var builtin))
                 return BuiltinPreview(builtin);
-            return BuiltinPreview(SkirmishMapId.BlackridgePass);
+            return BuiltinMaps.Definition(SkirmishMapId.LushForest);
         }
 
         public static MapDefinition BuiltinPreview(SkirmishMapId id)
         {
-            switch (id)
-            {
-                case SkirmishMapId.TwinKeeps:
-                    return TwinKeepsDef();
-                case SkirmishMapId.RiverCrossing:
-                    return RiverCrossingDef();
-                default:
-                    return BlackridgePassDef();
-            }
-        }
-
-        private static MapDefinition TwinKeepsDef()
-        {
-            var def = BaseDef("twin_keeps", "Twin Keeps", -320f, 0f);
-            def.keeps = new[]
-            {
-                new MapKeepSpawn { seatIndex = 0, x = -350f, z = 0f },
-                new MapKeepSpawn { seatIndex = 1, x = 350f, z = 0f },
-            };
-            def.terrain = new[]
-            {
-                Rect(-380, -40, -320, 40, DefaultTerrainCatalog.GrassBare),
-                Rect(320, -40, 380, 40, DefaultTerrainCatalog.GrassBare),
-                Rect(-200, 80, 200, 160, DefaultTerrainCatalog.GrassLong),
-                Rect(-200, -160, 200, -80, DefaultTerrainCatalog.GrassLong),
-                Rect(-140, -110, -60, -40, DefaultTerrainCatalog.Forest),
-                Rect(60, 40, 140, 110, DefaultTerrainCatalog.Forest),
-                Rect(-60, 40, -30, 70, DefaultTerrainCatalog.Rock),
-                Rect(30, -70, 60, -40, DefaultTerrainCatalog.Rock),
-                Rect(-30, -50, 30, -20, DefaultTerrainCatalog.Swamp),
-                Rect(-220, -30, -180, 30, DefaultTerrainCatalog.Hill),
-                Rect(180, -30, 220, 30, DefaultTerrainCatalog.Hill),
-                Rect(-50, -50, 50, 50, DefaultTerrainCatalog.GrassShort),
-            };
-            return def;
-        }
-
-        private static MapDefinition RiverCrossingDef()
-        {
-            var def = BaseDef("river_crossing", "River Crossing", -280f, -200f);
-            def.keeps = new[]
-            {
-                new MapKeepSpawn { seatIndex = 0, x = -300f, z = -220f },
-                new MapKeepSpawn { seatIndex = 1, x = 300f, z = 220f },
-            };
-            def.terrain = new[]
-            {
-                Rect(-450, -28, 450, 28, DefaultTerrainCatalog.WaterDeep),
-                Rect(-35, -28, 35, 28, DefaultTerrainCatalog.WaterShallow),
-                Rect(-150, -28, -110, 28, DefaultTerrainCatalog.WaterShallow),
-                Rect(110, -28, 150, 28, DefaultTerrainCatalog.WaterShallow),
-                Rect(-380, -48, 380, -28, DefaultTerrainCatalog.Beach),
-                Rect(-380, 28, 380, 48, DefaultTerrainCatalog.Beach),
-                Rect(-200, -160, -120, -70, DefaultTerrainCatalog.Forest),
-                Rect(120, 70, 200, 160, DefaultTerrainCatalog.Forest),
-            };
-            return def;
-        }
-
-        private static MapDefinition BlackridgePassDef()
-        {
-            var def = BaseDef("blackridge_pass", "Blackridge Pass", -330f, 0f);
-            def.keeps = new[]
-            {
-                new MapKeepSpawn { seatIndex = 0, x = -360f, z = 0f },
-                new MapKeepSpawn { seatIndex = 1, x = 360f, z = 0f },
-            };
-            def.terrain = new[]
-            {
-                Rect(-80, -200, 80, 200, DefaultTerrainCatalog.Mountain),
-                Rect(-40, -40, 40, 40, DefaultTerrainCatalog.GrassBare),
-                Rect(-450, -60, -200, 60, DefaultTerrainCatalog.GrassShort),
-                Rect(200, -60, 450, 60, DefaultTerrainCatalog.GrassShort),
-                Rect(-120, -80, -60, 80, DefaultTerrainCatalog.Hill),
-                Rect(60, -80, 120, 80, DefaultTerrainCatalog.Hill),
-                Rect(-200, 100, -80, 180, DefaultTerrainCatalog.Forest),
-                Rect(80, -180, 200, -100, DefaultTerrainCatalog.Forest),
-            };
-            return def;
-        }
-
-        private static MapDefinition BaseDef(string id, string name, float camX, float camZ)
-        {
-            return new MapDefinition
-            {
-                id = id,
-                displayName = name,
-                defaultTerrain = DefaultTerrainCatalog.GrassShort,
-                cameraFocusX = camX,
-                cameraFocusZ = camZ,
-            };
-        }
-
-        private static MapTerrainPaint Rect(float minX, float minZ, float maxX, float maxZ, ushort terrain)
-        {
-            return new MapTerrainPaint
-            {
-                shape = "rect",
-                minX = minX,
-                minZ = minZ,
-                maxX = maxX,
-                maxZ = maxZ,
-                terrainIndex = terrain,
-            };
+            return BuiltinMaps.Definition(id);
         }
 
         private static void StampTextureOverlay(Color32[] pixels, MapTexturePaint paint)
@@ -352,7 +249,9 @@ namespace Asterra.Gameplay.Content
                 case DefaultTerrainCatalog.WaterWaterfall: return new Color32(150, 200, 220, 255);
                 case DefaultTerrainCatalog.IceThick:
                 case DefaultTerrainCatalog.IceThin: return new Color32(200, 220, 240, 255);
-                case DefaultTerrainCatalog.Trench: return new Color32(80, 60, 40, 255);
+                case DefaultTerrainCatalog.Snow: return new Color32(230, 235, 240, 255);
+                case DefaultTerrainCatalog.Road: return new Color32(140, 120, 90, 255);
+                case DefaultTerrainCatalog.Rubble: return new Color32(100, 95, 85, 255);
                 case DefaultTerrainCatalog.NoEntry: return new Color32(20, 20, 20, 255);
                 default: return new Color32(100, 100, 100, 255);
             }

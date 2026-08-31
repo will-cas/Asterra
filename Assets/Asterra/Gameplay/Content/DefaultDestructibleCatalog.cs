@@ -8,6 +8,12 @@ namespace Asterra.Gameplay.Content
         public const string TreeId = "destructible_tree";
         public const string BridgeId = "destructible_bridge";
         public const string RockId = "destructible_rock";
+        public const string FarmId = "scenery_farm";
+        public const string CrumblingTowerId = "scenery_crumbling_tower";
+        public const string CottageId = "scenery_cottage";
+        public const string MillId = "scenery_mill";
+        public const string ShrineId = "scenery_shrine";
+        public const string BarnId = "scenery_barn";
 
         public static DestructibleDefData Tree()
         {
@@ -65,6 +71,72 @@ namespace Asterra.Gameplay.Content
                 ResourceDropType = ResourceType.Gold,
                 ResourceDropAmount = 5,
                 FootprintRadius = 6f,
+            };
+        }
+
+        public static bool IsScenery(string definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId))
+                return false;
+            string id = definitionId.ToLowerInvariant();
+            return id.StartsWith("scenery_")
+                   || id.Contains("farm")
+                   || id.Contains("crumbling")
+                   || id.Contains("cottage")
+                   || id.Contains("mill")
+                   || id.Contains("shrine")
+                   || id.Contains("barn");
+        }
+
+        public static DestructibleDefData FromCatalogId(string catalogId)
+        {
+            if (string.IsNullOrEmpty(catalogId))
+                return Rock();
+            string id = catalogId.ToLowerInvariant();
+            if (id.Contains("tree"))
+                return Tree();
+            if (id.Contains("bridge"))
+                return Bridge();
+            if (id.Contains("farm"))
+                return Farm();
+            if (id.Contains("crumbling") || id.Contains("ruin_tower") || id.Contains("crumbling_tower"))
+                return CrumblingTower();
+            if (id.Contains("cottage"))
+                return Cottage();
+            if (id.Contains("mill"))
+                return Mill();
+            if (id.Contains("shrine"))
+                return Shrine();
+            if (id.Contains("barn"))
+                return Barn();
+            if (id.Contains("rock"))
+                return Rock();
+            if (IsScenery(id))
+                return Cottage();
+            return Rock();
+        }
+
+        public static DestructibleDefData Farm() => Scenery(FarmId, "Farm", 10f);
+        public static DestructibleDefData CrumblingTower() => Scenery(CrumblingTowerId, "Crumbling Tower", 8f);
+        public static DestructibleDefData Cottage() => Scenery(CottageId, "Cottage", 7f);
+        public static DestructibleDefData Mill() => Scenery(MillId, "Mill", 8f);
+        public static DestructibleDefData Shrine() => Scenery(ShrineId, "Shrine", 6f);
+        public static DestructibleDefData Barn() => Scenery(BarnId, "Barn", 9f);
+
+        private static DestructibleDefData Scenery(string id, string displayName, float radius)
+        {
+            return new DestructibleDefData
+            {
+                Id = id,
+                DisplayName = displayName,
+                MaxHealth = 1000000f,
+                Invulnerable = true,
+                BlocksMovement = true,
+                BlocksLos = true,
+                ClearsTerrainOnDestroy = false,
+                DisableTraversalOnDestroy = false,
+                FootprintRadius = radius,
+                ProvidesCover = true,
             };
         }
     }

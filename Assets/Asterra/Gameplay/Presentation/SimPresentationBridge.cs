@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Asterra.Core;
 using Asterra.Core.World;
+using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Presentation;
 using UnityEngine;
 
@@ -243,10 +244,10 @@ namespace Asterra.Gameplay
             filter.sharedMesh = AsterraMeshLibrary.GetResourceMesh(snap.Type);
             var rend = go.AddComponent<MeshRenderer>();
             bool gold = snap.Type == ResourceType.Gold;
-            rend.sharedMaterial = CreateColorMaterial(
+            rend.sharedMaterial = AsterraPbrLibrary.CreateLit(
                 AsterraMeshLibrary.ResourceColor(snap.Type),
-                AsterraMeshLibrary.GetPropAlbedo(gold ? "gold" : "timber"),
-                0.2f);
+                gold ? "crystal" : "bark",
+                gold ? 0.55f : 0.04f);
 
             // Gold nugget vs timber log: different world scales for silhouette.
             go.transform.localScale = gold
@@ -281,6 +282,7 @@ namespace Asterra.Gameplay
                 }
 
                 view.transform.position = new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z);
+                view.transform.rotation = Quaternion.Euler(0f, snap.YawDegrees, 0f);
                 view.SetDamaged(snap.State == DestructibleState.Damaged);
             }
 
@@ -308,20 +310,24 @@ namespace Asterra.Gameplay
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = AsterraMeshLibrary.GetDestructibleMesh(snap.DefinitionId);
             var color = AsterraMeshLibrary.DestructibleColor(snap.DefinitionId);
-            string texKey = "rock";
-            if (snap.DefinitionId != null && snap.DefinitionId.Contains("bridge"))
-                texKey = "bridge";
-            else if (snap.DefinitionId != null && snap.DefinitionId.Contains("tree"))
-                texKey = "leaf";
+            string texKey = AsterraMeshLibrary.DestructibleTexKey(snap.DefinitionId);
             var rend = go.AddComponent<MeshRenderer>();
-            rend.sharedMaterial = CreateColorMaterial(color, AsterraMeshLibrary.GetPropAlbedo(texKey), 0.14f);
+            rend.sharedMaterial = AsterraPbrLibrary.CreateLit(
+                color,
+                AsterraPbrLibrary.PropSetKey(texKey),
+                0.04f);
 
-            float scale = snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 1.15f : 1.35f;
+            bool scenery = DefaultDestructibleCatalog.IsScenery(snap.DefinitionId);
+            float scale = scenery ? 2.15f : snap.DefinitionId != null && snap.DefinitionId.Contains("bridge") ? 1.15f : 1.35f;
             go.transform.localScale = new Vector3(scale, scale, scale);
+            go.transform.rotation = Quaternion.Euler(0f, snap.YawDegrees, 0f);
 
-            var sphere = go.AddComponent<SphereCollider>();
-            sphere.center = new Vector3(0f, 1.2f, 0f);
-            sphere.radius = snap.FootprintRadius > 0.5f ? snap.FootprintRadius * 0.35f : 1.4f;
+            if (!scenery)
+            {
+                var sphere = go.AddComponent<SphereCollider>();
+                sphere.center = new Vector3(0f, 1.2f, 0f);
+                sphere.radius = snap.FootprintRadius > 0.5f ? snap.FootprintRadius * 0.35f : 1.4f;
+            }
 
             var view = go.AddComponent<DestructibleView>();
             view.Initialize(snap.Id, snap.DefinitionId, color);

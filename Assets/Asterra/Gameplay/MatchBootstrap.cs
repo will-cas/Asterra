@@ -7,6 +7,7 @@ using Asterra.Gameplay.Player;
 using Asterra.Gameplay.Presentation;
 using Asterra.Gameplay.Sim;
 using Asterra.Gameplay.World;
+using Asterra.Core.World;
 using Asterra.Net;
 using UnityEngine;
 
@@ -16,6 +17,7 @@ namespace Asterra.Gameplay
     {
         OfflineVsAi = 0,
         Online = 1,
+        Campaign = 2,
     }
 
     /// <summary>
@@ -27,15 +29,15 @@ namespace Asterra.Gameplay
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
         [SerializeField] private int playerFactionIndex;
         [SerializeField] private int enemyFactionIndex = 1;
-        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.BlackridgePass;
-        [SerializeField] private string mapKey = MapCatalog.BlackridgePassId;
+        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.LushForest;
+        [SerializeField] private string mapKey = MapCatalog.LushForestId;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 700;
         [SerializeField] private int startingTimber = 0;
         [SerializeField] private int enemyStartingGold = 500;
         [SerializeField] private AiDifficulty aiDifficulty = AiDifficulty.Normal;
-        [SerializeField] [Range(0, 1)] private int localSpawnSeat;
+        [SerializeField] [Range(0, 3)] private int localSpawnSeat;
         [SerializeField] private bool attachLocalOrders = true;
         [SerializeField] private bool runSmokeOnAwake;
         [SerializeField] private bool reportHashEveryTick;
@@ -62,12 +64,14 @@ namespace Asterra.Gameplay
         public FactionRoster EnemyRoster { get; private set; }
         public MatchLobbyState Lobby { get; private set; }
         public MatchPlayMode PlayMode => playMode;
+        public int CampaignMissionIndex { get; private set; }
         public bool IsMatchRunning { get; private set; }
 
         /// <summary>True while pause/options/profile overlay is open (blocks orders).</summary>
         public bool IsMenuOverlayOpen { get; set; }
         public MatchResult Result { get; private set; } = MatchResult.None;
         public VictoryEvaluator Victory { get; private set; }
+        public MapScriptRuntime MapScript { get; } = new MapScriptRuntime();
 
         public int PlayerFactionIndex
         {
@@ -91,7 +95,7 @@ namespace Asterra.Gameplay
             }
         }
 
-        /// <summary>Catalog id: built-in (twin_keeps, …) or custom designer map.</summary>
+        /// <summary>Catalog id: built-in (lush_forest, …) or custom designer map.</summary>
         public string MapKey
         {
             get => string.IsNullOrEmpty(mapKey) ? MapCatalog.BuiltinChoice(mapId).Id : mapKey;
@@ -109,11 +113,41 @@ namespace Asterra.Gameplay
             set => aiDifficulty = value;
         }
 
-        /// <summary>0 = west keep, 1 = east keep for the local offline player.</summary>
+        /// <summary>Keep seat index on the loaded map (0–3).</summary>
         public int LocalSpawnSeat
         {
             get => localSpawnSeat;
-            set => localSpawnSeat = value <= 0 ? 0 : 1;
+            set => localSpawnSeat = Mathf.Clamp(value, 0, 3);
+        }
+
+        private bool IsCapitalIslandDefence()
+        {
+            return LocalSpawnSeat == 0
+                   && MapCatalog.TryParseBuiltin(MapKey, out var id)
+                   && id == SkirmishMapId.MundorCapital;
+        }
+
+        private void AddOpponentBrain(PlayerId player)
+        {
+            string powerId = EnemyRoster.PowerIds != null && EnemyRoster.PowerIds.Length > 0
+                ? EnemyRoster.PowerIds[0]
+                : EnemyRoster.PowerId;
+            var brain = new SkirmishOpponentBrain(
+                player,
+                EnemyRoster.KeepBuildingId,
+                EnemyRoster.ProducerBuildingId,
+                EnemyRoster.BuilderUnitId,
+                EnemyRoster.BasicUnitId,
+                EnemyRoster.RangedUnitId,
+                EnemyRoster.CavalryUnitId,
+                EnemyRoster.TowerBuildingId,
+                EnemyRoster.OutpostBuildingId,
+                EnemyRoster.WallBuildingId,
+                EnemyRoster.BasicUpgradeId,
+                powerId,
+                aiDifficulty,
+                FactionDefaultContent.KeepTurretId);
+            coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
         }
 
         private CommandBus _commandBus;
@@ -147,6 +181,13 @@ namespace Asterra.Gameplay
                     && FindFirstObjectByType<OfflineMatchMenu>() == null)
                     gameObject.AddComponent<OfflineMatchMenu>();
             }
+        }
+
+        private void Update()
+        {
+            if (coordinator == null || MapScript == null)
+                return;
+            coordinator.PauseSim = IsMatchRunning && !Result.IsOver && MapScript.HasTalk;
         }
 
         public void SetPlayMode(MatchPlayMode mode) => playMode = mode;
@@ -185,13 +226,74 @@ namespace Asterra.Gameplay
             StartOfflineVsAi();
         }
 
+        public void ConfigureAndStartCampaign(int playerFaction, AiDifficulty difficulty, int missionIndex)
+        {
+            if (!CampaignCatalog.TryGet(missionIndex, out var mission))
+                mission = CampaignCatalog.Get(0);
+
+            CampaignMissionIndex = mission.Index;
+            PlayerFactionIndex = CampaignCatalog.PlayerFactionIndex;
+            EnemyFactionIndex = CampaignCatalog.RivalFactionIndex(PlayerFactionIndex);
+            MapKey = mission.MapKey;
+            aiDifficulty = CampaignCatalog.ClampDifficulty(difficulty);
+            LocalSpawnSeat = mission.SpawnSeat;
+            CampaignProgress.SetLobbyPicks(PlayerFactionIndex, aiDifficulty);
+            if (!CampaignProgress.HasSave)
+                CampaignProgress.StartNew(PlayerFactionIndex, aiDifficulty);
+
+            playMode = MatchPlayMode.Campaign;
+            StartOfflineVsAi();
+            EnqueueCampaignOpening();
+        }
+
+        public void ContinueCampaign()
+        {
+            bool secretReady = CampaignProgress.IsComplete
+                               && CampaignProgress.HiddenMissionUnlocked
+                               && !CampaignProgress.SecretEnding;
+            if (CampaignProgress.IsComplete && !secretReady)
+                return;
+
+            int next = secretReady
+                ? CampaignCatalog.SecretMissionIndex
+                : CampaignProgress.HasSave ? CampaignProgress.NextMissionIndex : 0;
+            if (!secretReady && next >= CampaignCatalog.MissionCount)
+                return;
+
+            TeardownMatchRuntime();
+            Result = MatchResult.None;
+            if (AsterraAudio.Instance != null)
+                AsterraSettings.ApplyAudio();
+            ConfigureAndStartCampaign(CampaignProgress.FactionIndex, CampaignProgress.Difficulty, next);
+            var menu = FindFirstObjectByType<OfflineMatchMenu>();
+            if (menu != null)
+                menu.enabled = false;
+        }
+
+        public void NotifyCampaignMatchOver(bool localWon)
+        {
+            if (playMode != MatchPlayMode.Campaign || !localWon)
+                return;
+            CampaignProgress.OnMissionWon(CampaignMissionIndex);
+        }
+
         /// <summary>Tear down the finished match and show the offline lobby again.</summary>
         public void ReturnToMainMenu()
         {
+            bool fromCampaign = playMode == MatchPlayMode.Campaign;
             TeardownMatchRuntime();
             Result = MatchResult.None;
             IsMatchRunning = false;
             EnsureOfflineMenu(enabled: true);
+            var menu = FindFirstObjectByType<OfflineMatchMenu>();
+            if (menu != null)
+            {
+                if (fromCampaign)
+                    menu.ShowCampaign();
+                else
+                    menu.ShowHub();
+            }
+
             if (AsterraAudio.Instance != null)
                 AsterraSettings.ApplyAudio();
         }
@@ -199,11 +301,19 @@ namespace Asterra.Gameplay
         /// <summary>Soft rematch with the same faction/map picks (no scene reload).</summary>
         public void RematchOffline()
         {
+            bool campaign = playMode == MatchPlayMode.Campaign;
+            int mission = CampaignMissionIndex;
             TeardownMatchRuntime();
             Result = MatchResult.None;
             if (AsterraAudio.Instance != null)
                 AsterraSettings.ApplyAudio();
             StartOfflineVsAi();
+            if (campaign)
+            {
+                playMode = MatchPlayMode.Campaign;
+                CampaignMissionIndex = mission;
+            }
+
             var menu = FindFirstObjectByType<OfflineMatchMenu>();
             if (menu != null)
                 menu.enabled = false;
@@ -259,7 +369,7 @@ namespace Asterra.Gameplay
             matchSeed = data.matchSeed;
             PlayerFactionIndex = data.playerFaction;
             EnemyFactionIndex = data.enemyFaction;
-            MapKey = string.IsNullOrEmpty(data.mapKey) ? MapCatalog.BlackridgePassId : data.mapKey;
+            MapKey = string.IsNullOrEmpty(data.mapKey) ? MapCatalog.LushForestId : data.mapKey;
             aiDifficulty = data.formatVersion >= 2
                 ? (AiDifficulty)Mathf.Clamp(data.aiDifficulty, 0, 3)
                 : AiDifficulty.Normal;
@@ -318,7 +428,8 @@ namespace Asterra.Gameplay
 
         public void StartOfflineVsAi()
         {
-            playMode = MatchPlayMode.OfflineVsAi;
+            if (playMode != MatchPlayMode.Campaign)
+                playMode = MatchPlayMode.OfflineVsAi;
             PlayerRoster = ResolveRoster(playerFactionIndex);
             EnemyRoster = ResolveRoster(enemyFactionIndex);
             if (EnemyRoster.Id == PlayerRoster.Id)
@@ -399,7 +510,13 @@ namespace Asterra.Gameplay
                 randomizeStartingWeather: restore == null);
             _sim = new SkirmishWorldSim(Wallet, Ids, Definitions, environment);
             World = _sim;
-            Session = new LocalMatchSession(localPlayer, includeAi ? 2 : (onlinePlayers?.Length ?? 1));
+            int keepCount = Mathf.Max(1, MapCatalog.KeepCount(MapKey));
+            int localSeat = Mathf.Clamp(LocalSpawnSeat, 0, keepCount - 1);
+            bool fillAllKeeps = includeAi
+                                && keepCount > 2
+                                && (playMode != MatchPlayMode.Campaign || IsCapitalIslandDefence());
+            int offlineCount = includeAi ? (fillAllKeeps ? keepCount : 2) : 1;
+            Session = new LocalMatchSession(localPlayer, onlinePlayers != null ? onlinePlayers.Length : offlineCount);
 
             _participants.Clear();
             if (onlinePlayers != null)
@@ -414,22 +531,55 @@ namespace Asterra.Gameplay
             }
             else
             {
-                _participants.Add(localPlayer);
-                _participants.Add(new PlayerId(1));
                 int enemyGold = enemyStartingGold;
                 if (includeAi)
                     enemyGold += AiDifficultyTuning.For(aiDifficulty).StartingGoldBonus;
                 Wallet.Seed(localPlayer, ResourceType.Gold, startingGold);
                 Wallet.Seed(localPlayer, ResourceType.Timber, startingTimber);
-                Wallet.Seed(new PlayerId(1), ResourceType.Gold, enemyGold);
-                Wallet.Seed(new PlayerId(1), ResourceType.Timber, startingTimber);
+                _participants.Add(localPlayer);
+                int extraAi = fillAllKeeps ? keepCount - 1 : 1;
+                for (int i = 0; i < extraAi; i++)
+                {
+                    var aiPlayer = new PlayerId((byte)(i + 1));
+                    _participants.Add(aiPlayer);
+                    Wallet.Seed(aiPlayer, ResourceType.Gold, enemyGold);
+                    Wallet.Seed(aiPlayer, ResourceType.Timber, startingTimber);
+                }
             }
 
-            // Deterministic seats: sorted player ids → west/east. Never local-centric.
+            // Deterministic seats: keep index → player. Unused keeps stay empty unless fillAllKeeps.
             PlayerSlotState[] seats;
             if (onlinePlayers != null)
             {
                 seats = onlinePlayers;
+            }
+            else if (fillAllKeeps)
+            {
+                seats = new PlayerSlotState[keepCount];
+                byte nextAi = 1;
+                for (int i = 0; i < keepCount; i++)
+                {
+                    if (i == localSeat)
+                    {
+                        seats[i] = new PlayerSlotState
+                        {
+                            Player = localPlayer,
+                            FactionIndex = PlayerRoster.Id.Value,
+                            IsReady = true,
+                            DisplayName = "Player",
+                        };
+                    }
+                    else
+                    {
+                        seats[i] = new PlayerSlotState
+                        {
+                            Player = new PlayerId(nextAi++),
+                            FactionIndex = EnemyRoster.Id.Value,
+                            IsReady = true,
+                            DisplayName = "Enemy AI",
+                        };
+                    }
+                }
             }
             else
             {
@@ -447,8 +597,7 @@ namespace Asterra.Gameplay
                     IsReady = true,
                     DisplayName = "Enemy AI",
                 };
-                // seats[0]=west, seats[1]=east — honor lobby spawn pick (AI takes the other).
-                seats = LocalSpawnSeat == 0
+                seats = localSeat == 0
                     ? new[] { local, ai }
                     : new[] { ai, local };
             }
@@ -475,25 +624,12 @@ namespace Asterra.Gameplay
 
             if (includeAi)
             {
-                string powerId = EnemyRoster.PowerIds != null && EnemyRoster.PowerIds.Length > 0
-                    ? EnemyRoster.PowerIds[0]
-                    : EnemyRoster.PowerId;
-                var brain = new SkirmishOpponentBrain(
-                    new PlayerId(1),
-                    EnemyRoster.KeepBuildingId,
-                    EnemyRoster.ProducerBuildingId,
-                    EnemyRoster.BuilderUnitId,
-                    EnemyRoster.BasicUnitId,
-                    EnemyRoster.RangedUnitId,
-                    EnemyRoster.CavalryUnitId,
-                    EnemyRoster.TowerBuildingId,
-                    EnemyRoster.OutpostBuildingId,
-                    EnemyRoster.WallBuildingId,
-                    EnemyRoster.BasicUpgradeId,
-                    powerId,
-                    aiDifficulty,
-                    FactionDefaultContent.KeepTurretId);
-                coordinator.AddContributor(new ArmyBrainFrameContributor(brain, _sim, Wallet));
+                for (int i = 0; i < _participants.Count; i++)
+                {
+                    if (_participants[i].Equals(localPlayer))
+                        continue;
+                    AddOpponentBrain(_participants[i]);
+                }
             }
 
             if (attachPresentation)
@@ -561,6 +697,10 @@ namespace Asterra.Gameplay
                 Victory.SetHoldSeconds(new PlayerId(1), restore.holdSecondsP1);
             }
 
+            MapScript.Bind(
+                playMode == MatchPlayMode.Campaign ? ResolveMapDefinition() : null,
+                localPlayer);
+
             Result = MatchResult.None;
             coordinator.TickAdvanced += OnTickAdvanced;
 
@@ -573,10 +713,16 @@ namespace Asterra.Gameplay
             var terrain = FindFirstObjectByType<TerrainGridPresenter>();
             if (terrain == null)
                 return;
-            if (MapCatalog.TryLoad(MapKey, out var custom) && custom.texturePaint != null)
+            if (MapCatalog.TryLoad(MapKey, out var custom) && custom != null)
+            {
                 terrain.SetTextureStrokes(custom.texturePaint);
+                terrain.SetHeightStrokes(custom.heightPaint);
+            }
             else
+            {
                 terrain.SetTextureStrokes(null);
+                terrain.SetHeightStrokes(null);
+            }
         }
 
         private void ResolveCameraFocus(out float focusX, out float focusZ)
@@ -609,19 +755,22 @@ namespace Asterra.Gameplay
 
             focusX = LocalSpawnSeat == 0 ? -320f : 320f;
             focusZ = 0f;
+        }
+
+        private MapDefinition ResolveMapDefinition()
+        {
+            if (MapCatalog.TryLoad(MapKey, out var custom) && custom != null)
+                return custom;
             if (MapCatalog.TryParseBuiltin(MapKey, out var builtin))
-            {
-                if (builtin == SkirmishMapId.RiverCrossing)
-                {
-                    focusX = LocalSpawnSeat == 0 ? -280f : 280f;
-                    focusZ = LocalSpawnSeat == 0 ? -200f : 200f;
-                }
-                else if (builtin == SkirmishMapId.BlackridgePass)
-                {
-                    focusX = LocalSpawnSeat == 0 ? -330f : 330f;
-                    focusZ = 0f;
-                }
-            }
+                return BuiltinMaps.Definition(builtin);
+            return BuiltinMaps.Definition(SkirmishMapId.LushForest);
+        }
+
+        private void EnqueueCampaignOpening()
+        {
+            var lines = CampaignCatalog.Talk(CampaignMissionIndex);
+            for (int i = 0; i < lines.Length; i++)
+                MapScript.EnqueueTalk(lines[i].Speaker, lines[i].Text);
         }
 
         private void OnTickAdvanced(Tick tick, ulong hash)
@@ -633,7 +782,17 @@ namespace Asterra.Gameplay
                 return;
 
             float dt = coordinator.Clock.FixedDeltaSeconds;
-            var result = Victory.Evaluate(World, dt, _participants);
+            MapScript.Tick(World, Victory, dt);
+            MatchResult result;
+            bool campaignScript = playMode == MatchPlayMode.Campaign;
+            if (campaignScript && MapScript.TryCustomDefeat(out var failed) && failed.IsOver)
+                result = failed;
+            else
+            {
+                result = Victory.Evaluate(World, dt, _participants);
+                if (campaignScript && MapScript.TryCustomVictory(out var scripted) && scripted.IsOver)
+                    result = scripted;
+            }
             if (!result.IsOver)
                 return;
 

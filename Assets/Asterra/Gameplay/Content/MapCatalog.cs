@@ -8,13 +8,16 @@ namespace Asterra.Gameplay.Content
 {
     /// <summary>
     /// Discovers built-in + designer maps. Custom maps: Assets/Asterra/Shared/Maps/*.map.json
-    /// (copied to StreamingAssets for builds).
     /// </summary>
     public static class MapCatalog
     {
-        public const string TwinKeepsId = "twin_keeps";
+        public const string MundorCapitalId = "mundor_capital";
+        public const string OutcastCampId = "outcast_camp";
         public const string RiverCrossingId = "river_crossing";
-        public const string BlackridgePassId = "blackridge_pass";
+        public const string FrozenWastesId = "frozen_wastes";
+        public const string LushForestId = "lush_forest";
+        public const string TwinCitiesId = "twin_cities";
+        public const string AncientRelicId = "ancient_relic";
 
         public readonly struct Choice
         {
@@ -49,11 +52,15 @@ namespace Asterra.Gameplay.Content
 
         public static IReadOnlyList<Choice> ListChoices()
         {
-            var list = new List<Choice>(8)
+            var list = new List<Choice>(12)
             {
-                new Choice(TwinKeepsId, "Twin Keeps", true, SkirmishMapId.TwinKeeps),
-                new Choice(RiverCrossingId, "River Crossing", true, SkirmishMapId.RiverCrossing),
-                new Choice(BlackridgePassId, "Blackridge Pass", true, SkirmishMapId.BlackridgePass),
+                BuiltinChoice(SkirmishMapId.LushForest),
+                BuiltinChoice(SkirmishMapId.RiverCrossing),
+                BuiltinChoice(SkirmishMapId.OutcastCamp),
+                BuiltinChoice(SkirmishMapId.TwinCities),
+                BuiltinChoice(SkirmishMapId.FrozenWastes),
+                BuiltinChoice(SkirmishMapId.AncientRelic),
+                BuiltinChoice(SkirmishMapId.MundorCapital),
             };
 
             foreach (var path in EnumerateMapFiles())
@@ -67,7 +74,7 @@ namespace Asterra.Gameplay.Content
                     if (IsBuiltinId(def.id))
                         continue;
                     string name = string.IsNullOrEmpty(def.displayName) ? def.id : def.displayName;
-                    list.Add(new Choice(def.id, name + " ★", false, SkirmishMapId.TwinKeeps));
+                    list.Add(new Choice(def.id, name + " ★", false, SkirmishMapId.LushForest));
                 }
                 catch (Exception e)
                 {
@@ -82,7 +89,7 @@ namespace Asterra.Gameplay.Content
         {
             var all = ListChoices();
             if (all.Count == 0)
-                return BuiltinChoice(SkirmishMapId.BlackridgePass);
+                return BuiltinChoice(SkirmishMapId.LushForest);
             int idx = 0;
             for (int i = 0; i < all.Count; i++)
             {
@@ -98,21 +105,14 @@ namespace Asterra.Gameplay.Content
 
         public static Choice BuiltinChoice(SkirmishMapId id)
         {
-            switch (id)
-            {
-                case SkirmishMapId.TwinKeeps:
-                    return new Choice(TwinKeepsId, "Twin Keeps", true, id);
-                case SkirmishMapId.RiverCrossing:
-                    return new Choice(RiverCrossingId, "River Crossing", true, id);
-                default:
-                    return new Choice(BlackridgePassId, "Blackridge Pass", true, SkirmishMapId.BlackridgePass);
-            }
+            var def = BuiltinMaps.Definition(id);
+            return new Choice(def.id, def.displayName, true, id);
         }
 
         public static Choice FromId(string id)
         {
             if (string.IsNullOrEmpty(id))
-                return BuiltinChoice(SkirmishMapId.BlackridgePass);
+                return BuiltinChoice(SkirmishMapId.LushForest);
             var all = ListChoices();
             for (int i = 0; i < all.Count; i++)
             {
@@ -122,29 +122,41 @@ namespace Asterra.Gameplay.Content
 
             if (TryParseBuiltin(id, out var builtin))
                 return BuiltinChoice(builtin);
-            return BuiltinChoice(SkirmishMapId.BlackridgePass);
+            return BuiltinChoice(SkirmishMapId.LushForest);
         }
 
         public static bool IsBuiltinId(string id)
         {
-            return id == TwinKeepsId || id == RiverCrossingId || id == BlackridgePassId;
+            return TryParseBuiltin(id, out _);
         }
 
         public static bool TryParseBuiltin(string id, out SkirmishMapId map)
         {
             switch (id)
             {
-                case TwinKeepsId:
-                    map = SkirmishMapId.TwinKeeps;
+                case MundorCapitalId:
+                    map = SkirmishMapId.MundorCapital;
+                    return true;
+                case OutcastCampId:
+                    map = SkirmishMapId.OutcastCamp;
                     return true;
                 case RiverCrossingId:
                     map = SkirmishMapId.RiverCrossing;
                     return true;
-                case BlackridgePassId:
-                    map = SkirmishMapId.BlackridgePass;
+                case FrozenWastesId:
+                    map = SkirmishMapId.FrozenWastes;
+                    return true;
+                case LushForestId:
+                    map = SkirmishMapId.LushForest;
+                    return true;
+                case TwinCitiesId:
+                    map = SkirmishMapId.TwinCities;
+                    return true;
+                case AncientRelicId:
+                    map = SkirmishMapId.AncientRelic;
                     return true;
                 default:
-                    map = SkirmishMapId.TwinKeeps;
+                    map = SkirmishMapId.LushForest;
                     return false;
             }
         }
@@ -246,6 +258,21 @@ namespace Asterra.Gameplay.Content
             }
 
             return new string(chars);
+        }
+
+        public static int KeepCount(string mapId)
+        {
+            var def = ResolveDefinition(mapId);
+            return def?.keeps != null ? def.keeps.Length : 2;
+        }
+
+        public static MapDefinition ResolveDefinition(string mapId)
+        {
+            if (TryParseBuiltin(mapId, out var builtin))
+                return BuiltinMaps.Definition(builtin);
+            if (TryLoad(mapId, out var custom))
+                return custom;
+            return BuiltinMaps.Definition(SkirmishMapId.LushForest);
         }
     }
 }

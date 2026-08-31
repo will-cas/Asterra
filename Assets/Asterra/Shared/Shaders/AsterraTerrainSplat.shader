@@ -7,8 +7,7 @@ Shader "Asterra/TerrainSplat"
         _DirtTex ("Dirt", 2D) = "white" {}
         _RockTex ("Rock", 2D) = "white" {}
         _SandTex ("Sand", 2D) = "white" {}
-        _UvScale ("World UV Scale", Float) = 0.085
-        _AmbientFloor ("Ambient Floor", Range(0,1)) = 0.32
+        _UvScale ("World UV Scale", Float) = 0.07
     }
     SubShader
     {
@@ -25,13 +24,15 @@ Shader "Asterra/TerrainSplat"
             Tags { "LightMode" = "UniversalForward" }
 
             HLSLPROGRAM
+            #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma multi_compile_fog
+            #include "AsterraLighting.hlsl"
 
             struct Attributes
             {
@@ -46,7 +47,6 @@ Shader "Asterra/TerrainSplat"
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
                 float4 color : COLOR;
-                float4 shadowCoord : TEXCOORD2;
             };
 
             TEXTURE2D(_GrassTex);
@@ -61,7 +61,6 @@ Shader "Asterra/TerrainSplat"
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
                 float _UvScale;
-                float _AmbientFloor;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -73,7 +72,6 @@ Shader "Asterra/TerrainSplat"
                 output.positionWS = pos.positionWS;
                 output.normalWS = nrm.normalWS;
                 output.color = input.color;
-                output.shadowCoord = TransformWorldToShadowCoord(pos.positionWS);
                 return output;
             }
 
@@ -94,15 +92,22 @@ Shader "Asterra/TerrainSplat"
                 float slope = 1.0 - saturate(normal.y);
                 albedo = lerp(albedo, albedo * float3(0.72, 0.7, 0.68), saturate(slope * 1.35));
 
-                Light mainLight = GetMainLight(input.shadowCoord);
-                float ndotl = saturate(dot(normal, mainLight.direction));
-                float3 ambient = max(SampleSH(normal), _AmbientFloor.xxx);
-                float3 lighting = ambient + mainLight.color * mainLight.shadowAttenuation * (0.22 + 0.78 * ndotl);
-                return half4(albedo * lighting, 1);
+                half smoothness = lerp(0.12, 0.28, w.b);
+                return AsterraShadePBR(
+                    input.positionWS,
+                    input.positionCS,
+                    normal,
+                    albedo,
+                    0.03,
+                    smoothness,
+                    AsterraCavityAO(normal));
             }
             ENDHLSL
         }
-    }
 
-    FallBack "Asterra/VertexColorLit"
+        UsePass "Universal Render Pipeline/Lit/ShadowCaster"
+        UsePass "Universal Render Pipeline/Lit/DepthOnly"
+        UsePass "Universal Render Pipeline/Lit/DepthNormals"
+    }
+    FallBack "Universal Render Pipeline/Lit"
 }

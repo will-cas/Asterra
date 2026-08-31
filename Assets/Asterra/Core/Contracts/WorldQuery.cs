@@ -280,6 +280,7 @@ namespace Asterra.Core
         public readonly Asterra.Core.World.DestructibleState State;
         public readonly float FootprintRadius;
         public readonly int LinkedTraversalLinkId;
+        public readonly float YawDegrees;
 
         public DestructibleSnapshot(
             SimEntityId id,
@@ -290,7 +291,8 @@ namespace Asterra.Core
             float maxHealth,
             Asterra.Core.World.DestructibleState state,
             float footprintRadius,
-            int linkedTraversalLinkId)
+            int linkedTraversalLinkId,
+            float yawDegrees = 0f)
         {
             Id = id;
             DefinitionId = definitionId;
@@ -301,6 +303,7 @@ namespace Asterra.Core
             State = state;
             FootprintRadius = footprintRadius;
             LinkedTraversalLinkId = linkedTraversalLinkId;
+            YawDegrees = yawDegrees;
         }
     }
 

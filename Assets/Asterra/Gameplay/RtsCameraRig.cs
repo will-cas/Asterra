@@ -44,6 +44,7 @@ namespace Asterra.Gameplay
             rigCamera.fieldOfView = 48f;
             rigCamera.nearClipPlane = 0.3f;
             rigCamera.farClipPlane = 3500f;
+            Asterra.Gameplay.Presentation.AsterraLightingLook.ConfigureCamera(rigCamera);
             FocusOn(lookAt.x, lookAt.z, defaultHeight, defaultBack);
         }
 

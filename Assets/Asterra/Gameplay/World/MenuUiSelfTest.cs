@@ -17,23 +17,41 @@ namespace Asterra.Gameplay
 
             Expect(ref fails, sb, "profile not during match", !AsterraMenuPanels.IsProfileAllowedDuringMatch);
 
-            Expect(ref fails, sb, "blackridge preview", PreviewOk(MapCatalog.BlackridgePassId));
-            Expect(ref fails, sb, "twin keeps preview", PreviewOk(MapCatalog.TwinKeepsId));
+            Expect(ref fails, sb, "greenveil preview", PreviewOk(MapCatalog.LushForestId));
+            Expect(ref fails, sb, "capital preview", PreviewOk(MapCatalog.MundorCapitalId));
             Expect(ref fails, sb, "river crossing preview", PreviewOk(MapCatalog.RiverCrossingId));
 
-            Expect(ref fails, sb, "blackridge seats", SeatsOk(MapCatalog.BlackridgePassId, 2));
-            Expect(ref fails, sb, "twin keeps seats", SeatsOk(MapCatalog.TwinKeepsId, 2));
+            Expect(ref fails, sb, "greenveil seats", SeatsOk(MapCatalog.LushForestId, 2));
+            Expect(ref fails, sb, "capital seats", SeatsOk(MapCatalog.MundorCapitalId, 3));
+            Expect(ref fails, sb, "outcast seats", SeatsOk(MapCatalog.OutcastCampId, 4));
+            Expect(ref fails, sb, "keep count camp", MapCatalog.KeepCount(MapCatalog.OutcastCampId) == 4);
+            Expect(ref fails, sb, "keep count capital", MapCatalog.KeepCount(MapCatalog.MundorCapitalId) == 3);
             Expect(ref fails, sb, "river seats", SeatsOk(MapCatalog.RiverCrossingId, 2));
 
-            Expect(ref fails, sb, "seat hit west blackridge", SeatHitOk(MapCatalog.BlackridgePassId));
-            Expect(ref fails, sb, "seat hit east blackridge", SeatHitEastOk(MapCatalog.BlackridgePassId));
+            Expect(ref fails, sb, "seat hit west greenveil", SeatHitOk(MapCatalog.LushForestId));
+            Expect(ref fails, sb, "seat hit east greenveil", SeatHitEastOk(MapCatalog.LushForestId));
 
             Expect(ref fails, sb, "difficulty cycle", AiDifficultyTuning.Cycle(AiDifficulty.Easy, 1) == AiDifficulty.Normal);
             Expect(ref fails, sb, "difficulty display", !string.IsNullOrEmpty(AiDifficultyTuning.DisplayName(AiDifficulty.Hard)));
             Expect(ref fails, sb, "easy blurb", !string.IsNullOrEmpty(AiDifficultyTuning.Blurb(AiDifficulty.Easy)));
             Expect(ref fails, sb, "insane blurb", !string.IsNullOrEmpty(AiDifficultyTuning.Blurb(AiDifficulty.Insane)));
 
-            Expect(ref fails, sb, "map catalog builtin blackridge", MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass).Id == MapCatalog.BlackridgePassId);
+            Expect(ref fails, sb, "campaign mission count", CampaignCatalog.MissionCount == 6);
+            Expect(ref fails, sb, "campaign greenveil map", CampaignCatalog.Get(0).MapKey == MapCatalog.LushForestId);
+            Expect(ref fails, sb, "campaign river map", CampaignCatalog.Get(1).MapKey == MapCatalog.RiverCrossingId);
+            Expect(ref fails, sb, "campaign camp map", CampaignCatalog.Get(2).MapKey == MapCatalog.OutcastCampId);
+            Expect(ref fails, sb, "campaign camp spawn", CampaignCatalog.Get(2).SpawnSeat == 1);
+            Expect(ref fails, sb, "campaign mercy mission", CampaignCatalog.MercyMissionIndex == 2);
+            Expect(ref fails, sb, "campaign opening talk", CampaignCatalog.Talk(0).Length >= 1);
+            Expect(ref fails, sb, "campaign rival outcast", CampaignCatalog.RivalFactionIndex(1) == 2);
+            Expect(ref fails, sb, "campaign rival crown", CampaignCatalog.RivalFactionIndex(0) == 1);
+            Expect(ref fails, sb, "campaign rival others vs crown", CampaignCatalog.RivalFactionIndex(2) == 1);
+            Expect(ref fails, sb, "campaign crown locked", CampaignCatalog.PlayerFactionIndex == 1);
+            Expect(ref fails, sb, "campaign secret mission", CampaignCatalog.Get(6).IsSecret);
+            Expect(ref fails, sb, "campaign secret capital", CampaignCatalog.Get(6).MapKey == MapCatalog.MundorCapitalId);
+            Expect(ref fails, sb, "campaign progress", CampaignProgressRoundtripOk());
+
+            Expect(ref fails, sb, "map catalog builtin greenveil", MapCatalog.BuiltinChoice(SkirmishMapId.LushForest).Id == MapCatalog.LushForestId);
             Expect(ref fails, sb, "overlay enum pause", (int)AsterraMenuPanels.Overlay.Pause == 3);
             Expect(ref fails, sb, "overlay enum profile", (int)AsterraMenuPanels.Overlay.Profile == 2);
             Expect(ref fails, sb, "ui scale default in range",
@@ -72,10 +90,46 @@ namespace Asterra.Gameplay
         private static bool ProfileNameOk()
         {
             string prev = AsterraLocalProfile.DisplayName;
-            AsterraLocalProfile.DisplayName = "TestCmdr";
-            bool ok = AsterraLocalProfile.DisplayName == "TestCmdr";
+            AsterraLocalProfile.DisplayName = "  Test Commander  ";
+            bool ok = AsterraLocalProfile.DisplayName == "Test Commander";
             AsterraLocalProfile.DisplayName = prev;
             return ok;
+        }
+
+        private static bool CampaignProgressRoundtripOk()
+        {
+            bool had = CampaignProgress.HasSave;
+            int prevMission = CampaignProgress.NextMissionIndex;
+            int prevFaction = CampaignProgress.FactionIndex;
+            var prevDiff = CampaignProgress.Difficulty;
+            bool prevComplete = CampaignProgress.IsComplete;
+
+            CampaignProgress.Clear();
+            bool empty = !CampaignProgress.HasSave;
+            CampaignProgress.StartNew(0, AiDifficulty.Hard);
+            bool started = CampaignProgress.HasSave
+                           && CampaignProgress.NextMissionIndex == 0
+                           && CampaignProgress.Difficulty == AiDifficulty.Hard;
+            CampaignProgress.OnMissionWon(0);
+            bool advanced = CampaignProgress.NextMissionIndex == 1 && !CampaignProgress.IsComplete;
+            for (int i = 1; i < CampaignCatalog.MissionCount; i++)
+                CampaignProgress.OnMissionWon(i);
+            bool done = CampaignProgress.IsComplete;
+
+            if (had)
+            {
+                CampaignProgress.StartNew(prevFaction, prevDiff);
+                for (int i = 0; i < prevMission; i++)
+                    CampaignProgress.OnMissionWon(i);
+                if (prevComplete)
+                    CampaignProgress.OnMissionWon(CampaignCatalog.MissionCount - 1);
+            }
+            else
+            {
+                CampaignProgress.Clear();
+            }
+
+            return empty && started && advanced && done;
         }
 
         private static bool PreviewOk(string mapId)

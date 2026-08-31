@@ -5,6 +5,8 @@ namespace Asterra.Core
         None = 0,
         KeepDestroyed = 1,
         TerritoryHeld = 2,
+        ObjectivesComplete = 3,
+        ObjectiveFailed = 4,
     }
 
     public readonly struct MatchResult

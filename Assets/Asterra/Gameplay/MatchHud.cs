@@ -20,6 +20,7 @@ namespace Asterra.Gameplay
         private string _hoverTip = string.Empty;
         private AsterraMenuPanels.Overlay _overlay = AsterraMenuPanels.Overlay.None;
         private AsterraMenuPanels.Overlay _overlayReturn = AsterraMenuPanels.Overlay.None;
+        private readonly ObjectiveHudRow[] _objRows = new ObjectiveHudRow[8];
         private int _cmdCardIndex;
         private int _cmdMaxRows = 2;
         private float _cmdGridX;
@@ -55,13 +56,14 @@ namespace Asterra.Gameplay
                 bool armed = orders != null && orders.HasArmedMode;
                 if (!armed)
                 {
-                    if (_overlay == AsterraMenuPanels.Overlay.None)
+                    if (match.MapScript != null && match.MapScript.HasTalk)
+                        match.MapScript.AdvanceTalk();
+                    else if (_overlay == AsterraMenuPanels.Overlay.None)
                         _overlay = AsterraMenuPanels.Overlay.Pause;
                     else if (_overlay == AsterraMenuPanels.Overlay.Pause)
                         _overlay = AsterraMenuPanels.Overlay.None;
                     else
-                        _overlay = AsterraMenuPanels.Overlay.Pause; // Esc from Options → pause
-                    match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
+                        _overlay = AsterraMenuPanels.Overlay.Pause;
                     AsterraAudio.PlayUiClick();
                 }
             }
@@ -70,7 +72,8 @@ namespace Asterra.Gameplay
             if (_overlay == AsterraMenuPanels.Overlay.Profile)
                 _overlay = AsterraMenuPanels.Overlay.Pause;
 
-            match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
+            match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None
+                || (match.MapScript != null && match.MapScript.HasTalk);
         }
 
         private void OnGUI()
@@ -101,6 +104,9 @@ namespace Asterra.Gameplay
             }
 
             DrawResources(player);
+            if (match.PlayMode == MatchPlayMode.Campaign)
+                DrawObjectives(player);
+            DrawConversation();
             DrawPowerButton();
             DrawCampJobs(player);
             DrawFeedbackToast();
@@ -131,12 +137,13 @@ namespace Asterra.Gameplay
                     _overlayReturn = AsterraMenuPanels.Overlay.None;
 
                 _overlay = next;
-                match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None;
+                match.IsMenuOverlayOpen = _overlay != AsterraMenuPanels.Overlay.None
+                    || (match.MapScript != null && match.MapScript.HasTalk);
                 if (quitMenu)
                 {
                     _overlay = AsterraMenuPanels.Overlay.None;
                     _overlayReturn = AsterraMenuPanels.Overlay.None;
-                    match.IsMenuOverlayOpen = false;
+                    match.IsMenuOverlayOpen = match.MapScript != null && match.MapScript.HasTalk;
                     match.ReturnToMainMenu();
                 }
             }
@@ -152,6 +159,15 @@ namespace Asterra.Gameplay
             bool won = match.Result.Winner == player;
             int faction = match.PlayerRoster != null ? match.PlayerRoster.Id.Value : match.PlayerFactionIndex;
             AsterraLocalProfile.RecordMatchEnd(won, faction);
+            if (match.PlayMode == MatchPlayMode.Campaign)
+            {
+                if (won
+                    && match.CampaignMissionIndex == CampaignCatalog.MercyMissionIndex
+                    && (match.Result.Reason == MatchEndReason.TerritoryHeld
+                        || (match.MapScript != null && match.MapScript.OptionalHoldComplete)))
+                    CampaignProgress.MarkMerciful();
+                match.NotifyCampaignMatchOver(won);
+            }
         }
 
         private void DrawResources(PlayerId player)
@@ -219,6 +235,76 @@ namespace Asterra.Gameplay
                     new Rect(strip.x + HudStyle.S(10f) + barW + HudStyle.S(8f), barY - HudStyle.S(6f), HudStyle.S(100f), HudStyle.S(16f)),
                     $"Hold {(int)(hold * 100f)}%",
                     HudStyle.Caption);
+            }
+        }
+
+        private void DrawObjectives(PlayerId player)
+        {
+            if (match?.MapScript == null)
+                return;
+            int n = match.MapScript.CopyHudRows(_objRows);
+            if (n <= 0)
+            {
+                float hold = match.Victory != null ? match.Victory.GetHoldProgress(player) : 0f;
+                _objRows[0] = new ObjectiveHudRow("Destroy the enemy keep", true, false, 0f);
+                _objRows[1] = new ObjectiveHudRow("Hold territory", false, hold >= 0.999f, hold);
+                n = 2;
+            }
+
+            float h = HudStyle.S(18f + n * 18f);
+            var rect = new Rect(HudStyle.S(10f), HudStyle.S(88f), HudStyle.S(280f), h);
+            HudClickBlocker.Block(rect);
+            HudStyle.DrawFrame(rect, HudStyle.PanelFillDeep, HudStyle.PanelBorder, 1f);
+            GUI.Label(
+                new Rect(rect.x + HudStyle.S(8f), rect.y + HudStyle.S(2f), rect.width - HudStyle.S(12f), HudStyle.S(16f)),
+                "OBJECTIVES",
+                HudStyle.Subtitle);
+            for (int i = 0; i < n; i++)
+            {
+                var row = _objRows[i];
+                string mark = row.Complete ? "✓" : (row.Required ? "●" : "○");
+                string label = mark + " " + row.Title;
+                if (!row.Complete && row.Progress > 0.01f && row.Progress < 0.999f)
+                    label += $"  {(int)(row.Progress * 100f)}%";
+                GUI.color = row.Complete ? new Color(0.65f, 0.85f, 0.55f) : new Color(0.82f, 0.84f, 0.78f);
+                GUI.Label(
+                    new Rect(
+                        rect.x + HudStyle.S(8f),
+                        rect.y + HudStyle.S(18f + i * 18f),
+                        rect.width - HudStyle.S(14f),
+                        HudStyle.S(16f)),
+                    label,
+                    HudStyle.Caption);
+            }
+
+            GUI.color = Color.white;
+        }
+
+        private void DrawConversation()
+        {
+            var script = match?.MapScript;
+            if (script == null || !script.HasTalk)
+                return;
+            var beat = script.CurrentTalk;
+            var veil = new Rect(0f, 0f, Screen.width, Screen.height);
+            GUI.color = new Color(0f, 0f, 0f, 0.45f);
+            GUI.DrawTexture(veil, Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            var box = new Rect(Screen.width * 0.5f - 280f, Screen.height - HudStyle.CommandDockHeight - HudStyle.S(132f), 560f, HudStyle.S(110f));
+            HudClickBlocker.Block(box);
+            HudStyle.DrawFrame(box, new Color(0.05f, 0.06f, 0.08f, 0.96f), new Color(0.78f, 0.66f, 0.32f, 0.7f), 1.5f);
+            GUI.Label(
+                new Rect(box.x + 16f, box.y + 8f, box.width - 32f, 22f),
+                string.IsNullOrEmpty(beat.Speaker) ? "—" : beat.Speaker,
+                HudStyle.Subtitle);
+            GUI.color = new Color(0.88f, 0.9f, 0.84f);
+            GUI.Label(new Rect(box.x + 16f, box.y + 30f, box.width - 32f, 48f), beat.Text, HudStyle.Caption);
+            GUI.color = Color.white;
+            if (GUI.Button(new Rect(box.xMax - 108f, box.yMax - 28f, 92f, 22f), "Continue")
+                || (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Space))
+            {
+                script.AdvanceTalk();
+                Event.current.Use();
             }
         }
 
@@ -993,16 +1079,20 @@ namespace Asterra.Gameplay
             string title = won ? "VICTORY" : "DEFEAT";
             string reason = match.Result.Reason == MatchEndReason.KeepDestroyed
                 ? "Enemy keep destroyed"
-                : "Territory held long enough";
+                : match.Result.Reason == MatchEndReason.ObjectivesComplete
+                    ? "Objectives complete"
+                    : match.Result.Reason == MatchEndReason.ObjectiveFailed
+                        ? "A required ward was lost"
+                        : "Territory held long enough";
             string story = BuildStoryBeat(won);
-            float boxH = string.IsNullOrEmpty(story) ? 160f : 210f;
+            float boxH = string.IsNullOrEmpty(story) ? 160f : 240f;
             var endRect = new Rect(Screen.width * 0.5f - 220f, Screen.height * 0.28f, 440f, boxH);
             HudClickBlocker.Block(endRect);
             HudStyle.DrawPanel(endRect, new Color(0.04f, 0.05f, 0.06f, 0.94f));
             GUI.Label(new Rect(endRect.x, endRect.y + 16f, endRect.width, 36f), title, HudStyle.Title);
             GUI.Label(new Rect(endRect.x + 20f, endRect.y + 58f, endRect.width - 40f, 28f), reason, HudStyle.Label);
             if (!string.IsNullOrEmpty(story))
-                GUI.Label(new Rect(endRect.x + 20f, endRect.y + 90f, endRect.width - 40f, 60f), story, HudStyle.Label);
+                GUI.Label(new Rect(endRect.x + 20f, endRect.y + 88f, endRect.width - 40f, 96f), story, HudStyle.Caption);
 
             float by = endRect.yMax - 48f;
             if (HudButton(new Rect(endRect.x + 40f, by, 160f, 34f), "Main Menu"))
@@ -1012,12 +1102,23 @@ namespace Asterra.Gameplay
                 _overlay = AsterraMenuPanels.Overlay.None;
                 match.ReturnToMainMenu();
             }
-            if (HudButton(new Rect(endRect.xMax - 200f, by, 160f, 34f), "Rematch"))
+
+            bool campaign = match.PlayMode == MatchPlayMode.Campaign;
+            bool secretReady = campaign
+                               && CampaignProgress.IsComplete
+                               && CampaignProgress.HiddenMissionUnlocked
+                               && !CampaignProgress.SecretEnding;
+            bool canNext = campaign && won && (!CampaignProgress.IsComplete || secretReady);
+            string rightLabel = canNext ? "Next Mission" : campaign ? "Retry" : "Rematch";
+            if (HudButton(new Rect(endRect.xMax - 200f, by, 160f, 34f), rightLabel))
             {
                 _endSfxPlayed = false;
                 _statsRecorded = false;
                 _overlay = AsterraMenuPanels.Overlay.None;
-                match.RematchOffline();
+                if (canNext)
+                    match.ContinueCampaign();
+                else
+                    match.RematchOffline();
             }
         }
 
@@ -1026,17 +1127,15 @@ namespace Asterra.Gameplay
             if (match == null)
                 return string.Empty;
 
-            bool blackridge = match.MapId == SkirmishMapId.BlackridgePass;
-            bool aurelian = match.PlayerRoster != null
-                            && match.PlayerRoster.DefinitionId == FactionDefaultContent.VeiledInheritanceId;
-            if (!blackridge)
-                return string.Empty;
+            if (match.PlayMode == MatchPlayMode.Campaign
+                && CampaignCatalog.TryGet(match.CampaignMissionIndex, out var mission))
+            {
+                if (won)
+                    return mission.Afterword;
+                return "The field is lost. Retry, or return to camp.";
+            }
 
-            if (won && aurelian)
-                return "Blackridge Pass secured.\nStory unlock: The First Border War continues.";
-            if (won)
-                return "Blackridge Pass falls under your banner.";
-            return "The pass is lost. The Crownlands stand exposed.";
+            return string.Empty;
         }
 
         private void DrawConstructionStatus(BuildingSnapshot b, float y)

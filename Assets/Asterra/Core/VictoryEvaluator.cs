@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Asterra.Core
 {
     /// <summary>
-    /// 1v1 victory: destroy the enemy keep, or hold contested territory for a duration.
+    /// Last player with a standing keep wins, or hold contested territory for a duration.
     /// Hold progress ticks for the player who controls the most Controlled nodes (any node counts).
     /// </summary>
     public sealed class VictoryEvaluator
@@ -32,27 +32,18 @@ namespace Asterra.Core
             if (world == null || players == null || players.Count == 0)
                 return MatchResult.None;
 
+            int keepHolders = 0;
+            PlayerId lastKeep = default;
             for (int i = 0; i < players.Count; i++)
             {
-                var player = players[i];
-                if (HasKeep(world, player))
+                if (!HasKeep(world, players[i]))
                     continue;
-
-                PlayerId? winner = null;
-                for (int j = 0; j < players.Count; j++)
-                {
-                    if (players[j] == player)
-                        continue;
-                    if (HasKeep(world, players[j]))
-                    {
-                        winner = players[j];
-                        break;
-                    }
-                }
-
-                if (winner.HasValue)
-                    return new MatchResult(true, winner.Value, MatchEndReason.KeepDestroyed);
+                keepHolders++;
+                lastKeep = players[i];
             }
+
+            if (keepHolders == 1)
+                return new MatchResult(true, lastKeep, MatchEndReason.KeepDestroyed);
 
             if (world.Territories.Count > 0)
             {

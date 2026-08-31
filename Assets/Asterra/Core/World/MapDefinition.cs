@@ -21,6 +21,8 @@ namespace Asterra.Core.World
         public MapTerrainPaint[] terrain = Array.Empty<MapTerrainPaint>();
         /// <summary>Cosmetic splat overlays (grass/dirt/rock/sand). Presentation only.</summary>
         public MapTexturePaint[] texturePaint = Array.Empty<MapTexturePaint>();
+        /// <summary>Additive height sculpt (smooth falloff disks). Presentation + footing.</summary>
+        public MapHeightPaint[] heightPaint = Array.Empty<MapHeightPaint>();
         public MapBlockedRect[] blocked = Array.Empty<MapBlockedRect>();
         public MapKeepSpawn[] keeps = Array.Empty<MapKeepSpawn>();
         public MapUnitSpawn[] units = Array.Empty<MapUnitSpawn>();
@@ -29,11 +31,15 @@ namespace Asterra.Core.World
         public MapTerritory[] territories = Array.Empty<MapTerritory>();
         public MapDestructible[] destructibles = Array.Empty<MapDestructible>();
         public MapTraversalLink[] traversalLinks = Array.Empty<MapTraversalLink>();
+        public MapObjective[] objectives = Array.Empty<MapObjective>();
+        public MapConversationLine[] conversations = Array.Empty<MapConversationLine>();
+        public MapTalkTrigger[] talkTriggers = Array.Empty<MapTalkTrigger>();
 
         public void EnsureArrays()
         {
             terrain ??= Array.Empty<MapTerrainPaint>();
             texturePaint ??= Array.Empty<MapTexturePaint>();
+            heightPaint ??= Array.Empty<MapHeightPaint>();
             blocked ??= Array.Empty<MapBlockedRect>();
             keeps ??= Array.Empty<MapKeepSpawn>();
             units ??= Array.Empty<MapUnitSpawn>();
@@ -42,6 +48,9 @@ namespace Asterra.Core.World
             territories ??= Array.Empty<MapTerritory>();
             destructibles ??= Array.Empty<MapDestructible>();
             traversalLinks ??= Array.Empty<MapTraversalLink>();
+            objectives ??= Array.Empty<MapObjective>();
+            conversations ??= Array.Empty<MapConversationLine>();
+            talkTriggers ??= Array.Empty<MapTalkTrigger>();
         }
     }
 
@@ -82,6 +91,18 @@ namespace Asterra.Core.World
     }
 
     [Serializable]
+    public class MapHeightPaint
+    {
+        public float x;
+        public float z;
+        public float radius = 24f;
+        /// <summary>World-unit height added at the center (negative lowers).</summary>
+        public float delta = 2f;
+        /// <summary>0 = hard disk, 1 = smooth cosine falloff.</summary>
+        public float falloff = 0.85f;
+    }
+
+    [Serializable]
     public class MapBlockedRect
     {
         public float minX;
@@ -98,6 +119,7 @@ namespace Asterra.Core.World
         public int seatIndex;
         public float x;
         public float z;
+        public float yawDegrees;
     }
 
     [Serializable]
@@ -108,6 +130,7 @@ namespace Asterra.Core.World
         public string role = "basic";
         public float x;
         public float z;
+        public float yawDegrees;
     }
 
     [Serializable]
@@ -129,6 +152,7 @@ namespace Asterra.Core.World
         public int amount = 500;
         public float x;
         public float z;
+        public float yawDegrees;
     }
 
     [Serializable]
@@ -143,10 +167,11 @@ namespace Asterra.Core.World
     [Serializable]
     public class MapDestructible
     {
-        /// <summary>tree | rock | bridge</summary>
+        /// <summary>tree | rock | bridge | farm | crumbling_tower | cottage | mill | shrine | barn</summary>
         public string catalogId = "tree";
         public float x;
         public float z;
+        public float yawDegrees;
         /// <summary>-1 = none. Index into map.traversalLinks when this prop disables a link on destroy.</summary>
         public int linkedTraversalLinkId = -1;
     }
@@ -163,6 +188,43 @@ namespace Asterra.Core.World
         public float durationSeconds = 1.25f;
         public float approachRadius = 8f;
         public bool enabled = true;
+    }
+
+    /// <summary>
+    /// Designer objective. Kinds: destroy_keeps, hold, optional_hold, reach, destroy_near, survive, protect.
+    /// </summary>
+    [Serializable]
+    public class MapObjective
+    {
+        public string id = "obj";
+        public string title = "Objective";
+        public string kind = "destroy_keeps";
+        public bool required = true;
+        public float x;
+        public float z;
+        public float radius = 36f;
+        public float holdSeconds = 90f;
+        public string onCompleteTalkId = string.Empty;
+    }
+
+    [Serializable]
+    public class MapConversationLine
+    {
+        public string id = "talk";
+        public string speaker = "";
+        public string text = "";
+    }
+
+    [Serializable]
+    public class MapTalkTrigger
+    {
+        public string conversationId = "talk";
+        /// <summary>start | enter | win | objective</summary>
+        public string when = "start";
+        public float x;
+        public float z;
+        public float radius = 28f;
+        public string objectiveId = string.Empty;
     }
 
     /// <summary>Menu entry for built-in or custom maps.</summary>

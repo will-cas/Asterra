@@ -198,5 +198,6 @@ namespace Asterra.Gameplay.Save
         public float health;
         public int state;
         public int linkedTraversalLinkId;
+        public float yawDegrees;
     }
 }

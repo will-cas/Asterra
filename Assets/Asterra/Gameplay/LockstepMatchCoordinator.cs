@@ -42,6 +42,8 @@ namespace Asterra.Gameplay
         public ILockstepClock Clock => _clock;
         public LockstepFrameGate Gate => _gate;
         public bool IsRunning { get; private set; }
+        /// <summary>When true, lockstep does not advance (conversations, etc.).</summary>
+        public bool PauseSim { get; set; }
         public event Action<Tick, ulong> TickAdvanced;
 
         public void ConfigureTiming(float hz, int delayTicks)
@@ -135,6 +137,11 @@ namespace Asterra.Gameplay
         {
             if (!IsRunning || _world == null || _gate == null)
                 return;
+            if (PauseSim)
+            {
+                _accum = 0f;
+                return;
+            }
 
             _accum += Time.deltaTime;
             float step = _clock.FixedDeltaSeconds;
@@ -154,7 +161,6 @@ namespace Asterra.Gameplay
             ulong hash = _world.ComputeWorldHash();
             if (bridge != null)
                 bridge.BroadcastWorldHash(_clock.CurrentTick, hash);
-            TickAdvanced?.Invoke(_clock.CurrentTick, hash);
         }
 
         private void StepOnce()
@@ -188,6 +194,7 @@ namespace Asterra.Gameplay
             _world.ApplyCommands(_consumeBuffer);
             _world.Tick(_clock.FixedDeltaSeconds);
             _clock.Advance();
+            TickAdvanced?.Invoke(_clock.CurrentTick, _world.ComputeWorldHash());
         }
 
         private void SubmitFrame(CommandFrame frame)

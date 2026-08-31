@@ -20,18 +20,27 @@ namespace Asterra.Gameplay.Sim
         public ushort ReplaceTerrainDefIndex;
         public bool DisableTraversalOnDestroy;
         public int LinkedTraversalLinkId = -1;
+        public float YawDegrees;
         public ResourceType? ResourceDropType;
         public int ResourceDropAmount;
         public bool BlocksMovement;
+        public bool Invulnerable;
 
         public bool IsAlive => State == DestructibleState.Intact || State == DestructibleState.Damaged;
 
-        public SimDestructible(SimEntityId id, DestructibleDefData def, float x, float z, int linkedTraversalLinkId = -1)
+        public SimDestructible(
+            SimEntityId id,
+            DestructibleDefData def,
+            float x,
+            float z,
+            int linkedTraversalLinkId = -1,
+            float yawDegrees = 0f)
         {
             Id = id;
             DefinitionId = def.Id;
             X = x;
             Z = z;
+            YawDegrees = yawDegrees;
             MaxHealth = def.MaxHealth;
             Health = def.MaxHealth;
             Armor = def.Armor;
@@ -46,6 +55,7 @@ namespace Asterra.Gameplay.Sim
             ResourceDropType = def.ResourceDropType;
             ResourceDropAmount = def.ResourceDropAmount;
             BlocksMovement = def.BlocksMovement;
+            Invulnerable = def.Invulnerable;
         }
 
         public DestructibleSnapshot ToSnapshot()
@@ -59,7 +69,8 @@ namespace Asterra.Gameplay.Sim
                 MaxHealth,
                 State,
                 FootprintRadius,
-                LinkedTraversalLinkId);
+                LinkedTraversalLinkId,
+                YawDegrees);
         }
     }
 }

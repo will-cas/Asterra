@@ -19,6 +19,15 @@ namespace Asterra.Gameplay.Presentation
         [SerializeField] private int heightBlurPasses = 2;
         [SerializeField] private int cellSubdivisions = 2;
 
+        /// <summary>When false, skip hiding AsterraGround (map-creator preview must not touch the skirmish scene).</summary>
+        public bool HideSkirmishGround
+        {
+            get => hideFlatGround;
+            set => hideFlatGround = value;
+        }
+
+        public Mesh TerrainSurfaceMesh { get; private set; }
+
         private Transform _root;
         private WorldTerrainGrid _builtForGrid;
         private int _builtCellFingerprint = int.MinValue;
@@ -33,6 +42,8 @@ namespace Asterra.Gameplay.Presentation
         private Texture2D _detailTex;
         private MapTexturePaint[] _texturePaint = System.Array.Empty<MapTexturePaint>();
         private int _texturePaintHash;
+        private MapHeightPaint[] _heightPaint = System.Array.Empty<MapHeightPaint>();
+        private int _heightPaintHash;
 
         private float[] _heightSamples;
         private int _heightW;
@@ -73,6 +84,14 @@ namespace Asterra.Gameplay.Presentation
             Rebuild(grid, fingerprint);
         }
 
+        /// <summary>Editor / preview rebuild from an authored grid (no running match required).</summary>
+        public void RebuildFromGrid(WorldTerrainGrid grid)
+        {
+            if (grid == null)
+                return;
+            Rebuild(grid, ComputeLayoutFingerprint(grid));
+        }
+
         private int ComputeLayoutFingerprint(WorldTerrainGrid grid)
         {
             unchecked
@@ -95,6 +114,7 @@ namespace Asterra.Gameplay.Presentation
                 }
 
                 hash = (hash * 16777619) ^ _texturePaintHash;
+                hash = (hash * 16777619) ^ _heightPaintHash;
                 return hash;
             }
         }
@@ -106,13 +126,20 @@ namespace Asterra.Gameplay.Presentation
             _builtCellFingerprint = int.MinValue;
         }
 
+        public void SetHeightStrokes(MapHeightPaint[] strokes)
+        {
+            _heightPaint = strokes ?? System.Array.Empty<MapHeightPaint>();
+            _heightPaintHash = MapHeightSculpt.HashStrokes(_heightPaint);
+            _builtCellFingerprint = int.MinValue;
+        }
+
         private void Rebuild(WorldTerrainGrid grid, int fingerprint)
         {
             _builtForGrid = grid;
             _builtCellFingerprint = fingerprint;
 
             if (_root != null)
-                Destroy(_root.gameObject);
+                DestroyCompat(_root.gameObject);
 
             _root = new GameObject("TerrainPaint").transform;
             _root.SetParent(transform, false);
@@ -164,6 +191,9 @@ namespace Asterra.Gameplay.Presentation
                 else if (cat == TerrainCategory.Trench || cat == TerrainCategory.Gap)
                     smoothHeight[i] = Mathf.Min(smoothHeight[i], target + 0.05f);
             }
+
+            MapHeightSculpt.Apply(
+                smoothHeight, w, h, grid.OriginX, grid.OriginZ, grid.CellSize, _heightPaint);
 
             BuildContinuousMesh(grid, smoothHeight, splat, categories);
             CacheHeightSamples(grid, smoothHeight);
@@ -301,6 +331,7 @@ namespace Asterra.Gameplay.Presentation
             mesh.RecalculateNormals();
             mesh.RecalculateTangents();
             mesh.RecalculateBounds();
+            TerrainSurfaceMesh = mesh;
 
             var go = new GameObject("TerrainSurface");
             go.transform.SetParent(_root, false);
@@ -492,7 +523,7 @@ namespace Asterra.Gameplay.Presentation
             root.transform.rotation = Quaternion.Euler(0f, hash & 359, 0f);
 
             var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Object.Destroy(trunk.GetComponent<Collider>());
+            DestroyCompat(trunk.GetComponent<Collider>());
             trunk.transform.SetParent(root.transform, false);
             trunk.transform.localPosition = new Vector3(0f, trunkH * 0.45f, 0f);
             trunk.transform.localScale = new Vector3(trunkR, trunkH * 0.45f, trunkR * 0.92f);
@@ -503,7 +534,7 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < layers; i++)
             {
                 var canopy = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Object.Destroy(canopy.GetComponent<Collider>());
+                DestroyCompat(canopy.GetComponent<Collider>());
                 canopy.transform.SetParent(root.transform, false);
                 float y = trunkH * (0.7f + i * 0.18f);
                 float ox = (((hash >> (i * 3)) & 3) * 0.35f - 0.35f) * PropToUnitScale * 0.25f;
@@ -614,7 +645,7 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < count; i++)
             {
                 var rock = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Object.Destroy(rock.GetComponent<Collider>());
+                DestroyCompat(rock.GetComponent<Collider>());
                 rock.transform.SetParent(root.transform, false);
                 // ~waist–chest for field rocks; larger mountain boulders vs ~14-tall units.
                 float s = (large ? 2.0f : 1.15f) * PropToUnitScale * (0.7f + ((hash >> (i * 4)) & 7) / 12f);
@@ -634,7 +665,7 @@ namespace Asterra.Gameplay.Presentation
         private void SpawnBush(Transform parent, float x, float groundY, float z, int hash)
         {
             var bush = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Object.Destroy(bush.GetComponent<Collider>());
+            DestroyCompat(bush.GetComponent<Collider>());
             bush.name = "Bush";
             bush.transform.SetParent(parent, false);
             // Knee-to-waist shrubs next to infantry.
@@ -655,7 +686,7 @@ namespace Asterra.Gameplay.Presentation
             for (int i = 0; i < stems; i++)
             {
                 var stem = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                Object.Destroy(stem.GetComponent<Collider>());
+                DestroyCompat(stem.GetComponent<Collider>());
                 stem.transform.SetParent(root.transform, false);
                 float h = (1.35f + ((hash >> (i + 2)) & 3) * 0.28f) * PropToUnitScale;
                 float ox = (((i * 3 + (hash & 3)) % 5) * 0.22f - 0.4f) * PropToUnitScale * 0.3f;
@@ -674,7 +705,7 @@ namespace Asterra.Gameplay.Presentation
         private void SpawnCrystal(Transform parent, float x, float groundY, float z, int hash)
         {
             var crystal = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Object.Destroy(crystal.GetComponent<Collider>());
+            DestroyCompat(crystal.GetComponent<Collider>());
             crystal.name = "AetherCrystal";
             crystal.transform.SetParent(parent, false);
             float h = (1.8f + ((hash >> 8) & 3) * 0.35f) * PropToUnitScale;
@@ -704,9 +735,9 @@ namespace Asterra.Gameplay.Presentation
                 if (_terrainMat.HasProperty("_BaseColor"))
                     _terrainMat.SetColor("_BaseColor", Color.white);
                 if (_terrainMat.HasProperty("_AmbientFloor"))
-                    _terrainMat.SetFloat("_AmbientFloor", 0.32f);
+                    _terrainMat.SetFloat("_AmbientFloor", 0.08f);
                 if (_terrainMat.HasProperty("_UvScale"))
-                    _terrainMat.SetFloat("_UvScale", 0.085f);
+                    _terrainMat.SetFloat("_UvScale", 0.07f);
                 if (_terrainMat.HasProperty("_GrassTex"))
                     _terrainMat.SetTexture("_GrassTex", AsterraMeshLibrary.GetTerrainAlbedo("grass"));
                 if (_terrainMat.HasProperty("_DirtTex"))
@@ -730,30 +761,31 @@ namespace Asterra.Gameplay.Presentation
             }
 
             if (_trunkMat == null)
-                _trunkMat = CreateSimpleLit(new Color(0.55f, 0.38f, 0.2f), 0.12f, AsterraMeshLibrary.GetPropAlbedo("bark"));
+                _trunkMat = AsterraPbrLibrary.CreateLit(new Color(0.85f, 0.78f, 0.7f), "bark");
             if (_waterMat == null)
             {
-                _waterMat = CreateSimpleLit(new Color(0.28f, 0.62f, 0.92f), 0.95f, null);
+                var waterShader = Shader.Find("Asterra/Water")
+                                  ?? Shader.Find("Universal Render Pipeline/Lit");
+                _waterMat = new Material(waterShader);
+                if (_waterMat.HasProperty("_Color"))
+                    _waterMat.SetColor("_Color", new Color(0.14f, 0.34f, 0.5f, 1f));
+                if (_waterMat.HasProperty("_BaseColor"))
+                    _waterMat.SetColor("_BaseColor", new Color(0.14f, 0.34f, 0.5f, 1f));
+                if (_waterMat.HasProperty("_Smoothness"))
+                    _waterMat.SetFloat("_Smoothness", 0.92f);
                 if (_waterMat.HasProperty("_Metallic"))
-                    _waterMat.SetFloat("_Metallic", 0.05f);
+                    _waterMat.SetFloat("_Metallic", 0.04f);
             }
             if (_canopyMat == null)
-                _canopyMat = CreateSimpleLit(new Color(0.45f, 0.75f, 0.32f), 0.15f, AsterraMeshLibrary.GetPropAlbedo("leaf"));
+                _canopyMat = AsterraPbrLibrary.CreateLit(new Color(0.85f, 0.95f, 0.75f), "leaf");
             if (_rockMat == null)
-                _rockMat = CreateSimpleLit(new Color(0.72f, 0.7f, 0.66f), 0.2f, AsterraMeshLibrary.GetPropAlbedo("rock"));
+                _rockMat = AsterraPbrLibrary.CreateLit(new Color(0.9f, 0.9f, 0.88f), "slate");
             if (_bushMat == null)
-                _bushMat = CreateSimpleLit(new Color(0.4f, 0.62f, 0.28f), 0.12f, AsterraMeshLibrary.GetPropAlbedo("bush"));
+                _bushMat = AsterraPbrLibrary.CreateLit(new Color(0.8f, 0.92f, 0.7f), "leaf");
             if (_reedMat == null)
-                _reedMat = CreateSimpleLit(new Color(0.45f, 0.62f, 0.28f), 0.1f, AsterraMeshLibrary.GetPropAlbedo("leaf"));
+                _reedMat = AsterraPbrLibrary.CreateLit(new Color(0.85f, 0.92f, 0.7f), "leaf");
             if (_crystalMat == null)
-            {
-                _crystalMat = CreateSimpleLit(new Color(0.45f, 0.75f, 1f), 0.85f, AsterraMeshLibrary.GetPropAlbedo("gold"));
-                if (_crystalMat.HasProperty("_EmissionColor"))
-                {
-                    _crystalMat.EnableKeyword("_EMISSION");
-                    _crystalMat.SetColor("_EmissionColor", new Color(0.25f, 0.55f, 0.9f) * 1.4f);
-                }
-            }
+                _crystalMat = AsterraPbrLibrary.CreateLit(new Color(1f, 0.95f, 0.7f), "crystal", 0.55f);
         }
 
         private static Texture2D BuildDetailTexture(int size)
@@ -948,14 +980,28 @@ namespace Asterra.Gameplay.Presentation
         {
             if (_root != null)
             {
-                Destroy(_root.gameObject);
+                DestroyCompat(_root.gameObject);
                 _root = null;
             }
+
+            TerrainSurfaceMesh = null;
 
             _builtForGrid = null;
             _builtCellFingerprint = int.MinValue;
             _texturePaint = System.Array.Empty<MapTexturePaint>();
             _texturePaintHash = 0;
+            _heightPaint = System.Array.Empty<MapHeightPaint>();
+            _heightPaintHash = 0;
+        }
+
+        private static void DestroyCompat(Object obj)
+        {
+            if (obj == null)
+                return;
+            if (Application.isPlaying)
+                Destroy(obj);
+            else
+                DestroyImmediate(obj);
         }
 
         private static float HeightFor(TerrainCategory category, ushort defIndex = 0)

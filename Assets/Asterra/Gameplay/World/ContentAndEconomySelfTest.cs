@@ -29,23 +29,23 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "outpost and wall defs exist", FortificationDefs());
             Expect(ref fails, sb, "train builder from keep", TrainBuilderFromKeep());
             Expect(ref fails, sb, "cancel production half-refund", CancelProductionRefunds());
-            Expect(ref fails, sb, "blackridge starts workers only", BlackridgeStartsWorkersOnly());
-            Expect(ref fails, sb, "twin keeps starts workers only", TwinKeepsStartsWorkersOnly());
+            Expect(ref fails, sb, "greenveil starts workers only", GreenveilStartsWorkersOnly());
+            Expect(ref fails, sb, "twin cities starts workers only", TwinCitiesStartsWorkersOnly());
 
             sb.Append(fails == 0 ? "ContentAndEconomySelfTest: OK" : $"ContentAndEconomySelfTest: FAIL ({fails})");
             return sb.ToString();
         }
 
-        private static bool BlackridgeStartsWorkersOnly()
+        private static bool GreenveilStartsWorkersOnly()
         {
-            return StartingCombatCount(MapCatalog.BlackridgePassId, new PlayerId(0)) == 0
-                   && StartingBuilderCount(MapCatalog.BlackridgePassId, new PlayerId(0)) >= 1;
+            return StartingCombatCount(MapCatalog.LushForestId, new PlayerId(0)) == 0
+                   && StartingBuilderCount(MapCatalog.LushForestId, new PlayerId(0)) >= 1;
         }
 
-        private static bool TwinKeepsStartsWorkersOnly()
+        private static bool TwinCitiesStartsWorkersOnly()
         {
-            return StartingCombatCount(MapCatalog.TwinKeepsId, new PlayerId(0)) == 0
-                   && StartingBuilderCount(MapCatalog.TwinKeepsId, new PlayerId(0)) >= 1;
+            return StartingCombatCount(MapCatalog.TwinCitiesId, new PlayerId(0)) == 0
+                   && StartingBuilderCount(MapCatalog.TwinCitiesId, new PlayerId(0)) >= 1;
         }
 
         private static int StartingCombatCount(string mapKey, PlayerId player)

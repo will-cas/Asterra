@@ -21,6 +21,7 @@ namespace Asterra.Gameplay.Audio
         Defeat = 13,
         Select = 14,
         Invalid = 15,
+        Thunder = 16,
     }
 
     /// <summary>
@@ -167,6 +168,7 @@ namespace Asterra.Gameplay.Audio
             _clips[AsterraSfx.Victory] = Chord("victory", 523f, 784f, 0.55f, 0.4f);
             _clips[AsterraSfx.Defeat] = Sweep("defeat", 300f, 90f, 0.6f, 0.4f);
             _clips[AsterraSfx.Invalid] = Tone("invalid", 140f, 0.08f, 0.3f, soft: true);
+            _clips[AsterraSfx.Thunder] = NoiseBurst("thunder", 0.55f, 0.55f, bright: false);
 
             _musicBed = SoftPad("music_bed", 110f, 165f, 4.5f);
             _ambienceBed = SoftNoise("ambience", 3.2f, 0.35f);

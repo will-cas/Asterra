@@ -48,3 +48,9 @@ InitTestScene*.unity*
 # Plastic (if Hub adds it by mistake)
 ignore.conf
 *private.ignore.conf
+
+# Meshgen / Blender
+tools/meshgen/__pycache__/
+*.blend1
+Assets/Asterra/Shared/Art/Blender/Exports/
+Assets/Asterra/Shared/Art/Blender/Renders/

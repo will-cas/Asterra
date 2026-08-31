@@ -98,7 +98,7 @@ namespace Asterra.Gameplay
             var data = new MatchSaveData
             {
                 formatVersion = OfflineMatchSaveService.CurrentFormatVersion,
-                mapKey = MapCatalog.BlackridgePassId,
+                mapKey = MapCatalog.LushForestId,
                 playerFaction = 0,
                 enemyFaction = 1,
                 aiDifficulty = 2,
@@ -108,7 +108,7 @@ namespace Asterra.Gameplay
             string path = Path.Combine(Application.temporaryCachePath, "asterra_test_roundtrip.json");
             OfflineMatchSaveService.Write(path, data);
             bool ok = OfflineMatchSaveService.TryRead(path, out var loaded)
-                      && loaded.mapKey == MapCatalog.BlackridgePassId
+                      && loaded.mapKey == MapCatalog.LushForestId
                       && loaded.aiDifficulty == 2
                       && loaded.tick == 99
                       && loaded.units.Length == data.units.Length

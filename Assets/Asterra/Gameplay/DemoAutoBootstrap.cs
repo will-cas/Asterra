@@ -48,15 +48,22 @@ namespace Asterra.Gameplay
             {
                 var lightGo = new GameObject("Asterra Sun");
                 var light = lightGo.AddComponent<Light>();
-                light.type = LightType.Directional;
-                light.color = new Color(1f, 0.96f, 0.9f);
-                light.intensity = 1.35f;
-                light.shadows = LightShadows.Soft;
-                lightGo.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+                Asterra.Gameplay.Presentation.AsterraLightingLook.ConfigureSun(light);
+                light.intensity = Asterra.Gameplay.Presentation.AsterraLightingLook.NoonSunIntensity;
+                light.colorTemperature = 5600f;
+                lightGo.transform.rotation = Quaternion.Euler(52f, -32f, 0f);
             }
 
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.35f, 0.38f, 0.42f);
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.38f, 0.55f, 0.82f);
+            RenderSettings.ambientEquatorColor = new Color(0.72f, 0.76f, 0.78f);
+            RenderSettings.ambientGroundColor = new Color(0.28f, 0.24f, 0.16f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogDensity = 0.0009f;
+            RenderSettings.fogColor = new Color(0.62f, 0.72f, 0.82f);
+            if (Camera.main != null)
+                Asterra.Gameplay.Presentation.AsterraLightingLook.ConfigureCamera(Camera.main);
         }
     }
 }

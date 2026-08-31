@@ -32,6 +32,7 @@ namespace Asterra.Gameplay.Presentation
         private Color _factionColor = Color.gray;
         private Texture2D _albedo;
         private float _uvScale = 0.18f;
+        private string _pbrKey = "cloth";
         private float _hitFlashUntil;
         private Transform _hpRoot;
         private Transform _hpFill;
@@ -99,6 +100,7 @@ namespace Asterra.Gameplay.Presentation
             _baseColor = Color.Lerp(Color.white, AsterraMeshLibrary.FactionBodyColor(factionIndex, isUnit, definitionId), 0.55f);
             _albedo = AsterraMeshLibrary.GetBodyAlbedo(isUnit, definitionId, factionIndex);
             _uvScale = AsterraMeshLibrary.BodyUvScale(isUnit);
+            _pbrKey = AsterraPbrLibrary.BodySetKey(isUnit, definitionId);
             BuildTroopMeshes(mesh, isUnit);
 
             EnsurePickCollider(isUnit, mesh);
@@ -110,6 +112,8 @@ namespace Asterra.Gameplay.Presentation
             SetRevealed(true);
             SetHealth(1f, 1f);
             _animPhase = (id.Value % 97) * 0.173f;
+            if (isUnit)
+                EnsureBlobShadow();
             if (!isUnit)
                 EnsureScaffold();
         }
@@ -139,7 +143,7 @@ namespace Asterra.Gameplay.Presentation
                 filter.sharedMesh = mesh;
                 var rend = host.gameObject.AddComponent<MeshRenderer>();
                 // Unique material instance per troop so hit-flash does not tint siblings wrong.
-                rend.material = CreateColorMaterial(_baseColor, _albedo, _uvScale);
+                rend.material = CreateBodyMaterial(_baseColor, DefinitionId, isUnit);
                 _troopRenderers[i] = rend;
             }
 
@@ -694,6 +698,33 @@ namespace Asterra.Gameplay.Presentation
             _pickCollider = sphere;
         }
 
+        private void EnsureBlobShadow()
+        {
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            StripColliderImmediate(quad);
+            quad.name = "BlobShadow";
+            quad.transform.SetParent(transform, false);
+            quad.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            float worldSize = _squadSize > 1
+                ? Mathf.Clamp(4.4f + _squadSize * 0.28f, 4.4f, 10f)
+                : 2.9f;
+            float inv = 1f / Mathf.Max(0.01f, transform.lossyScale.x);
+            quad.transform.localPosition = new Vector3(0f, 0.04f * inv, 0f);
+            quad.transform.localScale = new Vector3(worldSize * inv, worldSize * inv, 1f);
+            var rend = quad.GetComponent<Renderer>();
+            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+            var shader = Shader.Find("Asterra/BlobShadow")
+                         ?? Shader.Find("Universal Render Pipeline/Unlit")
+                         ?? Shader.Find("Sprites/Default");
+            var mat = new Material(shader);
+            if (mat.HasProperty("_Color"))
+                mat.SetColor("_Color", new Color(0f, 0f, 0f, 0.42f));
+            if (mat.HasProperty("_BaseColor"))
+                mat.SetColor("_BaseColor", new Color(0f, 0f, 0f, 0.42f));
+            rend.sharedMaterial = mat;
+        }
+
         private static void StripColliderImmediate(GameObject go)
         {
             if (go == null)
@@ -826,6 +857,14 @@ namespace Asterra.Gameplay.Presentation
                 mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Color"))
                 mat.SetColor("_Color", color);
+        }
+
+        private Material CreateBodyMaterial(Color color, string definitionId, bool isUnit)
+        {
+            string key = string.IsNullOrEmpty(_pbrKey)
+                ? AsterraPbrLibrary.BodySetKey(isUnit, definitionId)
+                : _pbrKey;
+            return AsterraPbrLibrary.CreateLit(color, key, AsterraPbrLibrary.MetallicForSet(key));
         }
 
         private static Material CreateColorMaterial(Color color)

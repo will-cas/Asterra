@@ -22,6 +22,21 @@ namespace Asterra.Core
             if (!keepWin.IsOver || keepWin.Winner.Value != 0 || keepWin.Reason != MatchEndReason.KeepDestroyed)
                 throw new System.InvalidOperationException("Keep victory failed.");
 
+            var three = new VictoryEvaluator(keeps, requiredHoldSeconds: 90f);
+            world = new FakeWorld();
+            world.AddBuilding(new PlayerId(0), "building_iron_keep");
+            world.AddBuilding(new PlayerId(1), "building_heartwood");
+            world.AddBuilding(new PlayerId(2), "building_heartwood");
+            var threePlayers = new[] { new PlayerId(0), new PlayerId(1), new PlayerId(2) };
+            world.ClearBuildings(new PlayerId(1));
+            var stillOn = three.Evaluate(world, 0.1f, threePlayers);
+            if (stillOn.IsOver)
+                throw new System.InvalidOperationException("1v2 should continue while a second keep stands.");
+            world.ClearBuildings(new PlayerId(2));
+            var lastKeep = three.Evaluate(world, 0.1f, threePlayers);
+            if (!lastKeep.IsOver || lastKeep.Winner.Value != 0 || lastKeep.Reason != MatchEndReason.KeepDestroyed)
+                throw new System.InvalidOperationException("1v2 last-keep victory failed.");
+
             var holdEval = new VictoryEvaluator(keeps, requiredHoldSeconds: 2f);
             world = new FakeWorld();
             world.AddBuilding(new PlayerId(0), "building_iron_keep");

@@ -1472,10 +1472,10 @@ namespace Asterra.Gameplay.Player
             float best = float.MaxValue;
             for (int i = 0; i < hits.Length; i++)
             {
-                var candidate = hits[i].collider != null
+                    var candidate = hits[i].collider != null
                     ? hits[i].collider.GetComponentInParent<DestructibleView>()
                     : null;
-                if (candidate == null)
+                if (candidate == null || DefaultDestructibleCatalog.IsScenery(candidate.DefinitionId))
                     continue;
                 float d = hits[i].distance;
                 if (d < best)
@@ -1494,7 +1494,7 @@ namespace Asterra.Gameplay.Player
             for (int i = 0; i < views.Length; i++)
             {
                 var candidate = views[i];
-                if (candidate == null)
+                if (candidate == null || DefaultDestructibleCatalog.IsScenery(candidate.DefinitionId))
                     continue;
                 Vector3 sp = rigCamera.WorldToScreenPoint(candidate.transform.position + Vector3.up * 4f);
                 if (sp.z <= 0f)

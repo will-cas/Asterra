@@ -84,6 +84,18 @@ namespace Asterra.Core.World
             Expect(ref fails, sb, "playable size", playable.Width == 90 && playable.Height == 90);
             Expect(ref fails, sb, "outside playable blocked", playable.IsBlocked(500f, 0f));
 
+            var heights = new float[90 * 90];
+            MapHeightSculpt.Apply(
+                heights, 90, 90, -450f, -450f, 10f,
+                new[] { new MapHeightPaint { x = 0f, z = 0f, radius = 30f, delta = 8f, falloff = 0.85f } });
+            int mid = 45 * 90 + 45;
+            Expect(ref fails, sb, "height raise center", heights[mid] > 4f);
+            Expect(ref fails, sb, "height raise edge falloff", heights[mid] > heights[45 * 90 + 47]);
+            MapHeightSculpt.Apply(
+                heights, 90, 90, -450f, -450f, 10f,
+                new[] { new MapHeightPaint { x = 0f, z = 0f, radius = 30f, delta = -8f, falloff = 0.85f } });
+            Expect(ref fails, sb, "height lower cancels", System.Math.Abs(heights[mid]) < 0.15f);
+
             sb.Append(fails == 0 ? "WorldTerrainGridSelfTest: OK" : $"WorldTerrainGridSelfTest: FAIL ({fails})");
             return sb.ToString();
         }

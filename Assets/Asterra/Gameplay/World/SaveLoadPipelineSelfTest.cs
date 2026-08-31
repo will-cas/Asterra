@@ -42,7 +42,7 @@ namespace Asterra.Gameplay
                 live,
                 wallet,
                 matchSeed: 42,
-                mapKey: MapCatalog.BlackridgePassId,
+                mapKey: MapCatalog.LushForestId,
                 tick: 40,
                 nextEntityId: ids.PeekNext);
 

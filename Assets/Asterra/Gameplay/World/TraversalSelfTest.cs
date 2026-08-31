@@ -8,7 +8,7 @@ using Asterra.Gameplay.World;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Phase-4 regression: bridges, jumps, magic crossings, boats.</summary>
+    /// <summary>Bridges, jumps, magic crossings, boats.</summary>
     public static class TraversalSelfTest
     {
         public static string Run()
@@ -21,25 +21,23 @@ namespace Asterra.Gameplay
             SkirmishMapTraversal.Apply(env, SkirmishMapId.RiverCrossing);
 
             Expect(ref fails, sb, "has links", env.TraversalGraph.Links.Count >= 3);
-            Expect(ref fails, sb, "boat on ocean", env.CanUnitEnter(-390f, 0f, TraversalCapability.Water));
-            Expect(ref fails, sb, "land not on ocean", !env.CanUnitEnter(-390f, 0f, TraversalCapability.Land));
-            Expect(ref fails, sb, "bridge deck land", env.CanUnitEnter(65f, 0f, TraversalCapability.Land));
+            Expect(ref fails, sb, "boat on ocean", env.CanUnitEnter(0f, -400f, TraversalCapability.Water));
+            Expect(ref fails, sb, "land not on ocean", !env.CanUnitEnter(0f, -400f, TraversalCapability.Land));
+            Expect(ref fails, sb, "bridge deck land", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
 
-            // Pathfinding inserts bridge waypoints when mid is water.
             var path = new List<(float x, float z)>();
-            bool okPath = env.Pathfinding.TryGetPath(-65f, -40f, 65f, 40f, TraversalCapability.Land, path);
+            bool okPath = env.Pathfinding.TryGetPath(-65f, -10f, 65f, 10f, TraversalCapability.Land, path);
             Expect(ref fails, sb, "path across river", okPath && path.Count >= 2);
 
-            // Sim: unit walks onto bridge link and crosses.
             var ids = new SequentialIdFactory();
             var wallet = new ResourceWallet();
             var defs = SkirmishDefaultContent.CreateRegistry();
             var sim = new SkirmishWorldSim(wallet, ids, defs, env);
             var player = new PlayerId(0);
             var faction = new FactionId(0);
-            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.VeiledApprenticeId, 65f, -32f);
-            unit.MoveTargetX = 65f;
-            unit.MoveTargetZ = 32f;
+            var unit = sim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.VeiledApprenticeId, -50f, 0f);
+            unit.MoveTargetX = 50f;
+            unit.MoveTargetZ = 0f;
 
             bool started = false;
             for (int i = 0; i < 40; i++)
@@ -49,18 +47,16 @@ namespace Asterra.Gameplay
                     started = true;
             }
 
-            Expect(ref fails, sb, "bridge traversal started", started || unit.Z > 0f);
-            Expect(ref fails, sb, "crossed north", unit.Z > 10f);
+            Expect(ref fails, sb, "bridge traversal started", started || unit.X > 0f);
+            Expect(ref fails, sb, "crossed east", unit.X > 10f);
 
-            // Magic crossing rejects land-only units.
             Expect(ref fails, sb, "magic link exists",
                 env.TraversalGraph.TryFindLinkForMove(
-                    -220f, -32f, -220f, 32f, TraversalCapability.Magic, 0f, out _, out _));
+                    -40f, 200f, 40f, 200f, TraversalCapability.Magic, 0f, out _, out _));
             Expect(ref fails, sb, "land cannot use magic link",
                 !env.TraversalGraph.TryFindLinkForMove(
-                    -220f, -32f, -220f, 32f, TraversalCapability.Land, 0f, out _, out _));
+                    -40f, 200f, 40f, 200f, TraversalCapability.Land, 0f, out _, out _));
 
-            // Disable bridge → link no longer chosen.
             int bridgeId = -1;
             for (int i = 0; i < env.TraversalGraph.Links.Count; i++)
             {
@@ -74,33 +70,31 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "found bridge id", bridgeId >= 0);
             env.TraversalGraph.SetLinkEnabled(bridgeId, false);
             Expect(ref fails, sb, "disabled bridge ignored",
-                !env.TraversalGraph.TryFindLinkForMove(65f, -32f, 65f, 32f, TraversalCapability.Land, 0f, out _, out _));
+                !env.TraversalGraph.TryFindLinkForMove(-40f, 0f, 40f, 0f, TraversalCapability.Land, 0f, out _, out _));
 
-            // Boat movement on water.
             var boatEnv = new WorldEnvironmentSim();
             SkirmishMapTerrain.Apply(boatEnv, SkirmishMapId.RiverCrossing);
             var boatSim = new SkirmishWorldSim(wallet, ids, defs, boatEnv);
-            var boat = boatSim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.RiverBoatId, -390f, 0f);
+            var boat = boatSim.SpawnUnit(ids.Next(), player, faction, FactionDefaultContent.RiverBoatId, 0f, -400f);
             Expect(ref fails, sb, "boat caps water", boat.TraversalCapabilities == TraversalCapability.Water);
-            boat.MoveTargetX = -385f;
-            boat.MoveTargetZ = 15f;
-            float boatStartX = boat.X;
+            boat.MoveTargetX = 8f;
+            boat.MoveTargetZ = -390f;
+            float boatStartZ = boat.Z;
             for (int i = 0; i < 20; i++)
                 boatSim.Tick(0.1f);
             Expect(ref fails, sb, "boat moved on water",
-                System.Math.Abs(boat.X - boatStartX) + System.Math.Abs(boat.Z - 0f) > 1.5f);
+                System.Math.Abs(boat.X) + System.Math.Abs(boat.Z - boatStartZ) > 1.5f);
 
-            // Jump-up requires Jump on Blackridge.
-            var br = new WorldEnvironmentSim();
-            SkirmishMapTerrain.Apply(br, SkirmishMapId.BlackridgePass);
-            SkirmishMapTraversal.Apply(br, SkirmishMapId.BlackridgePass);
+            var relic = new WorldEnvironmentSim();
+            SkirmishMapTerrain.Apply(relic, SkirmishMapId.AncientRelic);
+            SkirmishMapTraversal.Apply(relic, SkirmishMapId.AncientRelic);
             Expect(ref fails, sb, "jump down for land",
-                br.TraversalGraph.TryFindLinkForMove(0f, 95f, 0f, 40f, TraversalCapability.Land, 0f, out var down, out _)
+                relic.TraversalGraph.TryFindLinkForMove(0f, 95f, 0f, 40f, TraversalCapability.Land, 0f, out var down, out _)
                 && down.Type == TraversalLinkType.JumpDown);
             Expect(ref fails, sb, "jump up needs Jump",
-                !br.TraversalGraph.TryFindLinkForMove(0f, 45f, 0f, 95f, TraversalCapability.Land, 0f, out _, out _));
+                !relic.TraversalGraph.TryFindLinkForMove(0f, 45f, 0f, 95f, TraversalCapability.Land, 0f, out _, out _));
             Expect(ref fails, sb, "pathfinder can jump up",
-                br.TraversalGraph.TryFindLinkForMove(
+                relic.TraversalGraph.TryFindLinkForMove(
                     0f, 45f, 0f, 95f, TraversalCapability.Land | TraversalCapability.Jump, 0f, out var up, out _)
                 && up.Type == TraversalLinkType.JumpUp);
 

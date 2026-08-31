@@ -5,7 +5,7 @@ using Asterra.Gameplay.World;
 
 namespace Asterra.Gameplay
 {
-    /// <summary>Phase-3 regression: each skirmish map paints logical terrain correctly.</summary>
+    /// <summary>Regression: each built-in map paints logical terrain correctly.</summary>
     public static class SkirmishMapTerrainSelfTest
     {
         public static string Run()
@@ -13,37 +13,40 @@ namespace Asterra.Gameplay
             var sb = new StringBuilder();
             int fails = 0;
 
-            ExpectMap(ref fails, sb, SkirmishMapId.TwinKeeps, env =>
+            ExpectMap(ref fails, sb, SkirmishMapId.LushForest, env =>
             {
-                Expect(ref fails, sb, "TK center land", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "TK long grass", env.Features.HasLongGrassNear(0f, 120f, 30f));
-                Expect(ref fails, sb, "TK forest", env.Features.HasForestNear(-100f, -70f, 40f));
-                Expect(ref fails, sb, "TK tree blocks", !env.CanUnitEnter(-110f, -80f, TraversalCapability.Land));
-                Expect(ref fails, sb, "TK swamp slow", env.MovementModifier(0f, -35f, TraversalCapability.Land) < 0.6f);
+                Expect(ref fails, sb, "GV keep pad", env.CanUnitEnter(-340f, 0f, TraversalCapability.Land));
+                Expect(ref fails, sb, "GV long grass", env.Features.HasLongGrassNear(-120f, -120f, 40f));
+                Expect(ref fails, sb, "GV forest", env.Features.HasForestNear(0f, 200f, 40f));
+                Expect(ref fails, sb, "GV tree blocks", !env.CanUnitEnter(-110f, -80f, TraversalCapability.Land));
+                Expect(ref fails, sb, "GV swamp slow", env.MovementModifier(-40f, 110f, TraversalCapability.Land) < 0.6f);
             });
 
             ExpectMap(ref fails, sb, SkirmishMapId.RiverCrossing, env =>
             {
-                Expect(ref fails, sb, "RC river blocks land", !env.CanUnitEnter(80f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "RC river allows boat", env.CanUnitEnter(80f, 0f, TraversalCapability.Water));
-                Expect(ref fails, sb, "RC center ford", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "RC west ford", env.CanUnitEnter(-130f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "RC waterfall blocked", !env.CanUnitEnter(-345f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "RC waterfall blocks boat", !env.CanUnitEnter(-345f, 0f, TraversalCapability.Water));
-                Expect(ref fails, sb, "RC water feature", env.Features.HasWaterNear(80f, 0f, 40f));
-                Expect(ref fails, sb, "RC ice land", env.CanUnitEnter(190f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "RC keep pad", env.CanUnitEnter(-300f, -220f, TraversalCapability.Land));
+                Expect(ref fails, sb, "RC river blocks land", !env.CanUnitEnter(0f, 50f, TraversalCapability.Land));
+                Expect(ref fails, sb, "RC river allows boat", env.CanUnitEnter(0f, 50f, TraversalCapability.Water));
+                Expect(ref fails, sb, "RC center deck", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
+                Expect(ref fails, sb, "RC south ford", env.CanUnitEnter(0f, -190f, TraversalCapability.Land));
+                Expect(ref fails, sb, "RC ocean blocks land", !env.CanUnitEnter(0f, 410f, TraversalCapability.Land));
+                Expect(ref fails, sb, "RC ocean allows boat", env.CanUnitEnter(0f, 410f, TraversalCapability.Water));
+                Expect(ref fails, sb, "RC water feature", env.Features.HasWaterNear(0f, 80f, 40f));
+                Expect(ref fails, sb, "RC keep pad", env.CanUnitEnter(-320f, 0f, TraversalCapability.Land));
             });
 
-            ExpectMap(ref fails, sb, SkirmishMapId.BlackridgePass, env =>
+            ExpectMap(ref fails, sb, SkirmishMapId.AncientRelic, env =>
             {
-                Expect(ref fails, sb, "BP trench center", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
-                Expect(ref fails, sb, "BP trench cover", env.Features.SampleCoverBonus(0f, 0f) >= 0.3f);
-                Expect(ref fails, sb, "BP mountain blocks", !env.CanUnitEnter(-200f, 200f, TraversalCapability.Land));
-                Expect(ref fails, sb, "BP mountain unit ok", env.CanUnitEnter(-200f, 120f, TraversalCapability.Mountain));
-                Expect(ref fails, sb, "BP north ramp", env.CanUnitEnter(0f, 110f, TraversalCapability.Land));
-                Expect(ref fails, sb, "BP south ramp", env.CanUnitEnter(0f, -110f, TraversalCapability.Land));
-                Expect(ref fails, sb, "BP no-entry corner", env.Grid.IsBlocked(-300f, 300f));
+                Expect(ref fails, sb, "AR relic bowl", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
+                Expect(ref fails, sb, "AR no-entry cliff", env.Grid.IsBlocked(-300f, 0f));
+                Expect(ref fails, sb, "AR south keep", env.CanUnitEnter(0f, -340f, TraversalCapability.Land));
+            });
+
+            ExpectMap(ref fails, sb, SkirmishMapId.MundorCapital, env =>
+            {
+                Expect(ref fails, sb, "MC island land", env.CanUnitEnter(0f, 0f, TraversalCapability.Land));
+                Expect(ref fails, sb, "MC west river blocks", !env.CanUnitEnter(-140f, 80f, TraversalCapability.Land));
+                Expect(ref fails, sb, "MC west river boat", env.CanUnitEnter(-140f, 80f, TraversalCapability.Water));
+                Expect(ref fails, sb, "MC east river blocks", !env.CanUnitEnter(140f, 80f, TraversalCapability.Land));
             });
 
             sb.Append(fails == 0 ? "SkirmishMapTerrainSelfTest: OK" : $"SkirmishMapTerrainSelfTest: FAIL ({fails})");

@@ -231,9 +231,10 @@ namespace Asterra.Gameplay
             DestructibleDefData def,
             float x,
             float z,
-            int linkedTraversalLinkId = -1)
+            int linkedTraversalLinkId = -1,
+            float yawDegrees = 0f)
         {
-            var prop = new SimDestructible(id, def, x, z, linkedTraversalLinkId);
+            var prop = new SimDestructible(id, def, x, z, linkedTraversalLinkId, yawDegrees);
             _destructibles.Add(prop);
             _destructiblesById[id.Value] = prop;
             RebuildSnapshots();
@@ -4076,7 +4077,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < _destructibles.Count; i++)
             {
                 var d = _destructibles[i];
-                if (!d.IsAlive)
+                if (!d.IsAlive || d.Invulnerable)
                     continue;
                 float dx = d.X - unit.X;
                 float dz = d.Z - unit.Z;
@@ -4129,6 +4130,8 @@ namespace Asterra.Gameplay
 
             if (_destructiblesById.TryGetValue(targetId.Value, out var targetProp) && targetProp.IsAlive)
             {
+                if (targetProp.Invulnerable)
+                    return;
                 ApplyDestructibleDamage(targetProp, damage, preferBuilding ? DamageType.Siege : DamageType.Blunt);
                 return;
             }
@@ -5390,6 +5393,7 @@ namespace Asterra.Gameplay
                     health = d.Health,
                     state = (int)d.State,
                     linkedTraversalLinkId = d.LinkedTraversalLinkId,
+                    yawDegrees = d.YawDegrees,
                 });
             }
 
@@ -5668,7 +5672,8 @@ namespace Asterra.Gameplay
                         def,
                         d.x,
                         d.z,
-                        d.linkedTraversalLinkId);
+                        d.linkedTraversalLinkId,
+                        d.yawDegrees);
                     prop.Health = d.health;
                     prop.State = (DestructibleState)d.state;
                     if (prop.State == DestructibleState.Destroyed)
@@ -5745,13 +5750,7 @@ namespace Asterra.Gameplay
 
         private DestructibleDefData ResolveDestructibleDef(string definitionId)
         {
-            if (string.IsNullOrEmpty(definitionId))
-                return DefaultDestructibleCatalog.Rock();
-            if (definitionId.Contains("tree"))
-                return DefaultDestructibleCatalog.Tree();
-            if (definitionId.Contains("bridge"))
-                return DefaultDestructibleCatalog.Bridge();
-            return DefaultDestructibleCatalog.Rock();
+            return DefaultDestructibleCatalog.FromCatalogId(definitionId);
         }
     }
 }

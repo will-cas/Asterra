@@ -16,6 +16,8 @@ namespace Asterra.Gameplay.Presentation
         {
             if (string.IsNullOrEmpty(definitionId))
                 return GetOrCreate("unit_militia");
+            if (TryExact(definitionId, out var exact))
+                return exact;
 
             if (definitionId.Contains("heir") || definitionId.Contains("captain")
                 || definitionId.Contains("colossus")
@@ -73,6 +75,8 @@ namespace Asterra.Gameplay.Presentation
 
         public static Mesh GetBuildingMesh(string definitionId, byte factionIndex)
         {
+            if (TryExact(definitionId, out var exact))
+                return exact;
             string key = ResolveBuildingMeshKey(definitionId, factionIndex);
             return GetOrCreate(key);
         }
@@ -177,7 +181,7 @@ namespace Asterra.Gameplay.Presentation
             return ProducerMeshes[f];
         }
 
-        private static bool IsTower(string definitionId)
+        public static bool IsTower(string definitionId)
         {
             return !string.IsNullOrEmpty(definitionId)
                    && (definitionId.Contains("tower") || definitionId.Contains("watchtower")
@@ -185,7 +189,7 @@ namespace Asterra.Gameplay.Presentation
                        || definitionId.Contains("clockwork") || definitionId.Contains("far_glass"));
         }
 
-        private static bool IsWall(string definitionId)
+        public static bool IsWall(string definitionId)
         {
             return !string.IsNullOrEmpty(definitionId)
                    && (definitionId.Contains("palisade") || definitionId.Contains("wall")
@@ -389,10 +393,24 @@ namespace Asterra.Gameplay.Presentation
 
         public static Mesh GetDestructibleMesh(string definitionId)
         {
+            if (TryExact(definitionId, out var exact))
+                return exact;
             if (!string.IsNullOrEmpty(definitionId))
             {
                 if (definitionId.Contains("bridge"))
                     return GetOrCreate("prop_bridge");
+                if (definitionId.Contains("farm"))
+                    return GetOrCreate("scenery_farm");
+                if (definitionId.Contains("crumbling") || definitionId.Contains("ruin_tower"))
+                    return GetOrCreate("scenery_crumbling_tower");
+                if (definitionId.Contains("cottage"))
+                    return GetOrCreate("scenery_cottage");
+                if (definitionId.Contains("mill"))
+                    return GetOrCreate("scenery_mill");
+                if (definitionId.Contains("shrine"))
+                    return GetOrCreate("scenery_shrine");
+                if (definitionId.Contains("barn"))
+                    return GetOrCreate("scenery_barn");
                 if (definitionId.Contains("rock"))
                     return GetOrCreate("prop_rock");
             }
@@ -406,11 +424,30 @@ namespace Asterra.Gameplay.Presentation
             {
                 if (definitionId.Contains("bridge"))
                     return new Color(0.45f, 0.32f, 0.18f);
+                if (definitionId.Contains("farm") || definitionId.Contains("barn") || definitionId.Contains("cottage"))
+                    return new Color(0.62f, 0.48f, 0.28f);
+                if (definitionId.Contains("crumbling") || definitionId.Contains("shrine"))
+                    return new Color(0.52f, 0.5f, 0.46f);
+                if (definitionId.Contains("mill"))
+                    return new Color(0.58f, 0.5f, 0.38f);
                 if (definitionId.Contains("rock"))
                     return new Color(0.55f, 0.55f, 0.58f);
             }
 
             return new Color(0.18f, 0.42f, 0.22f);
+        }
+
+        public static string DestructibleTexKey(string definitionId)
+        {
+            if (string.IsNullOrEmpty(definitionId))
+                return "rock";
+            if (definitionId.Contains("bridge") || definitionId.Contains("farm")
+                || definitionId.Contains("barn") || definitionId.Contains("cottage")
+                || definitionId.Contains("mill"))
+                return "bridge";
+            if (definitionId.Contains("tree"))
+                return "leaf";
+            return "rock";
         }
 
         public static bool IsKeep(string definitionId)
@@ -542,6 +579,23 @@ namespace Asterra.Gameplay.Presentation
             return type == ResourceType.Gold
                 ? new Color(0.98f, 0.84f, 0.18f)
                 : new Color(0.48f, 0.3f, 0.14f);
+        }
+
+        private static bool TryExact(string key, out Mesh mesh)
+        {
+            mesh = null;
+            if (string.IsNullOrEmpty(key))
+                return false;
+            if (Cache.TryGetValue(key, out mesh) && mesh != null && mesh.vertexCount > 0)
+                return true;
+            if (ObjMeshLoader.TryLoad(key, out mesh) && mesh != null && mesh.vertexCount > 0)
+            {
+                Cache[key] = mesh;
+                return true;
+            }
+
+            mesh = null;
+            return false;
         }
 
         private static Mesh GetOrCreate(string key)

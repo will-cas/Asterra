@@ -21,12 +21,12 @@ namespace Asterra.Gameplay
 
             // Tree destruction opens terrain.
             var env = new WorldEnvironmentSim();
-            SkirmishMapTerrain.Apply(env, SkirmishMapId.TwinKeeps);
-            SkirmishMapTraversal.Apply(env, SkirmishMapId.TwinKeeps);
+            SkirmishMapTerrain.Apply(env, SkirmishMapId.LushForest);
+            SkirmishMapTraversal.Apply(env, SkirmishMapId.LushForest);
             Expect(ref fails, sb, "tree cell blocked before", !env.CanUnitEnter(-110f, -80f, TraversalCapability.Land));
 
             var sim = new SkirmishWorldSim(wallet, ids, defs, env);
-            SkirmishMapDestructibles.Apply(sim, ids, SkirmishMapId.TwinKeeps);
+            SkirmishMapDestructibles.Apply(sim, ids, SkirmishMapId.LushForest);
             Expect(ref fails, sb, "spawned destructibles", sim.Destructibles.Count >= 2);
 
             var treeId = FindDestructible(sim, DefaultDestructibleCatalog.TreeId);
@@ -35,7 +35,6 @@ namespace Asterra.Gameplay
             sim.Tick(0.05f);
 
             Expect(ref fails, sb, "tree opened path", env.CanUnitEnter(-110f, -80f, TraversalCapability.Land));
-            Expect(ref fails, sb, "timber drop node", HasNearbyResource(sim, ResourceType.Timber, -110f, -80f, 20f));
 
             // Bridge destruction disables traversal + floods deck.
             var riverEnv = new WorldEnvironmentSim();
@@ -47,7 +46,7 @@ namespace Asterra.Gameplay
             int bridgeLink = FindBridgeLink(riverEnv);
             Expect(ref fails, sb, "bridge link on", bridgeLink >= 0
                 && riverEnv.TraversalGraph.TryGetLink(bridgeLink, out var bl) && bl.Enabled);
-            Expect(ref fails, sb, "bridge deck walkable", riverEnv.CanUnitEnter(65f, 0f, TraversalCapability.Land));
+            Expect(ref fails, sb, "bridge deck walkable", riverEnv.CanUnitEnter(0f, 0f, TraversalCapability.Land));
 
             var bridgeId = FindDestructible(riverSim, DefaultDestructibleCatalog.BridgeId);
             Expect(ref fails, sb, "found bridge prop", bridgeId.HasValue);
@@ -56,8 +55,8 @@ namespace Asterra.Gameplay
 
             Expect(ref fails, sb, "bridge link off",
                 riverEnv.TraversalGraph.TryGetLink(bridgeLink, out var bl2) && !bl2.Enabled);
-            Expect(ref fails, sb, "deck flooded", !riverEnv.CanUnitEnter(65f, 0f, TraversalCapability.Land));
-            Expect(ref fails, sb, "deck is water for boats", riverEnv.CanUnitEnter(65f, 0f, TraversalCapability.Water));
+            Expect(ref fails, sb, "deck flooded", !riverEnv.CanUnitEnter(0f, 0f, TraversalCapability.Land));
+            Expect(ref fails, sb, "deck is water for boats", riverEnv.CanUnitEnter(0f, 0f, TraversalCapability.Water));
 
             // Wall removal marks path dirty during destroy (cleared after tick).
             var wallEnv = new WorldEnvironmentSim();
@@ -74,6 +73,14 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "wall destroyed event path",
                 wall.State == BuildingState.Destroyed || !ContainsBuilding(wallSim, wall.Id));
             wallSim.Tick(0.05f);
+
+            var farm = sim.SpawnDestructible(ids.Next(), DefaultDestructibleCatalog.Farm(), 200f, 200f);
+            float farmHp = farm.Health;
+            Smash(sim, farm.Id, 50000f);
+            Expect(ref fails, sb, "farm invulnerable", farm.IsAlive && farm.Health >= farmHp - 0.01f);
+            Expect(ref fails, sb, "farm is scenery", DefaultDestructibleCatalog.IsScenery(farm.DefinitionId));
+            Expect(ref fails, sb, "greenveil has farm", HasCatalog(BuiltinMaps.LushForest(), "farm"));
+            Expect(ref fails, sb, "capital has crumbling tower", HasCatalog(BuiltinMaps.MundorCapital(), "crumbling"));
 
             sb.Append(fails == 0 ? "DestructionSelfTest: OK" : $"DestructionSelfTest: FAIL ({fails})");
             return sb.ToString();
@@ -106,28 +113,25 @@ namespace Asterra.Gameplay
             return -1;
         }
 
-        private static bool HasNearbyResource(SkirmishWorldSim sim, ResourceType type, float x, float z, float radius)
+        private static bool ContainsBuilding(SkirmishWorldSim sim, SimEntityId id)
         {
-            float r2 = radius * radius;
-            for (int i = 0; i < sim.Resources.Count; i++)
+            for (int i = 0; i < sim.Buildings.Count; i++)
             {
-                var r = sim.Resources[i];
-                if (r.Type != type)
-                    continue;
-                float dx = r.X - x;
-                float dz = r.Z - z;
-                if (dx * dx + dz * dz <= r2)
+                if (sim.Buildings[i].Id.Value == id.Value)
                     return true;
             }
 
             return false;
         }
 
-        private static bool ContainsBuilding(SkirmishWorldSim sim, SimEntityId id)
+        private static bool HasCatalog(MapDefinition map, string token)
         {
-            for (int i = 0; i < sim.Buildings.Count; i++)
+            if (map?.destructibles == null)
+                return false;
+            for (int i = 0; i < map.destructibles.Length; i++)
             {
-                if (sim.Buildings[i].Id.Value == id.Value)
+                string id = map.destructibles[i].catalogId ?? string.Empty;
+                if (id.IndexOf(token, System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
             }
 

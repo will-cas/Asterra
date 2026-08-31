@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Asterra.Core;
+using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Sim;
 using UnityEngine;
 
@@ -64,7 +65,7 @@ namespace Asterra.Gameplay.Save
                 formatVersion = CurrentFormatVersion,
                 savedAtUtc = DateTime.UtcNow.ToString("o"),
                 matchSeed = matchSeed,
-                mapKey = string.IsNullOrEmpty(mapKey) ? "blackridge_pass" : mapKey,
+                mapKey = string.IsNullOrEmpty(mapKey) ? MapCatalog.LushForestId : mapKey,
                 playerFaction = playerFaction,
                 enemyFaction = enemyFaction,
                 aiDifficulty = aiDifficulty,
