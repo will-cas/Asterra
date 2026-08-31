@@ -52,5 +52,6 @@ ignore.conf
 # Meshgen / Blender
 tools/meshgen/__pycache__/
 *.blend1
+*.blend1.meta
 Assets/Asterra/Shared/Art/Blender/Exports/
 Assets/Asterra/Shared/Art/Blender/Renders/
