@@ -2,7 +2,7 @@
 
 - **Faction:** [university_guild](../factions/university_guild.md)
 - **Role:** keep
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_keeps.py`
 - **Mesh:** `Meshes/building_university_grand_college.obj` / `.fbx`
 
@@ -22,4 +22,4 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- Quality pass: brick hall, marble portico, clock turret with ticks and hands. Not a second observatory.

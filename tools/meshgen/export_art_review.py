@@ -159,17 +159,20 @@ def bounds(ob):
 def camera_shots(cx, cy, z0, z1, sx, sy, sz):
     span = max(sx, sy, sz)
     dist = span * 1.55
-    mid = z0 + sz * 0.42
-    upper = z0 + sz * 0.78
+    if sz > max(sx, sy) * 1.2:
+        dist = max(dist, sz * 2.05)
+    mid = z0 + sz * 0.48
+    upper = z0 + sz * 0.82
+    cam_z = z0 + sz * 0.22 + 1.2
     return [
-        ("front", (cx, cy - max(sy * 1.7, dist * 0.85), mid * 0.55 + 1.1), (cx, cy - sy * 0.15, mid), 35),
-        ("three-quarter", (cx + dist * 0.72, cy - dist * 0.95, z0 + sz * 0.28 + 1.4), (cx, cy + sy * 0.05, mid), 40),
-        ("side", (cx + dist * 1.15, cy, mid), (cx, cy, mid), 42),
-        ("rear", (cx - dist * 0.55, cy + dist * 0.95, mid), (cx, cy, mid), 40),
+        ("front", (cx, cy - dist, cam_z), (cx, cy - sy * 0.08, mid), 32),
+        ("three-quarter", (cx + dist * 0.78, cy - dist * 0.92, cam_z), (cx, cy, mid), 36),
+        ("side", (cx + dist * 1.05, cy, mid), (cx, cy, mid), 38),
+        ("rear", (cx - dist * 0.55, cy + dist * 0.95, mid * 0.85), (cx, cy, mid), 36),
         ("low", (cx + dist * 0.28, cy - dist * 0.75, z0 + 0.85), (cx, cy, z0 + sz * 0.62), 28),
-        ("detail", (cx + sz * 0.55, cy - sz * 0.85, upper), (cx, cy, upper), 50),
-        ("high", (cx + dist * 0.42, cy - dist * 0.55, z0 + sz * 1.05), (cx, cy, mid), 35),
-        ("top", (cx + span * 0.12, cy - dist * 0.4, z0 + sz * 1.25), (cx, cy, mid), 32),
+        ("detail", (cx + sz * 0.48, cy - sz * 0.72, upper), (cx, cy, upper), 48),
+        ("high", (cx + dist * 0.42, cy - dist * 0.55, z0 + sz * 1.15), (cx, cy, mid), 32),
+        ("top", (cx + span * 0.08, cy - dist * 0.35, z0 + sz * 1.35), (cx, cy, mid), 30),
     ]
 
 
@@ -267,7 +270,7 @@ def main():
         ob = fn(g, m, asterra_roster._coll_for(g, def_id))
         ob.location = (0.0, 0.0, 0.0)
         hide_except({ob.name, ground.name})
-        if not force and not def_id.startswith("scenery_"):
+        if not def_id.startswith("scenery_"):
             log("export", def_id)
             g.export_game_mesh(ob, def_id)
         render_cameras(scene, cam, ob, def_id)

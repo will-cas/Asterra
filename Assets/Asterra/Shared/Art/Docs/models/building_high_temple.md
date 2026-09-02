@@ -2,7 +2,7 @@
 
 - **Faction:** [uncrowned](../factions/uncrowned.md)
 - **Role:** building
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_buildings.py`
 - **Mesh:** `Meshes/building_high_temple.obj` / `.fbx`
 
@@ -12,7 +12,7 @@ Tall dark-stone spire with a crystal crown.
 
 ## Iterate
 
-Same tower language as the observatory shaft; crystal is the crown, not the whole top.
+Observatory-grade masonry and iron frames. Stay a heretical temple-spire — not a University lantern tower.
 
 ## Review stills
 
@@ -22,4 +22,6 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- First pass: gold window blocks and a gold platter + crystal ball.
+- Second pass wrongly copied University observatory massing (octagon keep, walks, glass lantern).
+- Rebuild: dark nave, slate roof, iron lancets, tapering spire, crystal in an iron crown. Quality of construction, Uncrowned temple identity.

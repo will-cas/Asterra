@@ -2,7 +2,7 @@
 
 - **Faction:** [outcast_host](../factions/outcast_host.md)
 - **Role:** keep
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_keeps.py`
 - **Mesh:** `Meshes/building_outcast_great_camp.obj` / `.fbx`
 
@@ -22,4 +22,4 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- Quality pass: logs, ice ridge, palisade, leather door. No masonry, no earth slab.

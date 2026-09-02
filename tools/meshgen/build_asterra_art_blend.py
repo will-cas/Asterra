@@ -183,6 +183,20 @@ def cube_uv(ob, cube_size=2.0):
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def solid(name, verts, faces, material, collection, uv=1.4):
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in verts], [], [tuple(f) for f in faces])
+    mesh.update()
+    ob = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    assign(ob, material)
+    cube_uv(ob, uv)
+    move_to(ob, collection)
+    return ob
+
+
 def cube(name, loc, size, material, collection, rot=(0, 0, 0), uv=2.0):
     bpy.ops.mesh.primitive_cube_add(size=1.0, location=loc, rotation=rot)
     ob = bpy.context.active_object

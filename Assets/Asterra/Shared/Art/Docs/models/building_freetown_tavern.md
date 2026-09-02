@@ -2,7 +2,7 @@
 
 - **Faction:** [freetown](../factions/freetown.md)
 - **Role:** keep
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_keeps.py`
 - **Mesh:** `Meshes/building_freetown_tavern.obj` / `.fbx`
 
@@ -22,4 +22,4 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- Quality pass: brick ashlar ground, jetty timber, dock piles, wood-framed glass. Dock stays part of the keep.

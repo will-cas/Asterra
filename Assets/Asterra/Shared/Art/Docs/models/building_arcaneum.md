@@ -2,7 +2,7 @@
 
 - **Faction:** [uncrowned](../factions/uncrowned.md)
 - **Role:** keep
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_keeps.py`
 - **Mesh:** `Meshes/building_arcaneum.obj` / `.fbx`
 
@@ -22,4 +22,4 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- Quality pass: coursed octagon, iron slits, buttresses that meet the wall, glass lantern with crystal inside. Uncrowned iron/glass — not a University observatory.

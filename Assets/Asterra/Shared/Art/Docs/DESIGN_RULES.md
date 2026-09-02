@@ -46,10 +46,10 @@ Walk a slice (skips ids that already have eight cameras):
 
 ## Buildings
 
-- Landmark towers are tall stone shafts with a function at the top — never a squat drum plus a gold ball.
-- Coursed masonry, string courses, buttresses, slit windows, walks, rails, courtyard or steps.
-- Window frames are iron (or faction metal), not gold shutters.
+- Construction quality is observatory-grade: coursed masonry, string courses, buttresses, iron (or faction-metal) frames, real glass/crystal. Never a squat drum plus a gold ball.
+- Silhouette follows the faction and the definition id. Do not copy University keep / lantern / telescope massing onto other buildings.
 - Banners belong on keeps. `_earth()` is a no-op; do not drop a ground slab into the game mesh.
+- Roofs are closed gable prisms (two planes + triangular gables). No rotated-cube tents, no tile-cube grids, no rectangular gable slabs poking through.
 
 ## Units
 

@@ -20,7 +20,7 @@ MODELS = [
     ("building_blackroot_conservatory", "uncrowned", "building", "Iron greenhouse: glass barrel vault, steel ribs, no house roof.", "Rib spacing and porch should read as a conservatory at RTS distance."),
     ("building_ancient_ruins", "uncrowned", "building", "Broken colonnade and rubble, no roof.", "Keep the missing column and fallen entablature; do not complete it into a temple."),
     ("building_conjuring_hall", "uncrowned", "building", "Round ritual chamber of dark stone with a crystal dome.", "Coursed drum, tighter gate arch, less gold window frames."),
-    ("building_high_temple", "uncrowned", "building", "Tall dark-stone spire with a crystal crown.", "Same tower language as the observatory shaft; crystal is the crown, not the whole top."),
+    ("building_high_temple", "uncrowned", "building", "Tall dark-stone spire with a crystal crown.", "Observatory-grade masonry and iron frames. Stay a heretical temple-spire — not a University lantern tower."),
     ("building_portal_gate", "uncrowned", "building", "Standing ring gate with glass throat, not a hall.", "Piers and ring should feel like a machine; crystal spark stays small."),
     ("building_shadowed_gate", "uncrowned", "building", "Dark twin of the portal: iron ring and void cloth.", "Thorn lintel; avoid looking like a copy of the steel portal with a recolour."),
     ("building_watchtower", "uncrowned", "building", "Coursed lookout with a glass lantern and slate cone.", "Add walk rail; iron mullions on the lantern."),

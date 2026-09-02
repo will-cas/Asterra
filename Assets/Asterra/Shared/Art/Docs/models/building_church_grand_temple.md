@@ -2,7 +2,7 @@
 
 - **Faction:** [rising_sun](../factions/rising_sun.md)
 - **Role:** keep
-- **Status:** captured
+- **Status:** iterate
 - **Author:** `tools/meshgen/asterra_keeps.py`
 - **Mesh:** `Meshes/building_church_grand_temple.obj` / `.fbx`
 
@@ -22,4 +22,4 @@ Comparison copies: `Blender/Renders/angles/<front|three-quarter|side|rear|low|de
 
 ## Notes
 
-_(Add defects and decisions here after each review pass.)_
+- Quality pass: marble ashlar, portico, sun disc, coursed drum, ribbed gold dome. Classical church, not a needle.

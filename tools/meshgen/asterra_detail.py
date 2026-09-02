@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 import bpy
+from mathutils import Vector
 
 
 def finish(g, name, parts, collection, bevel_w=0.016, segments=4, subdiv=0):
@@ -209,67 +210,113 @@ def door(g, p, c, wood, iron, loc, size=(1.0, 0.14, 2.5)):
         p.append(g.cyl(f"hr{k}", (x + sx, hy, z - sz * 0.35 + k * 0.42), 0.035, 0.05, iron, c, verts=8, rot=(math.radians(90), 0, 0)))
 
 
-def pitched(g, p, c, mat, loc, size, pitch=32, gable=None, axis="x", tiles=False):
-    """Closed gable with overhang, ridge, and slate tiles. No stair-step ends.
+def _slab(g, p, c, mat, corners, thick, uv=0.85):
+    a, b, c0, d = [Vector(v) for v in corners]
+    n = (b - a).cross(d - a)
+    if n.length < 1e-6:
+        return
+    n.normalize()
+    n *= thick
+    top = [a, b, c0, d]
+    bot = [v - n for v in top]
+    verts = [(v.x, v.y, v.z) for v in top + bot]
+    faces = (
+        (0, 1, 2, 3),
+        (4, 7, 6, 5),
+        (0, 4, 5, 1),
+        (1, 5, 6, 2),
+        (2, 6, 7, 3),
+        (3, 7, 4, 0),
+    )
+    p.append(g.solid("roof", verts, faces, mat, c, uv=uv))
 
-    loc.z is eave height. Roof planes overshoot the walls like the citadel.
-    A single low gable slab sits under the triangle so the end is not a tent.
+
+def _tri_slab(g, p, c, mat, corners, thick, uv=0.7):
+    a, b, d = [Vector(v) for v in corners]
+    n = (b - a).cross(d - a)
+    if n.length < 1e-6:
+        return
+    n.normalize()
+    n *= thick
+    top = [a, b, d]
+    bot = [v - n for v in top]
+    verts = [(v.x, v.y, v.z) for v in top + bot]
+    faces = (
+        (0, 1, 2),
+        (3, 5, 4),
+        (0, 3, 4, 1),
+        (1, 4, 5, 2),
+        (2, 5, 3, 0),
+    )
+    p.append(g.solid("gable", verts, faces, mat, c, uv=uv))
+
+
+def pitched(g, p, c, mat, loc, size, pitch=32, gable=None, axis="x", tiles=False):
+    """Closed gable: two roof planes that meet the ridge, triangular gable walls.
+
+    loc.z is wall-top / eave at the wall line. Planes continue a short overhang.
+    `tiles` is kept for callers; slate UVs on the planes do the work.
     """
     x, y, z = loc
-    sx, sy, sz = size
+    sx, sy, _sz = size
     rad = math.radians(pitch)
     fill = gable or mat
-    thick = max(sz, 0.16)
+    ov = 0.16
+    thick = 0.09
+    wall_t = 0.12
     if axis == "y":
         half = sx * 0.5
         rise = math.tan(rad) * half
-        span = half / max(math.cos(rad), 0.2)
-        p.append(g.cube("west", (x - half * 0.5, y, z + rise * 0.5), (span, sy * 1.04, thick), mat, c, rot=(0, -rad, 0)))
-        p.append(g.cube("east", (x + half * 0.5, y, z + rise * 0.5), (span, sy * 1.04, thick), mat, c, rot=(0, rad, 0)))
-        p.append(g.cube("ridge", (x, y, z + rise + 0.06), (0.2, sy * 0.98, 0.16), mat, c))
-        p.append(g.cube("gable_s", (x, y - sy * 0.49, z + rise * 0.32), (sx * 0.72, 0.26, rise * 0.62), fill, c))
-        p.append(g.cube("gable_n", (x, y + sy * 0.49, z + rise * 0.32), (sx * 0.72, 0.26, rise * 0.62), fill, c))
-        if tiles:
-            cols, rows = 6, 8
-            for side in (-1.0, 1.0):
-                for col in range(cols):
-                    for row in range(rows):
-                        t = (row + 0.5) / rows
-                        along = y + (t - 0.5) * sy * 0.92
-                        out = (0.35 + col * 0.42)
-                        p.append(
-                            g.cube(
-                                "tile",
-                                (x + side * out, along, z + 0.08 + (half - out) * math.tan(rad)),
-                                (0.44, sy / rows + 0.04, 0.05),
-                                mat,
-                                c,
-                                rot=(0, side * rad, 0),
-                            )
-                        )
+        hx = half + ov
+        hy = sy * 0.5 + ov
+        ze = z - math.tan(rad) * ov
+        zr = z + rise
+        _slab(
+            g, p, c, mat,
+            ((x - hx, y - hy, ze), (x - hx, y + hy, ze), (x, y + hy, zr), (x, y - hy, zr)),
+            thick,
+        )
+        _slab(
+            g, p, c, mat,
+            ((x + hx, y + hy, ze), (x + hx, y - hy, ze), (x, y - hy, zr), (x, y + hy, zr)),
+            thick,
+        )
+        gy = sy * 0.5
+        _tri_slab(
+            g, p, c, fill,
+            ((x - half, y - gy, z), (x + half, y - gy, z), (x, y - gy, zr)),
+            wall_t,
+        )
+        _tri_slab(
+            g, p, c, fill,
+            ((x + half, y + gy, z), (x - half, y + gy, z), (x, y + gy, zr)),
+            wall_t,
+        )
         return
     half = sy * 0.5
     rise = math.tan(rad) * half
-    span = half / max(math.cos(rad), 0.2)
-    p.append(g.cube("south", (x, y - half * 0.5, z + rise * 0.5), (sx * 1.04, span, thick), mat, c, rot=(rad, 0, 0)))
-    p.append(g.cube("north", (x, y + half * 0.5, z + rise * 0.5), (sx * 1.04, span, thick), mat, c, rot=(-rad, 0, 0)))
-    p.append(g.cube("ridge", (x, y, z + rise + 0.06), (sx * 0.98, 0.2, 0.16), mat, c))
-    p.append(g.cube("gable_e", (x + sx * 0.49, y, z + rise * 0.32), (0.26, sy * 0.72, rise * 0.62), fill, c))
-    p.append(g.cube("gable_w", (x - sx * 0.49, y, z + rise * 0.32), (0.26, sy * 0.72, rise * 0.62), fill, c))
-    if tiles:
-        cols, rows = 8, 4
-        for side, srot in ((-1.0, rad), (1.0, -rad)):
-            for col in range(cols):
-                along = x + (col - (cols - 1) * 0.5) * (sx * 0.9 / cols)
-                for row in range(rows):
-                    out = 0.45 + row * (half * 0.78 / rows)
-                    p.append(
-                        g.cube(
-                            "tile",
-                            (along, y + side * out, z + 0.08 + (half - out) * math.tan(rad)),
-                            (sx / cols + 0.06, 0.52, 0.05),
-                            mat,
-                            c,
-                            rot=(srot, 0, 0),
-                        )
-                    )
+    hy = half + ov
+    hx = sx * 0.5 + ov
+    ze = z - math.tan(rad) * ov
+    zr = z + rise
+    _slab(
+        g, p, c, mat,
+        ((x - hx, y - hy, ze), (x + hx, y - hy, ze), (x + hx, y, zr), (x - hx, y, zr)),
+        thick,
+    )
+    _slab(
+        g, p, c, mat,
+        ((x + hx, y + hy, ze), (x - hx, y + hy, ze), (x - hx, y, zr), (x + hx, y, zr)),
+        thick,
+    )
+    gx = sx * 0.5
+    _tri_slab(
+        g, p, c, fill,
+        ((x - gx, y - half, z), (x - gx, y + half, z), (x - gx, y, zr)),
+        wall_t,
+    )
+    _tri_slab(
+        g, p, c, fill,
+        ((x + gx, y + half, z), (x + gx, y - half, z), (x + gx, y, zr)),
+        wall_t,
+    )
