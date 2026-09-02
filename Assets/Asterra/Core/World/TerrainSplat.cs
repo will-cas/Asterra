@@ -54,9 +54,9 @@ namespace Asterra.Core.World
             if (defIndex == DefaultTerrainCatalog.Rubble)
                 return Normalize(new Color(0.05f, 0.15f, 0.8f, 0f));
             if (defIndex == DefaultTerrainCatalog.Snow)
-                return Normalize(new Color(0.05f, 0.05f, 0.15f, 0.75f));
+                return Normalize(new Color(0.15f, 0.1f, 0.35f, 0.4f));
             if (defIndex == DefaultTerrainCatalog.Scorched)
-                return Normalize(new Color(0.15f, 0.75f, 0.1f, 0f));
+                return Normalize(new Color(0.08f, 0.82f, 0.1f, 0f));
             if (defIndex == DefaultTerrainCatalog.Berm)
                 return Normalize(new Color(0.35f, 0.55f, 0.1f, 0f));
             if (defIndex == DefaultTerrainCatalog.Debris)
@@ -73,7 +73,7 @@ namespace Asterra.Core.World
                 case TerrainCategory.Rock:
                     return Normalize(new Color(0.05f, 0.15f, 0.8f, 0f));
                 case TerrainCategory.Swamp:
-                    return Normalize(new Color(0.35f, 0.6f, 0.05f, 0f));
+                    return Normalize(new Color(0.22f, 0.72f, 0.06f, 0f));
                 case TerrainCategory.Forest:
                 case TerrainCategory.Tree:
                     return Normalize(new Color(0.7f, 0.25f, 0.05f, 0f));
@@ -89,7 +89,7 @@ namespace Asterra.Core.World
                 case TerrainCategory.NoEntry:
                     return Normalize(new Color(0.05f, 0.2f, 0.75f, 0f));
                 case TerrainCategory.Ice:
-                    return Normalize(new Color(0.05f, 0.05f, 0.2f, 0.7f));
+                    return Normalize(new Color(0.12f, 0.18f, 0.45f, 0.25f));
                 default:
                     if (category == TerrainCategory.WaterRiver
                         || category == TerrainCategory.WaterLake
@@ -98,6 +98,47 @@ namespace Asterra.Core.World
                         return Normalize(new Color(0.05f, 0.35f, 0.1f, 0.5f));
                     return Normalize(new Color(0.75f, 0.2f, 0.05f, 0f));
             }
+        }
+
+        /// <summary>
+        /// Presentation-only biome extras: x wetness, y snow. Scorched is a separate mask.
+        /// </summary>
+        public static Vector2 BiomeUv(TerrainCategory category, ushort defIndex)
+        {
+            float wet = 0f;
+            float snow = 0f;
+            if (defIndex == DefaultTerrainCatalog.Mud)
+                wet = 0.85f;
+            if (defIndex == DefaultTerrainCatalog.Snow)
+                snow = 0.9f;
+            switch (category)
+            {
+                case TerrainCategory.Swamp:
+                    wet = Mathf.Max(wet, 0.8f);
+                    break;
+                case TerrainCategory.Trench:
+                    wet = Mathf.Max(wet, 0.45f);
+                    break;
+                case TerrainCategory.Beach:
+                    wet = Mathf.Max(wet, 0.25f);
+                    break;
+                case TerrainCategory.Ice:
+                    snow = Mathf.Max(snow, 1f);
+                    break;
+                case TerrainCategory.WaterRiver:
+                case TerrainCategory.WaterLake:
+                case TerrainCategory.WaterOcean:
+                case TerrainCategory.WaterWaterfall:
+                    wet = Mathf.Max(wet, 0.9f);
+                    break;
+            }
+
+            return new Vector2(wet, snow);
+        }
+
+        public static float Scorched01(ushort defIndex)
+        {
+            return defIndex == DefaultTerrainCatalog.Scorched ? 1f : 0f;
         }
 
         public static Color Overlay(Color current, string layer, float strength)

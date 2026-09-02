@@ -6,7 +6,7 @@ import math
 import bpy
 
 
-def finish(g, name, parts, collection, bevel_w=0.045, segments=2):
+def finish(g, name, parts, collection, bevel_w=0.016, segments=4, subdiv=0):
     ob = g.join(name, parts, collection)
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
@@ -14,6 +14,8 @@ def finish(g, name, parts, collection, bevel_w=0.045, segments=2):
     bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
     if bevel_w:
         g.bevel(ob, bevel_w, segments)
+    if subdiv and hasattr(g, "subdiv"):
+        g.subdiv(ob, subdiv)
     g.unwrap_smart(ob)
     ob["definition_id"] = name
     return ob
@@ -73,10 +75,23 @@ def wall_merlons(g, p, c, mat, y, z, xs, depth=0.5, h=0.7):
         p.append(g.cube("mer", (x, y, z), (0.5, depth, h), mat, c))
 
 
+def slit_window(g, p, c, frame, glass, loc, size, yaw=0.0):
+    """Narrow lancet: thin iron, glass, almost no sill."""
+    p.append(g.cube("wf", loc, size, frame, c, rot=(0, 0, yaw)))
+    inset = list(loc)
+    if abs(yaw) < 0.1:
+        inset[1] += 0.04 if loc[1] >= 0 else -0.04
+    else:
+        inset[0] += 0.04 if loc[0] >= 0 else -0.04
+    gs = (size[0] * 0.55, size[1] * 0.35, size[2] * 0.72)
+    p.append(g.cube("wg", tuple(inset), gs, glass, c, rot=(0, 0, yaw)))
+
+
 def banner(g, p, c, pole, cloth, loc, h=3.2, fly=1.4):
     x, y, z = loc
     p.append(g.cyl("pole", (x, y, z), 0.06, h, pole, c, verts=8))
     p.append(g.cube("ban", (x + fly * 0.45, y, z + h * 0.18), (fly, 0.05, 0.85), cloth, c))
+    p.append(g.cube("ban2", (x + fly * 0.42, y + 0.04, z + h * 0.02), (fly * 0.88, 0.04, 0.55), cloth, c, rot=(0, 0, math.radians(8))))
 
 
 def facade_windows(g, p, c, frame, glass, y, z, xs, size=(1.05, 0.18, 1.35), yaw=0.0):
@@ -127,6 +142,34 @@ def merlons(g, p, c, mat, cx, cy, z, half, count=5, skip_gate=True):
         p.append(g.cube("mw", (cx - half, cy + x, z), (0.48, 0.52, h), mat, c))
 
 
+def stone_drum(g, p, c, mat, z0, z1, radius, verts=24, course_h=0.26, uv=0.45, cx=0.0, cy=0.0):
+    """Stacked masonry rings so a tower reads as cut stone, not a plastic cylinder."""
+    z = z0
+    i = 0
+    while z + course_h * 0.4 < z1:
+        h = min(course_h, z1 - z)
+        rr = radius * (0.992 if i % 2 else 1.0)
+        p.append(g.cyl(f"course{i}", (cx, cy, z + h * 0.5), rr, h * 0.94, mat, c, verts=verts, uv=uv))
+        z += course_h
+        i += 1
+    return i
+
+
+def stone_shaft(g, p, c, mat, z0, z1, r0, r1, verts=20, course_h=0.2, uv=0.35, cx=0.0, cy=0.0):
+    """Tapered coursed tower shaft."""
+    z = z0
+    i = 0
+    htot = max(z1 - z0, 0.01)
+    while z + course_h * 0.35 < z1:
+        h = min(course_h, z1 - z)
+        t = (z - z0) / htot
+        rr = (r0 + (r1 - r0) * t) * (0.992 if i % 2 else 1.0)
+        p.append(g.cyl(f"shaft{i}", (cx, cy, z + h * 0.5), rr, h * 0.94, mat, c, verts=verts, uv=uv))
+        z += course_h
+        i += 1
+    return i
+
+
 def ashlar_face(g, p, c, mat, y, z0, z1, x0, x1, depth=0.08, bw=0.52, bh=0.22):
     """Running bond on a facade so a hall is not a blank plaster slab."""
     row = 0
@@ -141,16 +184,18 @@ def ashlar_face(g, p, c, mat, y, z0, z1, x0, x1, depth=0.08, bw=0.52, bh=0.22):
         row += 1
 
 
-def arch(g, p, c, mat, loc, radius=1.45, depth=0.95, z0=2.55, count=9, yaw=0.0):
+def arch(g, p, c, mat, loc, radius=1.45, depth=0.95, z0=2.55, count=9, yaw=0.0, block=(0.42, None, 0.36)):
     x, y, _ = loc
+    bw, _, bh = block
+    bd = depth if block[1] is None else block[1]
     for k in range(count):
         t = math.pi * k / (count - 1)
         ax = math.cos(t) * radius
         az = z0 + math.sin(t) * (radius * 0.92)
         if abs(yaw) < 0.1:
-            p.append(g.cube("vous", (x + ax, y, az), (0.42, depth, 0.36), mat, c, rot=(0, math.pi / 2 - t, 0)))
+            p.append(g.cube("vous", (x + ax, y, az), (bw, bd, bh), mat, c, rot=(0, math.pi / 2 - t, 0)))
         else:
-            p.append(g.cube("vous", (x, y + ax, az), (depth, 0.42, 0.36), mat, c, rot=(math.pi / 2 - t, 0, yaw)))
+            p.append(g.cube("vous", (x, y + ax, az), (bd, bw, bh), mat, c, rot=(math.pi / 2 - t, 0, yaw)))
 
 
 def door(g, p, c, wood, iron, loc, size=(1.0, 0.14, 2.5)):

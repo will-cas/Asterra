@@ -12,12 +12,14 @@ namespace Asterra.Core
         SetReady = 3,
         StartMatch = 4,
         SyncLobby = 5,
+        SetTeamColor = 6,
     }
 
     public sealed class PlayerSlotState
     {
         public PlayerId Player;
         public byte FactionIndex;
+        public byte TeamColorIndex;
         public bool IsReady;
         public string DisplayName = string.Empty;
     }
@@ -87,6 +89,7 @@ namespace Asterra.Core
                 {
                     Player = player,
                     FactionIndex = (byte)(player.Value % 6),
+                    TeamColorIndex = (byte)(player.Value % 8),
                     DisplayName = string.IsNullOrEmpty(displayName) ? $"Player {player.Value}" : displayName,
                 };
                 _slots[player.Value] = slot;
@@ -106,6 +109,16 @@ namespace Asterra.Core
             if (!_slots.TryGetValue(player.Value, out var slot))
                 slot = ClaimSlot(player);
             slot.FactionIndex = (byte)Math.Min(factionIndex, (byte)5);
+            slot.IsReady = false;
+        }
+
+        public void SetTeamColor(PlayerId player, byte colorIndex)
+        {
+            if (HasStarted)
+                return;
+            if (!_slots.TryGetValue(player.Value, out var slot))
+                slot = ClaimSlot(player);
+            slot.TeamColorIndex = (byte)(colorIndex % 8);
             slot.IsReady = false;
         }
 
@@ -132,6 +145,7 @@ namespace Asterra.Core
                 {
                     Player = pair.Value.Player,
                     FactionIndex = pair.Value.FactionIndex,
+                    TeamColorIndex = pair.Value.TeamColorIndex,
                     IsReady = pair.Value.IsReady,
                     DisplayName = pair.Value.DisplayName,
                 };
@@ -161,6 +175,7 @@ namespace Asterra.Core
             {
                 writer.Write(pair.Value.Player.Value);
                 writer.Write(pair.Value.FactionIndex);
+                writer.Write(pair.Value.TeamColorIndex);
                 writer.Write(pair.Value.IsReady);
                 writer.Write(pair.Value.DisplayName ?? string.Empty);
             }
@@ -187,6 +202,7 @@ namespace Asterra.Core
                 {
                     Player = new PlayerId(reader.ReadByte()),
                     FactionIndex = reader.ReadByte(),
+                    TeamColorIndex = reader.ReadByte(),
                     IsReady = reader.ReadBoolean(),
                     DisplayName = reader.ReadString(),
                 };
@@ -201,6 +217,17 @@ namespace Asterra.Core
             writer.Write((byte)LobbyMessageType.SetFaction);
             writer.Write(player.Value);
             writer.Write(factionIndex);
+            writer.Flush();
+            return ms.ToArray();
+        }
+
+        public static byte[] SerializeSetTeamColor(PlayerId player, byte colorIndex)
+        {
+            using var ms = new MemoryStream(8);
+            using var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
+            writer.Write((byte)LobbyMessageType.SetTeamColor);
+            writer.Write(player.Value);
+            writer.Write(colorIndex);
             writer.Flush();
             return ms.ToArray();
         }
@@ -242,6 +269,9 @@ namespace Asterra.Core
             {
                 case LobbyMessageType.SetFaction:
                     SetFaction(new PlayerId(reader.ReadByte()), reader.ReadByte());
+                    break;
+                case LobbyMessageType.SetTeamColor:
+                    SetTeamColor(new PlayerId(reader.ReadByte()), reader.ReadByte());
                     break;
                 case LobbyMessageType.SetReady:
                     SetReady(new PlayerId(reader.ReadByte()), reader.ReadBoolean());

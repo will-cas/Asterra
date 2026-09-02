@@ -182,6 +182,10 @@ namespace Asterra.Gameplay.Presentation
             AsterraLightingLook.ApplyCloudGlobals(
                 Mathf.Lerp(0.08f, 0.72f, overcast) * Mathf.Lerp(1f, 0.35f, nightDim),
                 new Vector2(_cloudOffsetX, _cloudOffsetZ));
+            AsterraLightingLook.ApplyWindGlobals(
+                weatherSys.WindDirX,
+                weatherSys.WindDirZ,
+                0.22f + weatherSys.WindIntensity * 0.9f + overcast * 0.25f);
             AsterraLightingLook.TickLightning(Time.deltaTime);
 
             if (!driveRenderSettings)

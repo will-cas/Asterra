@@ -32,12 +32,12 @@ Shader "Asterra/Water"
             #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
             #pragma multi_compile_fog
             #include "AsterraLighting.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/GlobalIllumination.hlsl"
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float4 color : COLOR;
             };
 
             struct Varyings
@@ -45,6 +45,7 @@ Shader "Asterra/Water"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
+                float4 color : COLOR;
             };
 
             CBUFFER_START(UnityPerMaterial)
@@ -63,6 +64,7 @@ Shader "Asterra/Water"
                 output.positionCS = pos.positionCS;
                 output.positionWS = pos.positionWS;
                 output.normalWS = nrm.normalWS;
+                output.color = input.color;
                 return output;
             }
 
@@ -83,28 +85,50 @@ Shader "Asterra/Water"
             half4 frag(Varyings input) : SV_Target
             {
                 float3 nWS = normalize(lerp(normalize(input.normalWS), WaveNormal(input.positionWS), 0.65));
-                half3 albedo = _Color.rgb * 0.55;
+                float shallow = saturate(input.color.r);
+                float ocean = saturate(input.color.g);
+                half3 deep = _Color.rgb * lerp(0.42, 0.32, ocean);
+                half3 near = half3(0.18, 0.48, 0.46);
+                half3 albedo = lerp(deep, near, shallow);
+                float foamN = AsterraValueNoise(input.positionWS.xz * 0.22 + _Time.y * 0.08);
+                albedo = lerp(albedo, half3(0.78, 0.86, 0.88), saturate(shallow * foamN * 1.4));
                 half4 lit = AsterraShadePBR(
                     input.positionWS,
                     input.positionCS,
                     nWS,
                     albedo,
                     0.04,
-                    _Smoothness,
-                    1.0);
+                    lerp(_Smoothness, 0.55, shallow),
+                    lerp(1.0, 0.88, shallow));
 
                 float3 viewDir = GetWorldSpaceNormalizeViewDir(input.positionWS);
                 float3 reflectVec = reflect(-viewDir, nWS);
                 half3 env = GlossyEnvironmentReflection(reflectVec, input.positionWS, 1.0 - _Smoothness, 1.0);
                 float fresnel = pow(1.0 - saturate(dot(nWS, viewDir)), 3.0) * _Fresnel;
-                lit.rgb += env * fresnel;
+                lit.rgb += env * fresnel * lerp(1.0, 0.45, shallow);
                 return lit;
             }
             ENDHLSL
         }
 
-        UsePass "Universal Render Pipeline/Lit/DepthOnly"
-        UsePass "Universal Render Pipeline/Lit/DepthNormals"
+        Pass
+        {
+            Name "DepthOnly"
+            Tags { "LightMode"="DepthOnly" }
+            ZWrite On
+            ColorMask R
+
+            HLSLPROGRAM
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            float4 DepthVert(float4 positionOS : POSITION) : SV_POSITION
+            {
+                return TransformObjectToHClip(positionOS.xyz);
+            }
+            half DepthFrag() : SV_TARGET { return 0; }
+            ENDHLSL
+        }
     }
     FallBack "Universal Render Pipeline/Lit"
 }

@@ -31,6 +31,11 @@ namespace Asterra.Core
         public readonly uint AttackTargetId;
         public readonly bool AttackMoving;
         public readonly bool Patrolling;
+        public readonly bool HasGatherTarget;
+        public readonly bool ReturningToDeposit;
+        public readonly bool Stunned;
+        public readonly bool Airborne;
+        public readonly bool WaterCraft;
 
         public UnitSnapshot(
             SimEntityId id,
@@ -58,7 +63,12 @@ namespace Asterra.Core
             bool hasAttackTarget = false,
             uint attackTargetId = 0,
             bool attackMoving = false,
-            bool patrolling = false)
+            bool patrolling = false,
+            bool hasGatherTarget = false,
+            bool returningToDeposit = false,
+            bool stunned = false,
+            bool airborne = false,
+            bool waterCraft = false)
         {
             Id = id;
             Owner = owner;
@@ -86,6 +96,11 @@ namespace Asterra.Core
             AttackTargetId = attackTargetId;
             AttackMoving = attackMoving;
             Patrolling = patrolling;
+            HasGatherTarget = hasGatherTarget;
+            ReturningToDeposit = returningToDeposit;
+            Stunned = stunned;
+            Airborne = airborne;
+            WaterCraft = waterCraft;
         }
 
         public bool HasAppliedEquipment(string upgradeId)
@@ -259,13 +274,15 @@ namespace Asterra.Core
         public readonly float Z;
         public readonly float TargetX;
         public readonly float TargetZ;
+        public readonly UnitRole Role;
 
-        public ProjectileSnapshot(float x, float z, float targetX, float targetZ)
+        public ProjectileSnapshot(float x, float z, float targetX, float targetZ, UnitRole role = UnitRole.Infantry)
         {
             X = x;
             Z = z;
             TargetX = targetX;
             TargetZ = targetZ;
+            Role = role;
         }
     }
 

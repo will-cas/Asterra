@@ -18,6 +18,9 @@ namespace Asterra.Gameplay.Presentation
         [SerializeField] private bool hideFlatGround = true;
         [SerializeField] private int heightBlurPasses = 2;
         [SerializeField] private int cellSubdivisions = 2;
+        [SerializeField] private int maxGrassCards = 260;
+        [SerializeField] private int maxRockShelves = 70;
+        [SerializeField] private int maxShoreFoam = 110;
 
         /// <summary>When false, skip hiding AsterraGround (map-creator preview must not touch the skirmish scene).</summary>
         public bool HideSkirmishGround
@@ -39,6 +42,8 @@ namespace Asterra.Gameplay.Presentation
         private Material _bushMat;
         private Material _reedMat;
         private Material _crystalMat;
+        private Material _grassCardMat;
+        private Material _foamMat;
         private Texture2D _detailTex;
         private MapTexturePaint[] _texturePaint = System.Array.Empty<MapTexturePaint>();
         private int _texturePaintHash;
@@ -46,6 +51,7 @@ namespace Asterra.Gameplay.Presentation
         private int _heightPaintHash;
 
         private float[] _heightSamples;
+        private TerrainCategory[] _categorySamples;
         private int _heightW;
         private int _heightH;
         private float _heightOriginX;
@@ -195,14 +201,15 @@ namespace Asterra.Gameplay.Presentation
             MapHeightSculpt.Apply(
                 smoothHeight, w, h, grid.OriginX, grid.OriginZ, grid.CellSize, _heightPaint);
 
-            BuildContinuousMesh(grid, smoothHeight, splat, categories);
-            CacheHeightSamples(grid, smoothHeight);
+            BuildContinuousMesh(grid, smoothHeight, splat, categories, defIndices);
+            CacheHeightSamples(grid, smoothHeight, categories);
             BuildWaterSurface(grid, smoothHeight, categories);
             ScatterTrees(grid, smoothHeight, categories, propRoot);
             ScatterDeco(grid, smoothHeight, categories, propRoot);
+            ScatterGroundCover(grid, smoothHeight, categories, propRoot);
         }
 
-        private void CacheHeightSamples(WorldTerrainGrid grid, float[] heights)
+        private void CacheHeightSamples(WorldTerrainGrid grid, float[] heights, TerrainCategory[] categories)
         {
             _heightW = grid.Width;
             _heightH = grid.Height;
@@ -212,6 +219,12 @@ namespace Asterra.Gameplay.Presentation
             if (_heightSamples == null || _heightSamples.Length != heights.Length)
                 _heightSamples = new float[heights.Length];
             System.Array.Copy(heights, _heightSamples, heights.Length);
+            if (categories != null)
+            {
+                if (_categorySamples == null || _categorySamples.Length != categories.Length)
+                    _categorySamples = new TerrainCategory[categories.Length];
+                System.Array.Copy(categories, _categorySamples, categories.Length);
+            }
         }
 
         /// <summary>Bilinear sample of the painted terrain height at a world XZ (for unit footing / rings).</summary>
@@ -240,11 +253,29 @@ namespace Asterra.Gameplay.Presentation
             return Mathf.Lerp(h0, h1, tz);
         }
 
+        /// <summary>0–1 wade amount from water / swamp / trench under a world XZ.</summary>
+        public float SampleWade(float worldX, float worldZ)
+        {
+            if (_categorySamples == null || _heightW < 1 || _heightH < 1)
+                return 0f;
+            int cx = Mathf.Clamp(Mathf.FloorToInt((worldX - _heightOriginX) / _heightCellSize), 0, _heightW - 1);
+            int cz = Mathf.Clamp(Mathf.FloorToInt((worldZ - _heightOriginZ) / _heightCellSize), 0, _heightH - 1);
+            var cat = _categorySamples[cz * _heightW + cx];
+            if (IsWater(cat))
+                return 1f;
+            if (cat == TerrainCategory.Swamp)
+                return 0.55f;
+            if (cat == TerrainCategory.Trench)
+                return 0.4f;
+            return 0f;
+        }
+
         private void BuildContinuousMesh(
             WorldTerrainGrid grid,
             float[] heights,
             Color[] colors,
-            TerrainCategory[] categories)
+            TerrainCategory[] categories,
+            ushort[] defIndices)
         {
             int w = grid.Width;
             int h = grid.Height;
@@ -277,6 +308,8 @@ namespace Asterra.Gameplay.Presentation
             int vertsZ = h * sub + 1;
             var verts = new Vector3[vertsX * vertsZ];
             var cols = new Color[vertsX * vertsZ];
+            var uv = new Vector2[vertsX * vertsZ];
+            var uv2 = new Vector2[vertsX * vertsZ];
             float cell = grid.CellSize;
             float originX = grid.OriginX;
             float originZ = grid.OriginZ;
@@ -301,6 +334,11 @@ namespace Asterra.Gameplay.Presentation
                     int idx = vz * vertsX + vx;
                     verts[idx] = new Vector3(worldX, y, worldZ);
                     cols[idx] = c;
+                    Vector2 biome = TerrainSplat.BiomeUv(categories[cz * w + cx], defIndices[cz * w + cx]);
+                    uv[idx] = biome;
+                    uv2[idx] = new Vector2(
+                        ShoreAmount(categories, w, h, cx, cz),
+                        TerrainSplat.Scorched01(defIndices[cz * w + cx]));
                 }
             }
 
@@ -327,6 +365,8 @@ namespace Asterra.Gameplay.Presentation
                 mesh.indexFormat = IndexFormat.UInt32;
             mesh.vertices = verts;
             mesh.colors = cols;
+            mesh.uv = uv;
+            mesh.uv2 = uv2;
             mesh.triangles = tris;
             mesh.RecalculateNormals();
             mesh.RecalculateTangents();
@@ -427,6 +467,31 @@ namespace Asterra.Gameplay.Presentation
                 mesh.indexFormat = IndexFormat.UInt32;
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
+            var waterCols = new List<Color>(verts.Count);
+            for (int i = 0; i < verts.Count; i++)
+                waterCols.Add(new Color(0f, 0.35f, 0.55f, 1f));
+            for (int cz = 0; cz < h; cz++)
+            {
+                for (int cx = 0; cx < w; cx++)
+                {
+                    if (!IsOpenWater(categories[cz * w + cx]))
+                        continue;
+                    float shallow = WaterShallow(categories, w, h, cx, cz);
+                    float ocean = categories[cz * w + cx] == TerrainCategory.WaterOcean ? 1f : 0.35f;
+                    int i = cz * cw + cx;
+                    int a = remap[i];
+                    int b = remap[i + cw];
+                    int c = remap[i + cw + 1];
+                    int d = remap[i + 1];
+                    var col = new Color(shallow, ocean, 0.4f, 1f);
+                    if (a >= 0) waterCols[a] = Color.Lerp(waterCols[a], col, 0.65f);
+                    if (b >= 0) waterCols[b] = Color.Lerp(waterCols[b], col, 0.65f);
+                    if (c >= 0) waterCols[c] = Color.Lerp(waterCols[c], col, 0.65f);
+                    if (d >= 0) waterCols[d] = Color.Lerp(waterCols[d], col, 0.65f);
+                }
+            }
+
+            mesh.SetColors(waterCols);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
@@ -544,7 +609,10 @@ namespace Asterra.Gameplay.Presentation
                 canopy.transform.localScale = new Vector3(s, s * 0.72f, s);
                 canopy.GetComponent<Renderer>().sharedMaterial = _canopyMat;
                 canopy.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.On;
+                AsterraWindSway.Add(canopy, AsterraPropMotion.Wind, 1.15f + i * 0.2f, 1.05f + i * 0.1f);
             }
+
+            AsterraWindSway.Add(root, AsterraPropMotion.Wind, dense ? 0.85f : 0.7f, 0.85f);
         }
 
         private void ScatterDeco(
@@ -674,6 +742,7 @@ namespace Asterra.Gameplay.Presentation
             bush.transform.localScale = new Vector3(s, s * 0.62f, s);
             bush.GetComponent<Renderer>().sharedMaterial = _bushMat;
             bush.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            AsterraWindSway.Add(bush, AsterraPropMotion.Wind, 1.35f, 1.2f);
         }
 
         private void SpawnReed(Transform parent, float x, float groundY, float z, int hash)
@@ -700,6 +769,8 @@ namespace Asterra.Gameplay.Presentation
                 stem.GetComponent<Renderer>().sharedMaterial = _reedMat;
                 stem.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             }
+
+            AsterraWindSway.Add(root, AsterraPropMotion.Wind, 1.55f, 1.35f);
         }
 
         private void SpawnCrystal(Transform parent, float x, float groundY, float z, int hash)
@@ -715,6 +786,176 @@ namespace Asterra.Gameplay.Presentation
             crystal.transform.localScale = new Vector3(w, h, w);
             crystal.GetComponent<Renderer>().sharedMaterial = _crystalMat;
             crystal.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            AsterraWindSway.Add(crystal, AsterraPropMotion.Pulse, 1.1f, 0.85f);
+        }
+
+        private void ScatterGroundCover(
+            WorldTerrainGrid grid,
+            float[] heights,
+            TerrainCategory[] categories,
+            Transform propRoot)
+        {
+            int w = grid.Width;
+            int h = grid.Height;
+            var cover = new GameObject("GroundCover").transform;
+            cover.SetParent(propRoot, false);
+            int grass = 0;
+            int shelves = 0;
+            int foam = 0;
+
+            for (int cz = 0; cz < h; cz++)
+            {
+                for (int cx = 0; cx < w; cx++)
+                {
+                    var cat = categories[cz * w + cx];
+                    if (IsOpenWater(cat))
+                        continue;
+                    int hash = cx * 50331653 ^ cz * 12582917;
+                    grid.CellCenter(cx, cz, out float wx, out float wz);
+                    wx += (((hash >> 3) & 7) / 7f - 0.5f) * grid.CellSize * 0.6f;
+                    wz += (((hash >> 6) & 7) / 7f - 0.5f) * grid.CellSize * 0.6f;
+                    float groundY = heights[cz * w + cx];
+                    float slope = CellSlope(heights, w, h, cx, cz, grid.CellSize);
+
+                    if (grass < maxGrassCards
+                        && slope < 0.38f
+                        && (cat == TerrainCategory.GrassLong || cat == TerrainCategory.GrassShort
+                            || cat == TerrainCategory.Forest || cat == TerrainCategory.Hill)
+                        && (hash & (cat == TerrainCategory.GrassLong ? 3 : 7)) == 0)
+                    {
+                        SpawnGrassCard(cover, wx, groundY, wz, hash);
+                        grass++;
+                    }
+
+                    if (shelves < maxRockShelves
+                        && slope > 0.22f
+                        && (cat == TerrainCategory.Hill || cat == TerrainCategory.Mountain || cat == TerrainCategory.Rock)
+                        && (hash & 15) == 0)
+                    {
+                        SpawnRockShelf(cover, wx, groundY, wz, hash, slope);
+                        shelves++;
+                    }
+
+                    if (foam < maxShoreFoam
+                        && _foamMat != null
+                        && ShoreAmount(categories, w, h, cx, cz) > 0.42f
+                        && (hash & 5) == 0)
+                    {
+                        SpawnShoreFoam(cover, wx, groundY, wz, hash);
+                        foam++;
+                    }
+                }
+            }
+        }
+
+        private void SpawnGrassCard(Transform parent, float x, float groundY, float z, int hash)
+        {
+            float s = (1.15f + ((hash >> 4) & 7) * 0.08f) * PropToUnitScale * 0.42f;
+            for (int i = 0; i < 2; i++)
+            {
+                var card = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                DestroyCompat(card.GetComponent<Collider>());
+                card.name = "GrassCard";
+                card.transform.SetParent(parent, false);
+                card.transform.position = new Vector3(x, groundY + s * 0.42f, z);
+                card.transform.rotation = Quaternion.Euler(-8f, (hash + i * 90) & 359, 6f);
+                card.transform.localScale = new Vector3(s, s * 0.85f, 1f);
+                var rend = card.GetComponent<Renderer>();
+                rend.sharedMaterial = _grassCardMat;
+                rend.shadowCastingMode = ShadowCastingMode.Off;
+                AsterraWindSway.Add(card, AsterraPropMotion.Wind, 1.7f, 1.45f);
+            }
+        }
+
+        private void SpawnRockShelf(Transform parent, float x, float groundY, float z, int hash, float slope)
+        {
+            var shelf = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            DestroyCompat(shelf.GetComponent<Collider>());
+            shelf.name = "RockShelf";
+            shelf.transform.SetParent(parent, false);
+            float w = (2.4f + ((hash >> 5) & 5) * 0.35f) * PropToUnitScale * 0.55f;
+            float d = (1.1f + ((hash >> 8) & 3) * 0.2f) * PropToUnitScale * 0.45f;
+            float th = 0.22f * PropToUnitScale;
+            shelf.transform.position = new Vector3(x, groundY + th * 0.35f, z);
+            shelf.transform.rotation = Quaternion.Euler(slope * 18f, hash & 359, (hash & 7) - 3);
+            shelf.transform.localScale = new Vector3(w, th, d);
+            var rend = shelf.GetComponent<Renderer>();
+            rend.sharedMaterial = _rockMat;
+            rend.shadowCastingMode = ShadowCastingMode.On;
+        }
+
+        private void SpawnShoreFoam(Transform parent, float x, float groundY, float z, int hash)
+        {
+            var foam = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            DestroyCompat(foam.GetComponent<Collider>());
+            foam.name = "ShoreFoam";
+            foam.transform.SetParent(parent, false);
+            float s = (1.6f + ((hash >> 2) & 5) * 0.15f) * PropToUnitScale * 0.5f;
+            foam.transform.position = new Vector3(x, groundY + 0.08f, z);
+            foam.transform.rotation = Quaternion.Euler(90f, hash & 359, 0f);
+            foam.transform.localScale = new Vector3(s, s * 0.55f, 1f);
+            var rend = foam.GetComponent<Renderer>();
+            rend.sharedMaterial = _foamMat;
+            rend.shadowCastingMode = ShadowCastingMode.Off;
+            AsterraWindSway.Add(foam, AsterraPropMotion.Bob, 0.55f, 1.1f);
+        }
+
+        private static float CellSlope(float[] heights, int w, int h, int cx, int cz, float cell)
+        {
+            float hL = heights[cz * w + Mathf.Max(cx - 1, 0)];
+            float hR = heights[cz * w + Mathf.Min(cx + 1, w - 1)];
+            float hD = heights[Mathf.Max(cz - 1, 0) * w + cx];
+            float hU = heights[Mathf.Min(cz + 1, h - 1) * w + cx];
+            float dx = (hR - hL) / Mathf.Max(0.01f, cell * 2f);
+            float dz = (hU - hD) / Mathf.Max(0.01f, cell * 2f);
+            return Mathf.Clamp01(Mathf.Sqrt(dx * dx + dz * dz));
+        }
+
+        private static float ShoreAmount(TerrainCategory[] categories, int w, int h, int cx, int cz)
+        {
+            if (IsOpenWater(categories[cz * w + cx]))
+                return 0f;
+            float best = 4f;
+            for (int dz = -3; dz <= 3; dz++)
+            {
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    int x = cx + dx;
+                    int z = cz + dz;
+                    if ((uint)x >= (uint)w || (uint)z >= (uint)h)
+                        continue;
+                    if (!IsOpenWater(categories[z * w + x]))
+                        continue;
+                    float d = Mathf.Sqrt(dx * dx + dz * dz);
+                    if (d < best)
+                        best = d;
+                }
+            }
+
+            return Mathf.Clamp01(1f - best / 2.8f);
+        }
+
+        private static float WaterShallow(TerrainCategory[] categories, int w, int h, int cx, int cz)
+        {
+            int land = 0;
+            int n = 0;
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dz == 0)
+                        continue;
+                    int x = cx + dx;
+                    int z = cz + dz;
+                    if ((uint)x >= (uint)w || (uint)z >= (uint)h)
+                        continue;
+                    n++;
+                    if (!IsOpenWater(categories[z * w + x]))
+                        land++;
+                }
+            }
+
+            return n == 0 ? 0f : land / (float)n;
         }
 
         private void EnsureMaterials()
@@ -737,27 +978,20 @@ namespace Asterra.Gameplay.Presentation
                 if (_terrainMat.HasProperty("_AmbientFloor"))
                     _terrainMat.SetFloat("_AmbientFloor", 0.08f);
                 if (_terrainMat.HasProperty("_UvScale"))
-                    _terrainMat.SetFloat("_UvScale", 0.07f);
-                if (_terrainMat.HasProperty("_GrassTex"))
-                    _terrainMat.SetTexture("_GrassTex", AsterraMeshLibrary.GetTerrainAlbedo("grass"));
-                if (_terrainMat.HasProperty("_DirtTex"))
-                    _terrainMat.SetTexture("_DirtTex", AsterraMeshLibrary.GetTerrainAlbedo("dirt"));
-                if (_terrainMat.HasProperty("_RockTex"))
-                    _terrainMat.SetTexture("_RockTex", AsterraMeshLibrary.GetTerrainAlbedo("rock"));
-                if (_terrainMat.HasProperty("_SandTex"))
-                    _terrainMat.SetTexture("_SandTex", AsterraMeshLibrary.GetTerrainAlbedo("sand"));
-                if (_terrainMat.HasProperty("_Gloss"))
-                    _terrainMat.SetFloat("_Gloss", 0.42f);
-                if (_terrainMat.HasProperty("_DetailTex"))
-                    _terrainMat.SetTexture("_DetailTex", _detailTex);
-                if (_terrainMat.HasProperty("_DetailScale"))
-                    _terrainMat.SetFloat("_DetailScale", 0.07f);
-                if (_terrainMat.HasProperty("_DetailStrength"))
-                    _terrainMat.SetFloat("_DetailStrength", 0.5f);
+                    _terrainMat.SetFloat("_UvScale", 0.065f);
+                BindTerrainLayer(_terrainMat, "_Grass", "grass", "grass");
+                BindTerrainLayer(_terrainMat, "_Dirt", "leather", "dirt");
+                BindTerrainLayer(_terrainMat, "_Rock", "slate", "rock");
+                BindTerrainLayer(_terrainMat, "_Sand", "plaster", "sand");
+                BindTerrainLayer(_terrainMat, "_Ice", "ice", "sand");
                 if (_terrainMat.HasProperty("_MacroScale"))
-                    _terrainMat.SetFloat("_MacroScale", 0.011f);
-                if (_terrainMat.HasProperty("_MacroStrength"))
-                    _terrainMat.SetFloat("_MacroStrength", 0.25f);
+                    _terrainMat.SetFloat("_MacroScale", 0.012f);
+                if (_terrainMat.HasProperty("_MacroBlend"))
+                    _terrainMat.SetFloat("_MacroBlend", 0.4f);
+                if (_terrainMat.HasProperty("_HeightBlend"))
+                    _terrainMat.SetFloat("_HeightBlend", 0.24f);
+                if (_terrainMat.HasProperty("_BumpScale"))
+                    _terrainMat.SetFloat("_BumpScale", 1.2f);
             }
 
             if (_trunkMat == null)
@@ -786,6 +1020,42 @@ namespace Asterra.Gameplay.Presentation
                 _reedMat = AsterraPbrLibrary.CreateLit(new Color(0.85f, 0.92f, 0.7f), "leaf");
             if (_crystalMat == null)
                 _crystalMat = AsterraPbrLibrary.CreateLit(new Color(1f, 0.95f, 0.7f), "crystal", 0.55f);
+            if (_grassCardMat == null)
+            {
+                _grassCardMat = AsterraPbrLibrary.CreateLit(new Color(0.55f, 0.78f, 0.32f), "leaf");
+                if (_grassCardMat.HasProperty("_UvScale"))
+                    _grassCardMat.SetFloat("_UvScale", 0.9f);
+            }
+            if (_foamMat == null)
+            {
+                var shader = Shader.Find("Asterra/UnlitColor")
+                             ?? Shader.Find("Universal Render Pipeline/Unlit")
+                             ?? Shader.Find("Unlit/Color");
+                if (shader != null)
+                    _foamMat = new Material(shader);
+                if (_foamMat != null)
+                {
+                    var foam = new Color(0.92f, 0.96f, 1f, 0.85f);
+                    if (_foamMat.HasProperty("_BaseColor"))
+                        _foamMat.SetColor("_BaseColor", foam);
+                    if (_foamMat.HasProperty("_Color"))
+                        _foamMat.SetColor("_Color", foam);
+                }
+            }
+        }
+
+        private static void BindTerrainLayer(Material mat, string prefix, string pbrKey, string fallbackLayer)
+        {
+            if (mat == null)
+                return;
+            var maps = AsterraPbrLibrary.GetMaps(pbrKey);
+            Texture2D albedo = maps.Albedo != null ? maps.Albedo : AsterraMeshLibrary.GetTerrainAlbedo(fallbackLayer);
+            if (mat.HasProperty(prefix + "Tex") && albedo != null)
+                mat.SetTexture(prefix + "Tex", albedo);
+            if (maps.Normal != null && mat.HasProperty(prefix + "N"))
+                mat.SetTexture(prefix + "N", maps.Normal);
+            if (maps.Roughness != null && mat.HasProperty(prefix + "R"))
+                mat.SetTexture(prefix + "R", maps.Roughness);
         }
 
         private static Texture2D BuildDetailTexture(int size)
@@ -952,12 +1222,14 @@ namespace Asterra.Gameplay.Presentation
             return category;
         }
 
-        private static bool IsWater(TerrainCategory category) =>
+        private static bool IsOpenWater(TerrainCategory category) =>
             category == TerrainCategory.WaterRiver
             || category == TerrainCategory.WaterLake
             || category == TerrainCategory.WaterOcean
-            || category == TerrainCategory.WaterWaterfall
-            || category == TerrainCategory.Ice;
+            || category == TerrainCategory.WaterWaterfall;
+
+        private static bool IsWater(TerrainCategory category) =>
+            IsOpenWater(category) || category == TerrainCategory.Ice;
 
         private static float MicroRelief(int cx, int cz, TerrainCategory category)
         {

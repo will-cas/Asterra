@@ -40,11 +40,14 @@ namespace Asterra.Gameplay.Presentation
         private static Mesh Parse(string text, string name)
         {
             var positions = new List<Vector3>(256);
+            var colors = new List<Color>(256);
             var texcoords = new List<Vector2>(256);
             var outPos = new List<Vector3>(256);
             var outUv = new List<Vector2>(256);
+            var outCol = new List<Color>(256);
             var tris = new List<int>(512);
             bool anyUv = false;
+            bool anyCol = false;
 
             var lines = text.Split('\n');
             for (int i = 0; i < lines.Length; i++)
@@ -58,6 +61,13 @@ namespace Asterra.Gameplay.Presentation
                     if (p.Length < 4)
                         continue;
                     positions.Add(new Vector3(F(p[1]), F(p[2]), F(p[3])));
+                    if (p.Length >= 7)
+                    {
+                        colors.Add(new Color(F(p[4]), F(p[5]), F(p[6]), 1f));
+                        anyCol = true;
+                    }
+                    else
+                        colors.Add(Color.white);
                 }
                 else if (line.StartsWith("vt "))
                 {
@@ -72,11 +82,11 @@ namespace Asterra.Gameplay.Presentation
                     var p = Split(line);
                     if (p.Length < 4)
                         continue;
-                    int i0 = EmitCorner(p[1], positions, texcoords, outPos, outUv);
-                    int i1 = EmitCorner(p[2], positions, texcoords, outPos, outUv);
+                    int i0 = EmitCorner(p[1], positions, colors, texcoords, outPos, outUv, outCol);
+                    int i1 = EmitCorner(p[2], positions, colors, texcoords, outPos, outUv, outCol);
                     for (int t = 3; t < p.Length; t++)
                     {
-                        int i2 = EmitCorner(p[t], positions, texcoords, outPos, outUv);
+                        int i2 = EmitCorner(p[t], positions, colors, texcoords, outPos, outUv, outCol);
                         tris.Add(i0);
                         tris.Add(i1);
                         tris.Add(i2);
@@ -95,6 +105,8 @@ namespace Asterra.Gameplay.Presentation
             mesh.SetTriangles(tris, 0);
             if (anyUv)
                 mesh.SetUVs(0, outUv);
+            if (anyCol)
+                mesh.SetColors(outCol);
             mesh.RecalculateNormals();
             mesh.RecalculateTangents();
             mesh.RecalculateBounds();
@@ -104,12 +116,18 @@ namespace Asterra.Gameplay.Presentation
         private static int EmitCorner(
             string token,
             List<Vector3> positions,
+            List<Color> colors,
             List<Vector2> texcoords,
             List<Vector3> outPos,
-            List<Vector2> outUv)
+            List<Vector2> outUv,
+            List<Color> outCol)
         {
             ParseFaceCorner(token, positions.Count, texcoords.Count, out int vi, out int ti);
             outPos.Add(positions[vi]);
+            if (vi >= 0 && vi < colors.Count)
+                outCol.Add(colors[vi]);
+            else
+                outCol.Add(Color.white);
             if (ti >= 0 && ti < texcoords.Count)
                 outUv.Add(texcoords[ti]);
             else

@@ -62,6 +62,18 @@ namespace Asterra.Gameplay
             Status = DescribeLobby();
         }
 
+        public void SetLocalTeamColor(int colorIndex)
+        {
+            var player = new PlayerId(localPlayerIndex);
+            byte color = (byte)Mathf.Clamp(colorIndex, 0, 7);
+            if (lobbyBridge != null)
+                lobbyBridge.BroadcastSetTeamColor(player, color);
+            else
+                match?.Lobby.SetTeamColor(player, color);
+            match?.SetTeamColorIndex(player, color);
+            Status = DescribeLobby();
+        }
+
         public void SetLocalReady(bool ready)
         {
             var player = new PlayerId(localPlayerIndex);

@@ -26,6 +26,14 @@ namespace Asterra.Net
                 LobbyMessageRpc(MatchLobbyState.SerializeSetFaction(player, factionIndex));
         }
 
+        public void BroadcastSetTeamColor(PlayerId player, byte colorIndex)
+        {
+            Lobby.SetTeamColor(player, colorIndex);
+            LobbyChanged?.Invoke();
+            if (IsSpawned)
+                LobbyMessageRpc(MatchLobbyState.SerializeSetTeamColor(player, colorIndex));
+        }
+
         public void BroadcastSetReady(PlayerId player, bool ready)
         {
             Lobby.SetReady(player, ready);

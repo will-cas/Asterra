@@ -125,14 +125,12 @@ def sample_slate(x, y, w, h):
 
 
 def sample_gold(x, y, w, h):
-    n = fbm(x / w, y / h, 11.0, 5, 10.0)
-    scratches = abs(math.sin((x / w) * 54.0 + n * 6.0))
-    c1, c2 = (0.58, 0.44, 0.20), (0.28, 0.20, 0.09)
-    col = _mix3(c1, c2, n * 0.75)
-    col = _mix3(col, (0.16, 0.12, 0.06), max(0.0, 0.18 - scratches) * 1.3)
-    oxid = max(0.0, fbm(x / w, y / h, 29.0, 3, 3.0) - 0.6) * 1.8
-    col = _mix3(col, (0.32, 0.38, 0.18), oxid * 0.35)
-    return (*col, 0.42 + n * 0.2 + oxid * 0.15, n)
+    n = fbm(x / w, y / h, 11.0, 4, 3.2)
+    patina = max(0.0, fbm(x / w, y / h, 29.0, 3, 1.6) - 0.6)
+    c1, c2 = (0.84, 0.70, 0.34), (0.46, 0.33, 0.12)
+    col = _mix3(c1, c2, n * 0.5)
+    col = _mix3(col, (0.34, 0.46, 0.26), patina * 0.2)
+    return (*col, 0.16 + n * 0.12 + patina * 0.18, n * 0.28)
 
 
 def sample_wood(x, y, w, h):
@@ -210,9 +208,9 @@ def sample_grass(x, y, w, h):
 def sample_crystal(x, y, w, h):
     n = fbm(x / w, y / h, 22.0, 4, 11.0)
     facet = abs(math.sin((x + y) / w * 40.0))
-    col = _mix3((0.95, 0.82, 0.22), (0.75, 0.55, 0.10), n)
-    col = _mix3(col, (1.0, 0.95, 0.55), facet * 0.35)
-    return (*col, 0.22 + n * 0.1, facet)
+    col = _mix3((0.78, 0.88, 0.96), (0.42, 0.58, 0.78), n)
+    col = _mix3(col, (0.95, 0.98, 1.0), facet * 0.28)
+    return (*col, 0.12 + n * 0.12, facet)
 
 
 def sample_ice(x, y, w, h):
@@ -226,9 +224,9 @@ def sample_ice(x, y, w, h):
 def sample_glass(x, y, w, h):
     n = fbm(x / w, y / h, 19.0, 3, 6.0)
     streak = abs(math.sin((x / w) * 14.0 + n))
-    col = _mix3((0.42, 0.52, 0.62), (0.22, 0.18, 0.32), n * 0.45)
-    col = _mix3(col, (0.70, 0.78, 0.88), streak * 0.25)
-    return (*col, 0.08 + n * 0.08, streak * 0.15)
+    col = _mix3((0.78, 0.86, 0.90), (0.55, 0.62, 0.68), n * 0.45)
+    col = _mix3(col, (0.92, 0.95, 0.97), streak * 0.25)
+    return (*col, 0.06 + n * 0.08, streak * 0.15)
 
 
 def sample_steel(x, y, w, h):

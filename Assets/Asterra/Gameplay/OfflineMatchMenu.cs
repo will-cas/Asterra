@@ -21,6 +21,8 @@ namespace Asterra.Gameplay
         private View _view = View.Hub;
         private int _playerFaction;
         private int _enemyFaction = 1;
+        private int _playerTeamColor;
+        private int _enemyTeamColor = 1;
         private MapCatalog.Choice _map = MapCatalog.BuiltinChoice(SkirmishMapId.LushForest);
         private AiDifficulty _difficulty = AiDifficulty.Normal;
         private int _spawnSeat;
@@ -44,6 +46,10 @@ namespace Asterra.Gameplay
             {
                 _playerFaction = bootstrap.PlayerFactionIndex;
                 _enemyFaction = bootstrap.EnemyFactionIndex;
+                _playerTeamColor = bootstrap.PlayerTeamColorIndex;
+                _enemyTeamColor = bootstrap.EnemyTeamColorIndex;
+                if (_playerTeamColor == 0 && _enemyTeamColor == 0 && _enemyFaction != 0)
+                    _enemyTeamColor = _enemyFaction;
                 _map = MapCatalog.FromId(bootstrap.MapKey);
                 _difficulty = bootstrap.AiDifficulty;
                 _spawnSeat = bootstrap.LocalSpawnSeat;
@@ -355,28 +361,30 @@ namespace Asterra.Gameplay
             }
 
             float cardY = y + 124f;
-            float cardH = Mathf.Clamp(h * 0.2f, 130f, 170f);
+            float cardH = Mathf.Clamp(h * 0.24f, 168f, 210f);
             float gap = 14f;
             float cardW = (contentW - gap * 2f - 52f) * 0.5f;
 
             var playerRoster = FactionDefaultContent.All[_playerFaction % FactionDefaultContent.All.Length];
             var enemyRoster = FactionDefaultContent.All[_enemyFaction % FactionDefaultContent.All.Length];
-            Color playerColor = AsterraMeshLibrary.FactionColor((byte)_playerFaction);
-            Color enemyColor = AsterraMeshLibrary.FactionColor((byte)_enemyFaction);
+            Color playerColor = AsterraMeshLibrary.TeamSwatch(_playerTeamColor);
+            Color enemyColor = AsterraMeshLibrary.TeamSwatch(_enemyTeamColor);
 
             DrawFactionCard(
                 new Rect(contentX, cardY, cardW, cardH),
                 "YOUR FORCE",
                 playerRoster,
                 playerColor,
-                ref _playerFaction);
+                ref _playerFaction,
+                ref _playerTeamColor);
             DrawVsBadge(new Rect(contentX + cardW + gap, cardY + cardH * 0.5f - 20f, 52f, 40f));
             DrawFactionCard(
                 new Rect(contentX + cardW + gap + 52f + gap, cardY, cardW, cardH),
                 "ENEMY FORCE",
                 enemyRoster,
                 enemyColor,
-                ref _enemyFaction);
+                ref _enemyFaction,
+                ref _enemyTeamColor);
 
             float stripY = cardY + cardH + 12f;
             DrawMapStrip(new Rect(contentX, stripY, contentW, 72f));
@@ -431,7 +439,8 @@ namespace Asterra.Gameplay
             {
                 AsterraAudio.Play(AsterraSfx.OrderTrain, 0.8f);
                 bootstrap.ConfigureAndStartOffline(
-                    _playerFaction, _enemyFaction, _map.Id, _difficulty, _spawnSeat);
+                    _playerFaction, _enemyFaction, _map.Id, _difficulty, _spawnSeat,
+                    _playerTeamColor, _enemyTeamColor);
                 enabled = false;
             }
 
@@ -471,7 +480,8 @@ namespace Asterra.Gameplay
             string role,
             FactionRoster roster,
             Color accent,
-            ref int factionIndex)
+            ref int factionIndex,
+            ref int teamColorIndex)
         {
             HudClickBlocker.Block(rect);
             Color fill = Color.Lerp(new Color(0.07f, 0.09f, 0.1f, 0.95f), accent, 0.12f);
@@ -502,19 +512,46 @@ namespace Asterra.Gameplay
                 ? "Commander ready"
                 : "Power · " + roster.PowerDisplayName;
             GUI.color = new Color(0.9f, 0.82f, 0.45f, 0.9f);
-            GUI.Label(new Rect(rect.x + 18f, rect.y + 108f, rect.width - 36f, 20f), power, HudStyle.Caption);
+            GUI.Label(new Rect(rect.x + 18f, rect.y + 100f, rect.width - 36f, 18f), power, HudStyle.Caption);
             GUI.color = Color.white;
 
-            var prev = new Rect(rect.x + 18f, rect.yMax - 38f, 44f, 26f);
-            var next = new Rect(rect.xMax - 62f, rect.yMax - 38f, 44f, 26f);
-            var mid = new Rect(rect.x + 70f, rect.yMax - 38f, rect.width - 140f, 26f);
+            DrawTeamSwatches(new Rect(rect.x + 14f, rect.y + 120f, rect.width - 28f, 26f), ref teamColorIndex);
+
+            var prev = new Rect(rect.x + 18f, rect.yMax - 34f, 44f, 24f);
+            var next = new Rect(rect.xMax - 62f, rect.yMax - 34f, 44f, 24f);
+            var mid = new Rect(rect.x + 70f, rect.yMax - 34f, rect.width - 140f, 24f);
             HudStyle.DrawPanel(mid, new Color(0.1f, 0.12f, 0.13f, 0.9f));
-            GUI.Label(mid, "Change", HudStyle.Subtitle);
+            GUI.Label(mid, "Change force", HudStyle.Subtitle);
 
             if (CycleChip(prev, "‹"))
                 CycleFaction(ref factionIndex, -1);
             if (CycleChip(next, "›"))
                 CycleFaction(ref factionIndex, +1);
+        }
+
+        private void DrawTeamSwatches(Rect row, ref int colorIndex)
+        {
+            int n = AsterraMeshLibrary.TeamSwatchCount;
+            float s = Mathf.Min(22f, (row.width - (n - 1) * 4f) / n);
+            float total = n * s + (n - 1) * 4f;
+            float x = row.x + (row.width - total) * 0.5f;
+            for (int i = 0; i < n; i++)
+            {
+                var r = new Rect(x + i * (s + 4f), row.y + (row.height - s) * 0.5f, s, s);
+                HudClickBlocker.Block(r);
+                Color c = AsterraMeshLibrary.TeamSwatch(i);
+                bool picked = colorIndex == i;
+                HudStyle.DrawFrame(
+                    r,
+                    c,
+                    picked ? Color.white : new Color(0.05f, 0.05f, 0.05f, 0.7f),
+                    picked ? 2f : 1f);
+                if (GUI.Button(r, GUIContent.none, GUIStyle.none))
+                {
+                    colorIndex = i;
+                    AsterraAudio.PlayUiClick();
+                }
+            }
         }
 
         private void DrawVsBadge(Rect rect)
@@ -585,8 +622,8 @@ namespace Asterra.Gameplay
                 GUI.DrawTexture(texRect, _mapPreview, ScaleMode.StretchToFill);
 
             var keeps = MapPreviewBuilder.GetKeepMarkers(_map.Id);
-            Color youCol = AsterraMeshLibrary.FactionColor((byte)_playerFaction);
-            Color aiCol = AsterraMeshLibrary.FactionColor((byte)_enemyFaction);
+            Color youCol = AsterraMeshLibrary.TeamSwatch(_playerTeamColor);
+            Color aiCol = AsterraMeshLibrary.TeamSwatch(_enemyTeamColor);
             for (int i = 0; i < keeps.Count; i++)
             {
                 var k = keeps[i];

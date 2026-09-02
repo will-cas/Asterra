@@ -22,38 +22,38 @@ from asterra_detail import (
     wall_merlons,
     window,
     ashlar_face,
+    slit_window,
+    stone_drum,
+    stone_shaft,
 )
 
 
 def _earth(g, p, c, mat, s=(8, 8, 0.36)):
-    p.append(g.cube("earth", (0, 0, s[2] * 0.5), s, mat, c))
+    return
 
 
 # --- Uncrowned: glass and steel ---
 
 def bld_arcane_academy(g, m, c):
-    """Two steel wings around a glass court."""
+    """Two dark-stone wings around a crystal court."""
     p = []
-    _earth(g, p, c, m.dark_stone, (11, 10, 0.36))
-    p.append(g.cube("court", (0, 0, 0.4), (6.2, 5.4, 0.16), m.steel, c))
-    p.append(g.cube("wing_l", (-4.6, 0.3, 2.2), (4.2, 7.2, 3.4), m.steel, c))
-    p.append(g.cube("wing_r", (4.6, 0.3, 2.2), (4.2, 7.2, 3.4), m.steel, c))
-    p.append(g.cube("link", (0, 2.4, 1.7), (5.2, 2.2, 2.4), m.dark_stone, c))
-    string_course(g, p, c, m.iron, (-4.6, 0.3, 3.55), (4.4, 7.4, 0.12))
-    string_course(g, p, c, m.iron, (4.6, 0.3, 3.55), (4.4, 7.4, 0.12))
-    cornice(g, p, c, m.iron, (-4.6, 0.3, 3.95), (4.5, 7.5, 0.14))
-    cornice(g, p, c, m.iron, (4.6, 0.3, 3.95), (4.5, 7.5, 0.14))
-    quoins(g, p, c, m.iron, 0, 0.3, 2.2, 6.5, 3.5, 3.4)
-    pitched(g, p, c, m.steel, (-4.6, 0.3, 4.05), (4.6, 7.8, 0.14), pitch=22, gable=m.steel, tiles=True)
-    pitched(g, p, c, m.steel, (4.6, 0.3, 4.05), (4.6, 7.8, 0.14), pitch=22, gable=m.steel, tiles=True)
-    for x in (-4.6, 4.6):
-        facade_windows(g, p, c, m.steel, m.glass, -3.35, 2.35, (x - 1.1, x + 1.1), (1.0, 0.18, 1.4))
-        side_windows(g, p, c, m.steel, m.glass, x + (2.15 if x > 0 else -2.15), 2.35, (-1.6, 0.4, 2.4))
-    p.append(g.cyl("orb", (0, 0, 2.4), 0.85, 0.12, m.glass, c, verts=16))
-    door(g, p, c, m.steel, m.iron, (0, -3.5, 1.15), (0.7, 0.12, 1.7))
-    stairs(g, p, c, m.dark_stone, (0, -4.3, 0.35), count=5, width=2.4)
-    banner(g, p, c, m.steel, m.cloth_purple, (2.2, -3.2, 3.4), h=2.4, fly=1.1)
-    return finish(g, "building_arcane_academy", p, c, 0.04, 3)
+    p.append(g.cube("court", (0, 0, 0.38), (6.0, 5.2, 0.14), m.dark_stone, c, uv=0.4))
+    p.append(g.cube("wing_l", (-4.45, 0.3, 2.15), (4.05, 7.05, 3.25), m.dark_stone, c, uv=0.4))
+    p.append(g.cube("wing_r", (4.45, 0.3, 2.15), (4.05, 7.05, 3.25), m.dark_stone, c, uv=0.4))
+    ashlar_face(g, p, c, m.dark_stone, -3.25, 0.85, 3.35, -6.3, -2.6, depth=0.07, bw=0.4, bh=0.22)
+    ashlar_face(g, p, c, m.dark_stone, -3.25, 0.85, 3.35, 2.6, 6.3, depth=0.07, bw=0.4, bh=0.22)
+    p.append(g.cube("link", (0, 2.35, 1.65), (5.05, 2.05, 2.25), m.dark_stone, c, uv=0.4))
+    string_course(g, p, c, m.gold, (-4.45, 0.3, 3.45), (4.2, 7.2, 0.1))
+    string_course(g, p, c, m.gold, (4.45, 0.3, 3.45), (4.2, 7.2, 0.1))
+    pitched(g, p, c, m.slate, (-4.45, 0.3, 3.95), (4.45, 7.55, 0.14), pitch=24, gable=m.dark_stone, tiles=True)
+    pitched(g, p, c, m.slate, (4.45, 0.3, 3.95), (4.45, 7.55, 0.14), pitch=24, gable=m.dark_stone, tiles=True)
+    for x in (-4.45, 4.45):
+        facade_windows(g, p, c, m.gold, m.glass, -3.25, 2.25, (x - 1.05, x + 1.05), (0.95, 0.16, 1.3))
+    p.append(g.uv_sphere("orb", (0, 0, 1.85), 0.72, m.crystal, c, segs=16, rings=10))
+    door(g, p, c, m.wood, m.iron, (0, -3.35, 1.1), (0.68, 0.12, 1.65))
+    stairs(g, p, c, m.dark_stone, (0, -4.15, 0.32), count=5, width=2.25)
+    banner(g, p, c, m.iron, m.cloth_purple, (2.05, -3.05, 3.25), h=2.25, fly=1.05)
+    return finish(g, "building_arcane_academy", p, c, 0.016, 4)
 
 
 def bld_conservatory(g, m, c):
@@ -92,38 +92,40 @@ def bld_ruins(g, m, c):
 
 
 def bld_conjuring_hall(g, m, c):
-    """Round ritual chamber."""
+    """Round ritual chamber of dark stone and crystal."""
     p = []
-    _earth(g, p, c, m.dark_stone, (9, 9, 0.32))
-    p.append(g.cyl("drum", (0, 0, 2.15), 4.2, 3.6, m.steel, c, verts=16))
-    p.append(g.cyl("ring", (0, 0, 4.05), 4.45, 0.22, m.iron, c, verts=16))
-    p.append(g.uv_sphere("dome", (0, 0, 5.15), 2.6, m.glass, c, segs=14, rings=8))
-    p.append(g.cyl("oculus", (0, 0, 6.55), 0.55, 0.35, m.steel, c, verts=10))
+    stone_drum(g, p, c, m.dark_stone, 0.2, 4.15, 4.05, verts=20, course_h=0.22, uv=0.38)
+    p.append(g.cyl("ring", (0, 0, 4.22), 4.28, 0.16, m.gold, c, verts=20, uv=0.45))
+    p.append(g.ico("dome", (0, 0, 5.45), 2.55, m.crystal, c, subdiv=2, scale=(1.0, 1.0, 0.55)))
+    p.append(g.cyl("oculus", (0, 0, 6.85), 0.5, 0.32, m.gold, c, verts=12))
     for k in range(8):
         ang = k * math.pi / 4
-        window(g, p, c, m.steel, m.glass, (math.cos(ang) * 4.15, math.sin(ang) * 4.15, 2.4), (0.18, 1.0, 1.5), yaw=ang)
-    p.append(g.cyl("dais", (0, 0, 0.7), 1.6, 0.35, m.dark_stone, c, verts=12))
-    p.append(g.cube("gate", (0, -4.4, 1.55), (2.4, 1.2, 2.4), m.steel, c))
-    door(g, p, c, m.steel, m.iron, (0, -5.0, 1.2), (0.7, 0.12, 1.8))
-    stairs(g, p, c, m.dark_stone, (0, -5.7, 0.3), count=5, width=2.2)
-    return finish(g, "building_conjuring_hall", p, c, 0.04, 3)
+        window(g, p, c, m.gold, m.glass, (math.cos(ang) * 4.05, math.sin(ang) * 4.05, 2.35), (0.18, 0.95, 1.45), yaw=ang)
+    p.append(g.cyl("dais", (0, 0, 0.7), 1.55, 0.32, m.dark_stone, c, verts=12))
+    p.append(g.cube("gate", (0, -4.35, 1.55), (2.35, 1.15, 2.35), m.dark_stone, c, uv=0.4))
+    arch(g, p, c, m.dark_stone, (0, -4.9, 0), radius=0.95, depth=0.55, z0=1.85, count=8)
+    door(g, p, c, m.wood, m.iron, (0, -4.95, 1.15), (0.65, 0.12, 1.75))
+    stairs(g, p, c, m.dark_stone, (0, -5.65, 0.28), count=5, width=2.15)
+    return finish(g, "building_conjuring_hall", p, c, 0.016, 4)
 
 
 def bld_high_temple(g, m, c):
-    """Tall steel shaft, crystal crown — not a house with a stick."""
+    """Tall dark-stone spire with a crystal crown."""
     p = []
-    _earth(g, p, c, m.dark_stone, (11, 11, 0.4))
-    p.append(g.cube("plinth", (0, 0, 0.7), (7.2, 7.2, 0.7), m.steel, c))
-    p.append(g.taper("shaft", (0, 0, 5.4), 2.4, 1.35, 8.6, m.steel, c, verts=10))
-    p.append(g.cube("crown", (0, 0, 9.85), (3.4, 3.4, 0.24), m.iron, c))
-    p.append(g.uv_sphere("crystal", (0, 0, 10.7), 0.85, m.crystal, c, segs=12, rings=8))
-    for z in (2.6, 4.6, 6.6, 8.2):
-        window(g, p, c, m.steel, m.glass, (0, -1.55 if z < 5 else -1.15, z), (1.1, 0.18, 1.2))
-    p.append(g.cube("gateh", (0, -3.5, 1.7), (3.4, 2.4, 2.6), m.dark_stone, c))
-    arch(g, p, c, m.steel, (0, -4.55, 0), radius=1.05, depth=0.7, z0=1.85, count=8)
-    door(g, p, c, m.steel, m.iron, (0, -4.7, 1.15), (0.65, 0.12, 1.7))
-    stairs(g, p, c, m.dark_stone, (0, -5.4, 0.3), count=6, width=2.4)
-    return finish(g, "building_high_temple", p, c, 0.04, 3)
+    p.append(g.cube("plinth", (0, 0, 0.55), (6.4, 6.4, 0.55), m.dark_stone, c, uv=0.4))
+    stone_shaft(g, p, c, m.dark_stone, 0.85, 10.35, 2.15, 1.22, verts=16, course_h=0.22, uv=0.35)
+    p.append(g.cyl("crown", (0, 0, 10.55), 1.55, 0.18, m.gold, c, verts=16, uv=0.45))
+    p.append(g.uv_sphere("crystal", (0, 0, 11.45), 0.82, m.crystal, c, segs=16, rings=10))
+    for z in (2.55, 4.65, 6.75, 8.75):
+        t = (z - 0.85) / 9.5
+        rr = 2.15 + (1.22 - 2.15) * t
+        window(g, p, c, m.gold, m.glass, (0, -rr, z), (0.95, 0.16, 1.15))
+    p.append(g.cube("gateh", (0, -3.25, 1.65), (3.15, 2.15, 2.45), m.dark_stone, c, uv=0.4))
+    arch(g, p, c, m.dark_stone, (0, -4.25, 0), radius=0.95, depth=0.6, z0=1.85, count=8)
+    door(g, p, c, m.wood, m.iron, (0, -4.35, 1.15), (0.62, 0.12, 1.65))
+    stairs(g, p, c, m.dark_stone, (0, -5.05, 0.28), count=6, width=2.25)
+    banner(g, p, c, m.iron, m.cloth_purple, (1.55, -3.35, 3.85), h=2.4, fly=1.0)
+    return finish(g, "building_high_temple", p, c, 0.016, 4)
 
 
 def bld_portal_gate(g, m, c):
@@ -159,22 +161,19 @@ def bld_shadowed_gate(g, m, c):
 
 
 def bld_watchtower(g, m, c):
-    """Lattice lookout — tower is the whole building."""
+    """Coursed stone lookout with a glass lantern."""
     p = []
-    _earth(g, p, c, m.dark_stone, (8, 8, 0.36))
-    p.append(g.cube("base", (0, 0, 0.7), (3.4, 3.4, 0.8), m.steel, c))
-    p.append(g.taper("shaft", (0, 0, 4.6), 1.15, 0.75, 7.2, m.steel, c, verts=8))
-    for i in range(6):
-        z = 1.6 + i * 1.05
-        p.append(g.cube(f"band{i}", (0, 0, z), (2.2 - i * 0.12, 2.2 - i * 0.12, 0.1), m.iron, c))
-    p.append(g.cube("cab", (0, 0, 8.35), (2.6, 2.6, 1.5), m.glass, c))
+    p.append(g.cyl("base", (0, 0, 0.45), 1.85, 0.55, m.dark_stone, c, verts=16, uv=0.4))
+    stone_shaft(g, p, c, m.dark_stone, 0.75, 8.15, 1.12, 0.78, verts=14, course_h=0.22, uv=0.35)
+    p.append(g.cyl("cab", (0, 0, 8.85), 1.35, 1.35, m.glass, c, verts=12, uv=0.45))
     for i in range(-1, 2):
-        p.append(g.cube(f"lx{i}", (i * 0.85, 0, 8.35), (0.08, 2.65, 1.5), m.steel, c))
-        p.append(g.cube(f"ly{i}", (0, i * 0.85, 8.35), (2.65, 0.08, 1.5), m.steel, c))
-    p.append(g.cube("roof", (0, 0, 9.2), (2.9, 2.9, 0.16), m.steel, c))
-    p.append(g.cyl("fin", (0, 0, 9.55), 0.06, 0.5, m.steel, c, verts=6))
-    stairs(g, p, c, m.dark_stone, (0, -2.4, 0.3), count=4, width=1.6)
-    return finish(g, "building_watchtower", p, c, 0.035, 3)
+        p.append(g.cube(f"lx{i}", (i * 0.85, 0, 8.85), (0.08, 2.55, 1.35), m.iron, c))
+        p.append(g.cube(f"ly{i}", (0, i * 0.85, 8.85), (2.55, 0.08, 1.35), m.iron, c))
+    p.append(g.cone("roof", (0, 0, 9.85), 1.55, 0.85, m.slate, c, verts=10))
+    p.append(g.cyl("fin", (0, 0, 10.45), 0.06, 0.45, m.gold, c, verts=6))
+    door(g, p, c, m.wood, m.iron, (0, -1.25, 0.95), (0.5, 0.1, 1.35))
+    stairs(g, p, c, m.dark_stone, (0, -2.15, 0.25), count=4, width=1.45)
+    return finish(g, "building_watchtower", p, c, 0.016, 4)
 
 
 def bld_palisade(g, m, c):
@@ -268,23 +267,22 @@ def bld_farm(g, m, c):
 
 
 def bld_outpost_tower(g, m, c):
-    """Round stone tower with merlons and slate cone."""
+    """Round stone tower with merlons and a slate cone."""
     p = []
-    _earth(g, p, c, m.brick, (9, 9, 0.4))
-    p.append(g.cyl("base", (0, 0, 0.7), 2.4, 0.7, m.brick, c, verts=16))
-    p.append(g.taper("shaft", (0, 0, 4.4), 1.85, 1.45, 6.8, m.plaster, c, verts=16))
-    p.append(g.cube("walk", (0, 0, 7.85), (3.6, 3.6, 0.2), m.slate, c))
+    p.append(g.cyl("base", (0, 0, 0.45), 2.25, 0.55, m.brick, c, verts=18, uv=0.35))
+    stone_shaft(g, p, c, m.brick, 0.75, 7.55, 1.78, 1.38, verts=18, course_h=0.2, uv=0.32)
+    p.append(g.cyl("walk", (0, 0, 7.72), 1.72, 0.16, m.slate, c, verts=16, uv=0.4))
     for k in range(8):
         ang = k * math.pi / 4
-        p.append(g.cube(f"mer{k}", (math.cos(ang) * 1.55, math.sin(ang) * 1.55, 8.25), (0.4, 0.4, 0.7), m.slate, c))
-    p.append(g.cone("roof", (0, 0, 8.85), 1.55, 1.35, m.slate, c, verts=12))
-    p.append(g.cyl("fin", (0, 0, 9.65), 0.06, 0.4, m.gold, c, verts=6))
-    window(g, p, c, m.brick, m.glass, (0, -1.7, 3.4), (0.7, 0.16, 1.2))
-    window(g, p, c, m.brick, m.glass, (0, -1.55, 5.5), (0.55, 0.14, 1.0))
-    arch(g, p, c, m.brick, (0, -2.15, 0), radius=0.75, depth=0.6, z0=1.5, count=7)
-    door(g, p, c, m.wood, m.iron, (0, -2.25, 1.05), (0.55, 0.12, 1.5))
-    stairs(g, p, c, m.brick, (0, -3.1, 0.25), count=5, width=1.8)
-    return finish(g, "building_royal_outpost_tower", p, c, 0.04, 3)
+        p.append(g.cube(f"mer{k}", (math.cos(ang) * 1.52, math.sin(ang) * 1.52, 8.12), (0.36, 0.36, 0.62), m.slate, c))
+    p.append(g.cone("roof", (0, 0, 8.75), 1.48, 1.25, m.slate, c, verts=12))
+    p.append(g.cyl("fin", (0, 0, 9.55), 0.06, 0.38, m.gold, c, verts=6))
+    window(g, p, c, m.brick, m.glass, (0, -1.62, 3.15), (0.65, 0.16, 1.15))
+    window(g, p, c, m.brick, m.glass, (0, -1.48, 5.45), (0.52, 0.14, 0.95))
+    arch(g, p, c, m.brick, (0, -1.95, 0), radius=0.72, depth=0.55, z0=1.45, count=7)
+    door(g, p, c, m.wood, m.iron, (0, -2.05, 1.0), (0.52, 0.12, 1.45))
+    stairs(g, p, c, m.brick, (0, -2.85, 0.22), count=5, width=1.7)
+    return finish(g, "building_royal_outpost_tower", p, c, 0.016, 4)
 
 
 def bld_royal_wall(g, m, c):
@@ -302,18 +300,17 @@ def bld_royal_wall(g, m, c):
 
 
 def bld_keep_turret(g, m, c):
-    """Small wall turret, squat."""
+    """Small wall turret of coursed stone."""
     p = []
-    _earth(g, p, c, m.brick, (7, 7, 0.32))
-    p.append(g.cube("drum", (0, 0, 1.7), (3.2, 3.2, 2.8), m.plaster, c))
-    p.append(g.cube("walk", (0, 0, 3.2), (3.6, 3.6, 0.18), m.slate, c))
+    stone_drum(g, p, c, m.brick, 0.15, 3.15, 1.55, verts=14, course_h=0.22, uv=0.38)
+    p.append(g.cyl("walk", (0, 0, 3.28), 1.72, 0.14, m.slate, c, verts=12, uv=0.4))
     for k in range(8):
         ang = k * math.pi / 4
-        p.append(g.cube(f"m{k}", (math.cos(ang) * 1.55, math.sin(ang) * 1.55, 3.55), (0.35, 0.35, 0.55), m.slate, c))
-    p.append(g.cone("roof", (0, 0, 4.05), 1.5, 0.85, m.slate, c, verts=10))
-    window(g, p, c, m.brick, m.glass, (0, -1.65, 1.85), (0.7, 0.14, 0.95))
-    door(g, p, c, m.wood, m.iron, (0, -1.7, 0.85), (0.5, 0.1, 1.2))
-    return finish(g, "building_keep_turret", p, c, 0.035, 3)
+        p.append(g.cube(f"m{k}", (math.cos(ang) * 1.48, math.sin(ang) * 1.48, 3.58), (0.32, 0.32, 0.5), m.slate, c))
+    p.append(g.cone("roof", (0, 0, 4.05), 1.42, 0.82, m.slate, c, verts=10))
+    window(g, p, c, m.brick, m.glass, (0, -1.55, 1.75), (0.65, 0.14, 0.9))
+    door(g, p, c, m.wood, m.iron, (0, -1.62, 0.82), (0.48, 0.1, 1.15))
+    return finish(g, "building_keep_turret", p, c, 0.016, 4)
 
 
 def bld_bridge(g, m, c):
@@ -546,8 +543,8 @@ def bld_library(g, m, c):
     _earth(g, p, c, m.brick, (14, 12, 0.4))
     p.append(g.cube("nave", (0, 0.6, 2.4), (10.4, 7.2, 3.8), m.red_brick, c))
     pitched(g, p, c, m.slate, (0, 0.6, 4.4), (10.8, 7.8, 0.16), pitch=24, gable=m.red_brick, tiles=True)
-    p.append(g.cyl("drum", (0, 0.6, 5.55), 2.0, 1.3, m.marble, c, verts=14))
-    p.append(g.uv_sphere("dome", (0, 0.6, 6.55), 2.05, m.gold, c, segs=14, rings=8))
+    p.append(g.cyl("drum", (0, 0.6, 5.45), 1.95, 1.15, m.marble, c, verts=16, uv=0.4))
+    p.append(g.ico("dome", (0, 0.6, 6.45), 2.0, m.gold, c, subdiv=2, scale=(1.0, 1.0, 0.52)))
     for x in (-3.6, -1.2, 1.2, 3.6):
         window(g, p, c, m.marble, m.glass, (x, -3.05, 2.55), (1.2, 0.18, 2.0))
     door(g, p, c, m.wood, m.iron, (0, -3.15, 1.25), (0.75, 0.14, 1.9))
@@ -574,22 +571,118 @@ def bld_alchemist(g, m, c):
 
 
 def bld_clockwork_tower(g, m, c):
-    """The tower is the building."""
+    """Wizard clock-spire: octagon keep, coursed shaft, four clock faces, glass lantern."""
     p = []
-    _earth(g, p, c, m.brick, (9, 9, 0.4))
-    p.append(g.cube("plinth", (0, 0, 0.6), (4.6, 4.6, 0.55), m.marble, c))
-    p.append(g.cube("shaft", (0, 0, 4.6), (3.4, 3.4, 7.4), m.red_brick, c))
-    p.append(g.cube("string", (0, 0, 7.4), (3.75, 3.75, 0.16), m.marble, c))
-    p.append(g.cube("walk", (0, 0, 8.35), (4.0, 4.0, 0.2), m.slate, c))
+    stone, trim, frame = m.brick, m.marble, m.iron
+
+    def r_at(z, z0=4.85, z1=11.55, r0=1.72, r1=1.28):
+        t = (z - z0) / max(z1 - z0, 0.01)
+        return r0 + (r1 - r0) * t
+
+    p.append(g.cyl("courtyard", (0, 0, 0.03), 6.4, 0.08, m.dark_stone, c, verts=16, uv=0.45))
+    p.append(g.cyl("plinth", (0, 0, 0.22), 2.55, 0.4, stone, c, verts=8, uv=0.22))
+    p.append(g.cyl("plinth_cap", (0, 0, 0.46), 2.65, 0.1, trim, c, verts=8, uv=0.35))
+    stone_drum(g, p, c, stone, 0.52, 4.15, 2.28, verts=8, course_h=0.18, uv=0.2)
+    p.append(g.cyl("keep_string", (0, 0, 4.22), 2.42, 0.1, trim, c, verts=8, uv=0.35))
+    p.append(g.cyl("keep_cornice", (0, 0, 4.4), 2.52, 0.12, stone, c, verts=8, uv=0.24))
+    for k in range(8):
+        ang = k * math.pi / 4 + math.pi / 8
+        bx, by = math.cos(ang) * 2.48, math.sin(ang) * 2.48
+        p.append(g.cube(f"butt{k}", (bx, by, 2.2), (0.5, 0.5, 3.05), stone, c, rot=(0, 0, ang), uv=0.22))
+        p.append(g.cube(f"bcap{k}", (bx * 1.02, by * 1.02, 3.82), (0.58, 0.58, 0.14), trim, c, rot=(0, 0, ang)))
+        if math.sin(ang) > -0.55:
+            slit_window(
+                g, p, c, frame, m.glass,
+                (math.cos(ang) * 2.26, math.sin(ang) * 2.26, 2.25),
+                (0.14, 0.5, 1.35), yaw=ang,
+            )
+    p.append(g.cube("porch", (0, -2.75, 1.35), (2.35, 1.4, 2.05), stone, c, uv=0.24))
+    pitched(g, p, c, m.slate, (0, -2.75, 2.45), (2.65, 1.65, 0.12), pitch=28, gable=stone, tiles=False)
+    for x in (-0.9, 0.9):
+        p.append(g.taper(f"col{x}", (x, -3.2, 1.55), 0.18, 0.14, 1.75, trim, c, verts=8))
+    p.append(g.cube("entab", (0, -3.2, 2.5), (2.2, 0.62, 0.12), trim, c))
+    p.append(g.cyl("gear", (0, -3.42, 2.15), 0.32, 0.06, m.gold, c, verts=16, rot=(math.radians(90), 0, 0)))
+    p.append(g.cyl("hub", (0, -3.45, 2.15), 0.12, 0.05, m.iron, c, verts=10, rot=(math.radians(90), 0, 0)))
+    ashlar_face(g, p, c, stone, -3.42, 0.4, 2.05, -0.95, 0.95, depth=0.07, bw=0.32, bh=0.18)
+    arch(g, p, c, stone, (0, -3.48, 0), radius=0.72, depth=0.42, z0=1.7, count=9, block=(0.24, 0.42, 0.2))
+    door(g, p, c, m.wood, frame, (0, -3.52, 1.05), (0.52, 0.1, 1.55))
+    stairs(g, p, c, stone, (0, -4.15, 0.09), count=7, width=2.05, step=(0.22, 0.12))
+    banner(g, p, c, frame, m.cloth_deep, (1.45, -2.85, 3.25), h=2.25, fly=1.05)
+    p.append(g.cyl("collar", (0, 0, 4.62), 1.95, 0.24, trim, c, verts=16, uv=0.32))
+    stone_shaft(g, p, c, stone, 4.75, 11.55, 1.72, 1.28, verts=18, course_h=0.16, uv=0.2)
+    for z in (6.85, 9.15):
+        p.append(g.cyl(f"band{z}", (0, 0, z), r_at(z) + 0.1, 0.09, trim, c, verts=20, uv=0.35))
+    for z in (5.85, 8.05, 10.35):
+        rr = r_at(z)
+        slit_window(g, p, c, frame, m.glass, (0, -rr - 0.01, z), (0.34, 0.12, 1.05))
+        slit_window(g, p, c, frame, m.glass, (0, rr + 0.01, z), (0.34, 0.12, 1.05), yaw=math.pi)
+        slit_window(g, p, c, frame, m.glass, (rr + 0.01, 0, z), (0.12, 0.34, 1.05), yaw=math.radians(90))
+        slit_window(g, p, c, frame, m.glass, (-rr - 0.01, 0, z), (0.12, 0.34, 1.05), yaw=math.radians(-90))
+    p.append(g.cyl("midwalk", (0, 0, 8.55), 1.88, 0.11, m.slate, c, verts=16, uv=0.3))
+    p.append(g.cyl("midrail", (0, 0, 8.92), 1.84, 0.055, trim, c, verts=16, uv=0.4))
+    for k in range(10):
+        ang = k * math.pi / 5
+        p.append(g.taper(f"corb{k}", (math.cos(ang) * 1.58, math.sin(ang) * 1.58, 8.22), 0.16, 0.08, 0.48, stone, c, verts=6, rot=(math.radians(16), 0, ang)))
+    for k in range(12):
+        ang = k * math.pi / 6
+        p.append(g.taper(f"mach{k}", (math.cos(ang) * 1.42, math.sin(ang) * 1.42, 11.35), 0.16, 0.09, 0.58, stone, c, verts=6, rot=(math.radians(18), 0, ang)))
+    p.append(g.cyl("clockwalk", (0, 0, 11.75), 1.95, 0.14, m.slate, c, verts=16, uv=0.28))
+    p.append(g.cyl("clockrail", (0, 0, 12.12), 1.9, 0.06, trim, c, verts=16, uv=0.4))
+    stone_drum(g, p, c, stone, 11.9, 13.85, 1.72, verts=16, course_h=0.16, uv=0.22)
+    p.append(g.cyl("clock_gold", (0, 0, 13.95), 1.88, 0.08, m.gold, c, verts=20, uv=0.45))
+    for yaw, pos in (
+        (0.0, (0, -1.78, 12.85)),
+        (math.pi, (0, 1.78, 12.85)),
+        (math.radians(90), (1.78, 0, 12.85)),
+        (math.radians(-90), (-1.78, 0, 12.85)),
+    ):
+        nx, ny = math.sin(yaw), -math.cos(yaw)
+        ux, uy = math.cos(yaw), math.sin(yaw)
+        face_rot = (math.radians(90), 0, yaw)
+        p.append(g.cyl("dial", pos, 0.58, 0.07, trim, c, verts=24, rot=face_rot))
+        p.append(g.cyl("bezel", (pos[0] + nx * 0.02, pos[1] + ny * 0.02, pos[2]), 0.66, 0.05, m.gold, c, verts=24, rot=face_rot))
+        p.append(g.cyl("inner_ring", (pos[0] + nx * 0.03, pos[1] + ny * 0.03, pos[2]), 0.5, 0.02, m.iron, c, verts=24, rot=face_rot))
+        for i in range(12):
+            a = i * math.pi / 6
+            rr = 0.44
+            tx = pos[0] + ux * math.sin(a) * rr + nx * 0.05
+            ty = pos[1] + uy * math.sin(a) * rr + ny * 0.05
+            tz = pos[2] + math.cos(a) * rr
+            mark = 0.1 if i % 3 == 0 else 0.055
+            p.append(g.cube(
+                "tick", (tx, ty, tz),
+                (abs(ux) * 0.04 + abs(nx) * 0.04 + 0.03, abs(uy) * 0.04 + abs(ny) * 0.04 + 0.03, mark),
+                m.iron, c,
+            ))
+        def hand(ang, length, thick):
+            mid = length * 0.42
+            hx = pos[0] + ux * math.sin(ang) * mid + nx * 0.06
+            hy = pos[1] + uy * math.sin(ang) * mid + ny * 0.06
+            hz = pos[2] + math.cos(ang) * mid
+            if abs(ny) > 0.5:
+                rot = (0, -ang, 0)
+                size = (thick, 0.05, length)
+            else:
+                rot = (ang, 0, 0)
+                size = (0.05, thick, length)
+            p.append(g.cube("hand", (hx, hy, hz), size, m.iron, c, rot=rot))
+        hand(-math.pi / 3, 0.32, 0.06)
+        hand(math.pi / 3, 0.44, 0.045)
+        p.append(g.cyl("boss", (pos[0] + nx * 0.07, pos[1] + ny * 0.07, pos[2]), 0.055, 0.05, m.gold, c, verts=12, rot=face_rot))
+    p.append(g.cyl("lantern", (0, 0, 14.65), 1.15, 1.15, m.glass, c, verts=16, uv=0.4))
     for k in range(8):
         ang = k * math.pi / 4
-        p.append(g.cube(f"mer{k}", (math.cos(ang) * 1.85, math.sin(ang) * 1.85, 8.75), (0.42, 0.42, 0.7), m.slate, c))
-    p.append(g.cyl("clock", (0, -1.75, 5.85), 0.7, 0.12, m.gold, c, verts=16, rot=(math.radians(90), 0, 0)))
-    p.append(g.cyl("rim", (0, -1.8, 5.85), 0.76, 0.05, m.iron, c, verts=16, rot=(math.radians(90), 0, 0)))
-    p.append(g.cube("hand", (0, -1.85, 5.85), (0.4, 0.04, 0.05), m.iron, c))
-    door(g, p, c, m.wood, m.iron, (0, -1.8, 1.15), (0.6, 0.12, 1.7))
-    stairs(g, p, c, m.marble, (0, -2.7, 0.28), count=5, width=2.2)
-    return finish(g, "building_university_clockwork_tower", p, c, 0.04, 3)
+        p.append(g.cube(
+            f"mull{k}", (math.cos(ang) * 1.14, math.sin(ang) * 1.14, 14.65),
+            (0.1, 0.1, 1.18), m.gold, c, rot=(0, 0, ang),
+        ))
+    p.append(g.cyl("lantern_sill", (0, 0, 14.08), 1.22, 0.08, m.gold, c, verts=16, uv=0.4))
+    p.append(g.cyl("lantern_cap", (0, 0, 15.22), 1.22, 0.08, m.gold, c, verts=16, uv=0.4))
+    p.append(g.ico("bell", (0, 0, 14.55), 0.32, m.gold, c, subdiv=2, scale=(1.0, 1.0, 1.15)))
+    p.append(g.cone("lantern_roof", (0, 0, 15.55), 1.35, 0.85, m.slate, c, verts=12))
+    p.append(g.cyl("fin", (0, 0, 16.05), 0.06, 0.35, m.gold, c, verts=8))
+    p.append(g.uv_sphere("star", (0, 0, 16.32), 0.1, m.crystal, c, segs=14, rings=8))
+    return finish(g, "building_university_clockwork_tower", p, c, 0.01, 5)
 
 
 def bld_moat(g, m, c):
@@ -603,18 +696,95 @@ def bld_moat(g, m, c):
 
 
 def bld_observatory(g, m, c):
-    """Dome + scope, not a house with a tube."""
+    """Tall wizard tower: octagonal keep, coursed shaft, ribbed dome observatory."""
     p = []
-    _earth(g, p, c, m.brick, (12, 12, 0.4))
-    p.append(g.cyl("drum", (0, 0.4, 2.35), 3.4, 3.6, m.red_brick, c, verts=16))
-    p.append(g.cube("ring", (0, 0.4, 4.2), (7.2, 7.2, 0.18), m.marble, c))
-    p.append(g.uv_sphere("dome", (0, 0.4, 5.35), 3.15, m.slate, c, segs=16, rings=10))
-    p.append(g.cyl("slit", (0, -1.4, 5.85), 0.55, 2.2, m.iron, c, verts=10, rot=(math.radians(40), 0, 0)))
-    p.append(g.cyl("lens", (0, -2.35, 6.65), 0.4, 0.16, m.glass, c, verts=12, rot=(math.radians(40), 0, 0)))
-    p.append(g.cube("annex", (0, -3.6, 1.35), (4.2, 2.8, 2.0), m.red_brick, c))
-    door(g, p, c, m.wood, m.iron, (0, -5.0, 1.05), (0.7, 0.12, 1.6))
-    stairs(g, p, c, m.marble, (0, -5.8, 0.28), count=5, width=2.6)
-    return finish(g, "building_university_grand_observatory", p, c, 0.04, 3)
+    stone, trim, frame = m.brick, m.marble, m.iron
+
+    def r_at(z, z0=5.15, z1=14.15, r0=1.92, r1=1.42):
+        t = (z - z0) / max(z1 - z0, 0.01)
+        return r0 + (r1 - r0) * t
+
+    p.append(g.cyl("plinth", (0, 0, 0.22), 2.95, 0.44, stone, c, verts=8, uv=0.22))
+    p.append(g.cyl("plinth_cap", (0, 0, 0.48), 3.05, 0.1, trim, c, verts=8, uv=0.35))
+    stone_drum(g, p, c, stone, 0.55, 4.45, 2.58, verts=8, course_h=0.18, uv=0.2)
+    p.append(g.cyl("keep_string", (0, 0, 4.52), 2.75, 0.12, trim, c, verts=8, uv=0.35))
+    p.append(g.cyl("keep_cornice", (0, 0, 4.72), 2.88, 0.14, stone, c, verts=8, uv=0.24))
+    for k in range(8):
+        ang = k * math.pi / 4 + math.pi / 8
+        bx, by = math.cos(ang) * 2.78, math.sin(ang) * 2.78
+        p.append(g.cube(f"butt{k}", (bx, by, 2.35), (0.58, 0.58, 3.35), stone, c, rot=(0, 0, ang), uv=0.22))
+        p.append(g.cube(f"bcap{k}", (bx * 1.02, by * 1.02, 4.12), (0.66, 0.66, 0.16), trim, c, rot=(0, 0, ang)))
+        if math.sin(ang) > -0.55:
+            slit_window(
+                g, p, c, frame, m.glass,
+                (math.cos(ang) * 2.55, math.sin(ang) * 2.55, 2.45),
+                (0.14, 0.55, 1.45), yaw=ang,
+            )
+    p.append(g.cube("porch", (0, -3.15, 1.45), (2.65, 1.55, 2.25), stone, c, uv=0.24))
+    pitched(g, p, c, m.slate, (0, -3.15, 2.65), (2.95, 1.85, 0.12), pitch=26, gable=stone, tiles=False)
+    for x in (-1.0, 1.0):
+        p.append(g.taper(f"col{x}", (x, -3.62, 1.65), 0.2, 0.15, 1.95, trim, c, verts=8))
+    p.append(g.cube("entab", (0, -3.62, 2.72), (2.45, 0.7, 0.14), trim, c))
+    ashlar_face(g, p, c, stone, -3.9, 0.4, 2.2, -1.05, 1.05, depth=0.07, bw=0.34, bh=0.18)
+    arch(g, p, c, stone, (0, -3.95, 0), radius=0.82, depth=0.48, z0=1.85, count=11, block=(0.28, 0.48, 0.24))
+    door(g, p, c, m.wood, frame, (0, -4.0, 1.12), (0.58, 0.1, 1.7))
+    stairs(g, p, c, stone, (0, -4.65, 0.09), count=8, width=2.35, step=(0.22, 0.12))
+    banner(g, p, c, frame, m.cloth_deep, (1.65, -3.25, 3.55), h=2.45, fly=1.15)
+    p.append(g.cyl("collar", (0, 0, 5.0), 2.15, 0.28, trim, c, verts=16, uv=0.32))
+    stone_shaft(g, p, c, stone, 5.15, 14.15, 1.92, 1.42, verts=20, course_h=0.16, uv=0.2)
+    for z in (7.35, 10.55, 13.55):
+        p.append(g.cyl(f"band{z}", (0, 0, z), r_at(z) + 0.1, 0.09, trim, c, verts=22, uv=0.35))
+    for z in (6.25, 8.55, 11.25, 13.15):
+        rr = r_at(z)
+        slit_window(g, p, c, frame, m.glass, (0, -rr - 0.01, z), (0.38, 0.12, 1.15))
+        slit_window(g, p, c, frame, m.glass, (0, rr + 0.01, z), (0.38, 0.12, 1.15), yaw=math.pi)
+        slit_window(g, p, c, frame, m.glass, (rr + 0.01, 0, z), (0.12, 0.38, 1.15), yaw=math.radians(90))
+        slit_window(g, p, c, frame, m.glass, (-rr - 0.01, 0, z), (0.12, 0.38, 1.15), yaw=math.radians(-90))
+    p.append(g.cyl("midwalk", (0, 0, 10.72), 2.12, 0.12, m.slate, c, verts=16, uv=0.3))
+    p.append(g.cyl("midrail", (0, 0, 11.12), 2.08, 0.06, trim, c, verts=16, uv=0.4))
+    for k in range(12):
+        ang = k * math.pi / 6
+        p.append(g.taper(f"corb{k}", (math.cos(ang) * 1.78, math.sin(ang) * 1.78, 10.38), 0.18, 0.09, 0.52, stone, c, verts=6, rot=(math.radians(16), 0, ang)))
+        p.append(g.cyl(f"post{k}", (math.cos(ang) * 2.05, math.sin(ang) * 2.05, 11.0), 0.05, 0.38, trim, c, verts=6))
+    for k in range(16):
+        ang = k * math.pi / 8
+        p.append(g.taper(f"mach{k}", (math.cos(ang) * 1.62, math.sin(ang) * 1.62, 14.05), 0.2, 0.1, 0.72, stone, c, verts=6, rot=(math.radians(20), 0, ang)))
+    p.append(g.cyl("walk", (0, 0, 14.52), 2.42, 0.14, m.slate, c, verts=16, uv=0.28))
+    p.append(g.cyl("walkrail", (0, 0, 14.92), 2.38, 0.07, trim, c, verts=16, uv=0.4))
+    for k in range(12):
+        ang = k * math.pi / 6
+        p.append(g.cube(f"mer{k}", (math.cos(ang) * 2.28, math.sin(ang) * 2.28, 15.05), (0.26, 0.26, 0.48), m.slate, c))
+        p.append(g.taper(f"garg{k}", (math.cos(ang) * 2.52, math.sin(ang) * 2.52, 14.55), 0.12, 0.05, 0.45, m.dark_stone, c, verts=5, rot=(math.radians(70), 0, ang)))
+    stone_drum(g, p, c, stone, 14.65, 16.85, 2.22, verts=16, course_h=0.15, uv=0.22)
+    p.append(g.cyl("obs_string", (0, 0, 16.95), 2.38, 0.09, trim, c, verts=16, uv=0.35))
+    p.append(g.cyl("obs_gold", (0, 0, 17.08), 2.45, 0.06, m.gold, c, verts=24, uv=0.45))
+    for k in range(12):
+        ang = k * math.pi / 6
+        slit_window(
+            g, p, c, frame, m.glass,
+            (math.cos(ang) * 2.22, math.sin(ang) * 2.22, 15.75),
+            (0.12, 0.48, 1.05), yaw=ang,
+        )
+        p.append(g.ico(f"shard{k}", (math.cos(ang) * 2.55, math.sin(ang) * 2.55, 17.35), 0.16, m.crystal, c, subdiv=2, scale=(0.55, 0.55, 1.35)))
+    p.append(g.ico("dome", (0, 0, 17.92), 2.32, m.gold, c, subdiv=5, scale=(1.0, 1.0, 0.52)))
+    for k in range(6):
+        ang = k * math.pi / 6
+        p.append(g.cube(f"rib{k}", (0, 0, 18.35), (0.04, 1.55, 0.72), m.iron, c, rot=(math.radians(8), 0, ang)))
+    p.append(g.cyl("dome_ring", (0, 0, 17.22), 2.2, 0.05, m.iron, c, verts=32))
+    p.append(g.cyl("yoke_l", (-0.38, -0.15, 18.45), 0.08, 0.95, m.gold, c, verts=10, rot=(math.radians(90), 0, 0)))
+    p.append(g.cyl("yoke_r", (0.38, -0.15, 18.45), 0.08, 0.95, m.gold, c, verts=10, rot=(math.radians(90), 0, 0)))
+    p.append(g.cyl("pivot", (0, -0.55, 18.45), 0.12, 0.85, m.iron, c, verts=12, rot=(0, math.radians(90), 0)))
+    p.append(g.cyl("tube_o", (0, -2.05, 18.95), 0.17, 2.35, m.gold, c, verts=20, rot=(math.radians(48), 0, 0)))
+    p.append(g.cyl("tube_i", (0, -2.05, 18.95), 0.11, 2.42, m.iron, c, verts=16, rot=(math.radians(48), 0, 0)))
+    for t in (0.22, 0.48, 0.72):
+        p.append(g.cyl(f"ring{t}", (0, -0.9 - t * 2.0, 18.45 + t * 1.15), 0.2, 0.06, m.iron, c, verts=16, rot=(math.radians(48), 0, 0)))
+    p.append(g.cyl("dew", (0, -3.05, 19.52), 0.2, 0.28, m.gold, c, verts=16, rot=(math.radians(48), 0, 0)))
+    p.append(g.cyl("lens", (0, -3.22, 19.62), 0.13, 0.05, m.glass, c, verts=16, rot=(math.radians(48), 0, 0)))
+    p.append(g.uv_sphere("cw", (0, 1.15, 17.75), 0.18, m.iron, c, segs=14, rings=10))
+    p.append(g.cone("finial", (0, 0, 19.28), 0.16, 0.42, m.gold, c, verts=10))
+    p.append(g.uv_sphere("star", (0, 0, 19.58), 0.09, m.crystal, c, segs=16, rings=10))
+    p.append(g.cyl("courtyard", (0, 0, 0.03), 7.2, 0.08, m.dark_stone, c, verts=16, uv=0.45))
+    return finish(g, "building_university_grand_observatory", p, c, 0.01, 5)
 
 
 def bld_weather_rods(g, m, c):
@@ -634,16 +804,18 @@ def bld_weather_rods(g, m, c):
 
 
 def bld_far_glass(g, m, c):
-    """Long tube on a brick pier."""
+    """Seeing-stone on a coursed limestone pier."""
     p = []
-    _earth(g, p, c, m.brick, (10, 14, 0.4))
-    p.append(g.cube("pier", (0, 1.2, 1.55), (3.6, 4.2, 2.4), m.red_brick, c))
-    p.append(g.cyl("tube", (0, -1.6, 3.55), 0.45, 7.4, m.iron, c, verts=14, rot=(math.radians(72), 0, 0)))
-    p.append(g.cyl("lens", (0, -4.85, 5.35), 0.55, 0.18, m.glass, c, verts=14, rot=(math.radians(72), 0, 0)))
-    p.append(g.cube("yoke", (0, 0.4, 2.85), (1.4, 1.4, 0.7), m.iron, c))
-    door(g, p, c, m.wood, m.iron, (0, -0.95, 1.0), (0.55, 0.12, 1.5))
-    stairs(g, p, c, m.marble, (0, -1.8, 0.25), count=4, width=1.8)
-    return finish(g, "building_university_far_glass", p, c, 0.035, 3)
+    stone = m.brick
+    stone_drum(g, p, c, stone, 0.1, 3.35, 1.45, verts=18, course_h=0.22, uv=0.4)
+    p.append(g.cyl("yoke", (0, 0, 3.55), 1.05, 0.28, m.gold, c, verts=16, uv=0.5))
+    p.append(g.uv_sphere("stone", (0, -0.12, 4.55), 0.82, m.crystal, c, segs=22, rings=14))
+    p.append(g.cyl("halo", (0, -0.12, 4.55), 1.12, 0.04, m.gold, c, verts=24, rot=(math.radians(75), 0, 0)))
+    p.append(g.cone("fin", (0, 0, 5.48), 0.1, 0.48, m.gold, c, verts=8))
+    p.append(g.cube("porch", (0, -1.85, 1.05), (2.05, 1.35, 1.55), stone, c, uv=0.4))
+    door(g, p, c, m.wood, m.iron, (0, -2.52, 0.95), (0.52, 0.1, 1.45))
+    stairs(g, p, c, stone, (0, -3.22, 0.18), count=5, width=1.75, step=(0.22, 0.13))
+    return finish(g, "building_university_far_glass", p, c, 0.014, 4)
 
 
 # --- Church: renaissance ---
@@ -666,20 +838,19 @@ def bld_monastery(g, m, c):
 
 
 def bld_sun_temple(g, m, c):
-    """Round sun rotunda."""
+    """Round sun rotunda of marble courses and a gold dome."""
     p = []
-    _earth(g, p, c, m.marble, (12, 12, 0.4))
-    p.append(g.cyl("cella", (0, 0.4, 2.35), 3.6, 3.8, m.marble, c, verts=16))
-    p.append(g.cyl("entab", (0, 0.4, 4.35), 3.85, 0.22, m.gold, c, verts=16))
-    p.append(g.uv_sphere("dome", (0, 0.4, 5.55), 2.7, m.gold, c, segs=16, rings=10))
-    p.append(g.cyl("sun", (0, -3.55, 3.15), 0.7, 0.1, m.gold, c, verts=16, rot=(math.radians(90), 0, 0)))
+    stone_drum(g, p, c, m.marble, 0.25, 4.25, 3.55, verts=18, course_h=0.22, uv=0.38)
+    p.append(g.cyl("entab", (0, 0.0, 4.38), 3.78, 0.16, m.gold, c, verts=18, uv=0.45))
+    p.append(g.ico("dome", (0, 0.0, 5.55), 2.65, m.gold, c, subdiv=2, scale=(1.0, 1.0, 0.55)))
+    p.append(g.cyl("sun", (0, -3.45, 3.05), 0.68, 0.08, m.gold, c, verts=16, rot=(math.radians(90), 0, 0)))
     for k in range(8):
         ang = k * math.pi / 4 + 0.2
-        p.append(g.taper(f"col{k}", (math.cos(ang) * 4.15, math.sin(ang) * 4.15, 1.7), 0.22, 0.18, 2.4, m.marble, c, verts=8))
-    p.append(g.cube("portico", (0, -4.6, 0.7), (5.4, 2.2, 0.4), m.marble, c))
-    door(g, p, c, m.wood, m.iron, (0, -3.85, 1.25), (0.75, 0.14, 1.9))
-    stairs(g, p, c, m.marble, (0, -5.8, 0.25), count=6, width=4.4)
-    return finish(g, "building_church_sun_temple", p, c, 0.04, 3)
+        p.append(g.taper(f"col{k}", (math.cos(ang) * 4.05, math.sin(ang) * 4.05, 1.65), 0.2, 0.16, 2.25, m.marble, c, verts=8))
+    p.append(g.cube("portico", (0, -4.45, 0.65), (5.2, 2.05, 0.38), m.marble, c, uv=0.4))
+    door(g, p, c, m.wood, m.iron, (0, -3.75, 1.2), (0.72, 0.14, 1.85))
+    stairs(g, p, c, m.marble, (0, -5.55, 0.22), count=6, width=4.2)
+    return finish(g, "building_church_sun_temple", p, c, 0.016, 4)
 
 
 def bld_sacred_site(g, m, c):
@@ -696,17 +867,16 @@ def bld_sacred_site(g, m, c):
 
 
 def bld_scorched_tower(g, m, c):
-    """Blackened broken tower."""
+    """Blackened broken stone tower."""
     p = []
-    _earth(g, p, c, m.brick, (9, 9, 0.4))
-    p.append(g.taper("shaft", (0, 0, 3.6), 1.9, 1.1, 6.4, m.brick, c, verts=10))
-    p.append(g.cube("break", (0.6, -0.4, 6.4), (1.8, 1.6, 1.4), m.brick, c, rot=(math.radians(12), 0, math.radians(18))))
-    p.append(g.cube("rubble", (1.8, -1.4, 0.7), (2.2, 1.8, 0.8), m.brick, c))
-    window(g, p, c, m.brick, m.slate, (0, -1.35, 2.8), (0.6, 0.14, 1.1))
-    p.append(g.cube("char", (0, 0, 5.5), (1.4, 1.4, 0.3), m.dark_stone, c))
-    door(g, p, c, m.wood, m.iron, (0, -1.7, 1.0), (0.55, 0.12, 1.5))
-    stairs(g, p, c, m.brick, (0, -2.5, 0.25), count=4, width=1.6)
-    return finish(g, "building_church_scorched_tower", p, c, 0.035, 3)
+    stone_shaft(g, p, c, m.brick, 0.2, 6.15, 1.82, 1.12, verts=14, course_h=0.22, uv=0.35)
+    p.append(g.cube("break", (0.55, -0.35, 6.35), (1.65, 1.45, 1.25), m.brick, c, rot=(math.radians(12), 0, math.radians(18))))
+    p.append(g.cube("rubble", (1.75, -1.35, 0.65), (2.05, 1.65, 0.75), m.brick, c))
+    window(g, p, c, m.brick, m.slate, (0, -1.35, 2.65), (0.55, 0.14, 1.05))
+    p.append(g.cube("char", (0, 0, 5.45), (1.25, 1.25, 0.28), m.dark_stone, c))
+    door(g, p, c, m.wood, m.iron, (0, -1.62, 0.95), (0.52, 0.12, 1.45))
+    stairs(g, p, c, m.brick, (0, -2.35, 0.22), count=4, width=1.55)
+    return finish(g, "building_church_scorched_tower", p, c, 0.016, 4)
 
 
 def bld_shrine(g, m, c):

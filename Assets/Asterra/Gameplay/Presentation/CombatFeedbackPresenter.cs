@@ -14,11 +14,15 @@ namespace Asterra.Gameplay.Presentation
 
         private readonly List<FxBurst> _bursts = new();
         private int _handledTick = int.MinValue;
+        private bool _endPosesApplied;
 
         private struct FxBurst
         {
             public GameObject Go;
             public float ExpireAt;
+            public float BornAt;
+            public float Life;
+            public float Size;
         }
 
         private void Awake()
@@ -56,8 +60,13 @@ namespace Asterra.Gameplay.Presentation
                             case CombatEventKind.Death:
                             {
                                 var deathView = FindView(views, ev.TargetId);
-                                if (deathView != null && !deathView.IsUnit)
-                                    deathView.BeginCollapse();
+                                if (deathView != null)
+                                {
+                                    if (deathView.IsUnit)
+                                        deathView.BeginDeath();
+                                    else
+                                        deathView.BeginCollapse();
+                                }
                                 SpawnBurst(ev.X, ev.Z, new Color(0.95f, 0.2f, 0.15f, 0.9f),
                                     ev.IsBuilding ? 9f : 6f, deathBurstSeconds);
                                 AsterraAudio.Play(AsterraSfx.Death, 0.8f);
@@ -99,9 +108,14 @@ namespace Asterra.Gameplay.Presentation
                                 MatchFeedback.Show("Research complete");
                                 break;
                             case CombatEventKind.TrainComplete:
+                            {
                                 SpawnBurst(ev.X, ev.Z, new Color(0.4f, 0.9f, 0.55f, 0.9f), 5f, pulseSeconds);
                                 AsterraAudio.Play(AsterraSfx.OrderTrain, 0.55f);
+                                var trainer = FindView(views, ev.TargetId);
+                                if (trainer != null && !trainer.IsUnit)
+                                    trainer.PlayBuildCompleteFlash();
                                 break;
+                            }
                             case CombatEventKind.PowerActivated:
                             {
                                 SpawnBurst(ev.X, ev.Z, new Color(0.85f, 0.55f, 1f, 0.95f), 12f, pulseSeconds * 1.2f);
@@ -139,13 +153,36 @@ namespace Asterra.Gameplay.Presentation
                 }
             }
 
+            if (match.Result.IsOver && match.Session != null && !_endPosesApplied)
+            {
+                _endPosesApplied = true;
+                var winner = match.Result.Winner;
+                var views = FindObjectsByType<EntityView>(FindObjectsSortMode.None);
+                for (int v = 0; v < views.Length; v++)
+                {
+                    var view = views[v];
+                    if (view != null && view.IsUnit)
+                        view.SetOutcomePose(view.Owner == winner);
+                }
+            }
+
             float now = Time.time;
             for (int i = _bursts.Count - 1; i >= 0; i--)
             {
-                if (now < _bursts[i].ExpireAt)
+                var burst = _bursts[i];
+                if (burst.Go != null)
+                {
+                    float u = Mathf.Clamp01((now - burst.BornAt) / Mathf.Max(0.05f, burst.Life));
+                    float pop = Mathf.Sin(Mathf.Clamp01(u * 1.15f) * Mathf.PI);
+                    float s = burst.Size * (0.35f + pop * 0.85f);
+                    burst.Go.transform.localScale = new Vector3(s, s, s);
+                    burst.Go.transform.Rotate(0f, 220f * Time.deltaTime, 90f * Time.deltaTime, Space.World);
+                }
+
+                if (now < burst.ExpireAt)
                     continue;
-                if (_bursts[i].Go != null)
-                    Destroy(_bursts[i].Go);
+                if (burst.Go != null)
+                    Destroy(burst.Go);
                 _bursts.RemoveAt(i);
             }
         }
@@ -172,7 +209,14 @@ namespace Asterra.Gameplay.Presentation
                 rend.sharedMaterial = mat;
             }
 
-            _bursts.Add(new FxBurst { Go = go, ExpireAt = Time.time + life });
+            _bursts.Add(new FxBurst
+            {
+                Go = go,
+                ExpireAt = Time.time + life,
+                BornAt = Time.time,
+                Life = life,
+                Size = size,
+            });
         }
 
         private static EntityView FindView(EntityView[] views, SimEntityId id)

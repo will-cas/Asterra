@@ -2,6 +2,7 @@ using Asterra.Core;
 using Asterra.Gameplay;
 using Asterra.Gameplay.Audio;
 using Asterra.Gameplay.Content;
+using Asterra.Gameplay.Presentation;
 using Asterra.Net;
 using UnityEngine;
 
@@ -13,6 +14,7 @@ namespace Asterra.UI
         [SerializeField] private MatchLobbyController lobby;
         [SerializeField] private MultiplayerMenu multiplayerMenu;
         [SerializeField] private int factionIndex;
+        [SerializeField] private int teamColorIndex;
         [SerializeField] private bool drawGui = true;
 
         public string StatusLine { get; private set; } = "Lobby";
@@ -48,9 +50,9 @@ namespace Asterra.UI
 
             HudStyle.Ensure();
             float w = 460f;
-            float h = 300f;
+            float h = 360f;
             float x = (Screen.width - w) * 0.5f;
-            float y = (Screen.height - h) * 0.42f;
+            float y = (Screen.height - h) * 0.38f;
             var panel = new Rect(x, y, w, h);
             HudClickBlocker.Block(panel);
             HudStyle.DrawPanel(panel, new Color(0.05f, 0.07f, 0.09f, 0.94f));
@@ -73,6 +75,10 @@ namespace Asterra.UI
             if (IconBtn(new Rect(bx + 120f, by, 240f, 28f), fname))
                 OnCycleFaction();
 
+            by += 36f;
+            GUI.Label(new Rect(bx, by, 120f, 24f), "Team colour", HudStyle.Label);
+            DrawLobbySwatches(new Rect(bx + 120f, by, 280f, 26f));
+
             by += 44f;
             if (IconBtn(new Rect(bx, by, 130f, 32f), "Host"))
                 OnHostSession();
@@ -80,6 +86,25 @@ namespace Asterra.UI
                 OnJoinSession();
             if (IconBtn(new Rect(bx + 280f, by, 120f, 32f), "Start"))
                 OnStart();
+        }
+
+        private void DrawLobbySwatches(Rect row)
+        {
+            int n = AsterraMeshLibrary.TeamSwatchCount;
+            float s = Mathf.Min(24f, (row.width - (n - 1) * 4f) / n);
+            for (int i = 0; i < n; i++)
+            {
+                var r = new Rect(row.x + i * (s + 4f), row.y + (row.height - s) * 0.5f, s, s);
+                HudClickBlocker.Block(r);
+                bool picked = teamColorIndex == i;
+                HudStyle.DrawFrame(
+                    r,
+                    AsterraMeshLibrary.TeamSwatch(i),
+                    picked ? Color.white : new Color(0.05f, 0.05f, 0.05f, 0.7f),
+                    picked ? 2f : 1f);
+                if (GUI.Button(r, GUIContent.none, GUIStyle.none))
+                    OnPickTeamColor(i);
+            }
         }
 
         private static bool IconBtn(Rect r, string label)
@@ -102,6 +127,14 @@ namespace Asterra.UI
             int n = FactionDefaultContent.All.Length;
             factionIndex = (factionIndex + 1) % n;
             lobby?.SetLocalFaction(factionIndex);
+            AsterraAudio.PlayUiClick();
+        }
+
+        public void OnPickTeamColor(int index)
+        {
+            teamColorIndex = ((index % AsterraMeshLibrary.TeamSwatchCount) + AsterraMeshLibrary.TeamSwatchCount)
+                % AsterraMeshLibrary.TeamSwatchCount;
+            lobby?.SetLocalTeamColor(teamColorIndex);
             AsterraAudio.PlayUiClick();
         }
 

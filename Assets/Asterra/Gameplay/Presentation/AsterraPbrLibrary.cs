@@ -65,7 +65,53 @@ namespace Asterra.Gameplay.Presentation
                 mat.SetFloat("_TexBlend", maps.Valid ? 1f : 0f);
             if (mat.HasProperty("_BumpScale"))
                 mat.SetFloat("_BumpScale", 1f);
+            if (mat.HasProperty("_UvScale") && maps.Valid)
+                mat.SetFloat("_UvScale", 0.38f);
+            if (mat.HasProperty("_TeamColor"))
+                mat.SetColor("_TeamColor", Color.white);
+            if (mat.HasProperty("_TeamCloth"))
+                mat.SetFloat("_TeamCloth", 0f);
             return mat;
+        }
+
+        public static float TeamClothWeight(string setKey)
+        {
+            if (string.IsNullOrEmpty(setKey))
+                return 0.35f;
+            if (setKey.StartsWith("cloth"))
+                return 1f;
+            if (setKey == "leather")
+                return 0.55f;
+            if (setKey == "leaf")
+                return 0.4f;
+            if (setKey == "ice" || setKey == "glass")
+                return 0.35f;
+            if (setKey == "plaster" || setKey == "pale_wood")
+                return 0.5f;
+            if (setKey == "marble")
+                return 0.35f;
+            if (setKey == "stone_brick" || setKey == "red_brick" || setKey == "slate")
+                return 0.22f;
+            if (setKey == "steel" || setKey == "iron")
+                return 0.18f;
+            return 0.3f;
+        }
+
+        public static void ApplyTeamDye(Material mat, Color team, bool building, string setKey, Mesh mesh)
+        {
+            if (mat == null)
+                return;
+            if (mat.HasProperty("_TeamColor"))
+                mat.SetColor("_TeamColor", team);
+            if (mat.HasProperty("_TeamCloth"))
+                mat.SetFloat("_TeamCloth", TeamClothWeight(setKey));
+            if (mat.HasProperty("_TeamBuilding"))
+                mat.SetFloat("_TeamBuilding", building ? 1f : 0f);
+            if (mat.HasProperty("_TeamBounds") && mesh != null)
+            {
+                Bounds b = mesh.bounds;
+                mat.SetVector("_TeamBounds", new Vector4(b.min.y, b.max.y, 0f, 0f));
+            }
         }
 
         public static Maps GetMaps(string setKey)
@@ -88,23 +134,23 @@ namespace Asterra.Gameplay.Presentation
             if (!isUnit)
             {
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("university"))
-                    return "red_brick";
+                    return "marble";
                 if (!string.IsNullOrEmpty(definitionId) && (definitionId.Contains("veiled")
                     || definitionId.Contains("arcane") || definitionId.Contains("portal")
                     || definitionId.Contains("shadowed") || definitionId.Contains("watchtower")))
                     return "steel";
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("outcast"))
-                    return "ice";
+                    return "marble";
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("freetown"))
-                    return "pale_wood";
+                    return "stone_brick";
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("church"))
                     return "marble";
                 if (AsterraMeshLibrary.IsWall(definitionId))
                     return "stone_brick";
                 if (!string.IsNullOrEmpty(definitionId) && definitionId.Contains("turret"))
-                    return "slate";
+                    return "steel";
                 if (AsterraMeshLibrary.IsKeep(definitionId))
-                    return "plaster";
+                    return "marble";
                 return "stone_brick";
             }
 
@@ -130,13 +176,16 @@ namespace Asterra.Gameplay.Presentation
                 return "cloth_sun";
             if (definitionId.StartsWith("unit_university"))
                 return "cloth_deep";
+            if (definitionId.StartsWith("unit_royal") || definitionId.Contains("legion")
+                || definitionId.Contains("guard") || definitionId.Contains("knight"))
+                return "steel";
             if (definitionId.Contains("dryad") || definitionId.Contains("sprite"))
                 return "leaf";
             if (definitionId.Contains("ember") || definitionId.Contains("golem") || definitionId.Contains("siege")
                 || definitionId.Contains("catapult") || definitionId.Contains("onager"))
                 return "iron";
             if (definitionId.Contains("cavalry") || definitionId.Contains("rider") || definitionId.Contains("knight"))
-                return "leather";
+                return "steel";
             if (definitionId.Contains("builder") || definitionId.Contains("archer") || definitionId.Contains("ranger"))
                 return "leather";
             if (definitionId.Contains("mage") || definitionId.Contains("caster") || definitionId.Contains("priest")
@@ -163,7 +212,7 @@ namespace Asterra.Gameplay.Presentation
             if (setKey == "gold" || setKey == "crystal")
                 return 0.55f;
             if (setKey == "iron" || setKey == "steel")
-                return 0.62f;
+                return 0.22f;
             if (setKey == "glass")
                 return 0.08f;
             if (setKey == "ice")

@@ -9,9 +9,6 @@ from asterra_detail import arch, door, finish, pitched, stairs, window
 def keep_arcaneum(g, m, c):
     """Uncrowned: iron-and-glass keep. Layered shaft, recessed bays, gate with hinges."""
     p = []
-    p.append(g.cube("earth", (0, 0, 0.28), (12.0, 12.0, 0.56), m.dark_stone, c))
-    p.append(g.cube("plinth", (0, 0, 0.85), (16.2, 16.2, 0.7), m.steel, c))
-    p.append(g.cube("plinth_cap", (0, 0, 1.22), (16.5, 16.5, 0.16), m.iron, c))
     p.append(g.cube("shaft", (0, 0, 5.55), (7.6, 7.6, 8.6), m.dark_stone, c))
     p.append(g.cube("string", (0, 0, 7.4), (7.95, 7.95, 0.18), m.steel, c))
     p.append(g.cube("cornice", (0, 0, 9.85), (8.15, 8.15, 0.22), m.steel, c))

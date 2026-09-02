@@ -97,7 +97,7 @@ def generate_textures():
     return images
 
 
-def pbr_mat(name, maps, metallic=0.0, uv_scale=1.0, normal_str=1.0, spec=0.5):
+def pbr_mat(name, maps, metallic=0.0, uv_scale=1.0, normal_str=1.0, spec=0.5, transmission=0.0, coord="Object", clearcoat=0.0):
     existing = bpy.data.materials.get(name)
     if existing:
         return existing
@@ -108,12 +108,37 @@ def pbr_mat(name, maps, metallic=0.0, uv_scale=1.0, normal_str=1.0, spec=0.5):
     bsdf.location = (200, 0)
     if "Metallic" in bsdf.inputs:
         bsdf.inputs["Metallic"].default_value = metallic
+    if "Specular IOR Level" in bsdf.inputs:
+        bsdf.inputs["Specular IOR Level"].default_value = spec
+    elif "Specular" in bsdf.inputs:
+        bsdf.inputs["Specular"].default_value = spec
+    if clearcoat > 0.01:
+        if "Coat Weight" in bsdf.inputs:
+            bsdf.inputs["Coat Weight"].default_value = clearcoat
+            if "Coat Roughness" in bsdf.inputs:
+                bsdf.inputs["Coat Roughness"].default_value = 0.12
+        elif "Clearcoat" in bsdf.inputs:
+            bsdf.inputs["Clearcoat"].default_value = clearcoat
+    if transmission > 0.01:
+        if "Transmission Weight" in bsdf.inputs:
+            bsdf.inputs["Transmission Weight"].default_value = transmission
+        elif "Transmission" in bsdf.inputs:
+            bsdf.inputs["Transmission"].default_value = transmission
+        if "IOR" in bsdf.inputs:
+            bsdf.inputs["IOR"].default_value = 1.52
+        m.use_screen_refraction = True
     uv = nt.nodes.new("ShaderNodeTexCoord")
     uv.location = (-900, 0)
     mapping = nt.nodes.new("ShaderNodeMapping")
     mapping.location = (-700, 0)
     mapping.inputs["Scale"].default_value = (uv_scale, uv_scale, uv_scale)
-    nt.links.new(uv.outputs["UV"], mapping.inputs["Vector"])
+    if coord == "UV":
+        src = uv.outputs["UV"]
+    elif coord == "Generated":
+        src = uv.outputs["Generated"]
+    else:
+        src = uv.outputs["Object"]
+    nt.links.new(src, mapping.inputs["Vector"])
 
     def tex_node(img, loc, non_color=False):
         n = nt.nodes.new("ShaderNodeTexImage")
@@ -258,16 +283,77 @@ def bevel(ob, width=0.05, segments=2):
         bpy.ops.object.shade_smooth()
 
 
+def subdiv(ob, levels=1):
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    mod = ob.modifiers.new(name="Sub", type="SUBSURF")
+    mod.levels = max(1, levels)
+    mod.render_levels = max(1, levels)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    try:
+        bpy.ops.object.shade_auto_smooth(angle=math.radians(28))
+    except Exception:
+        bpy.ops.object.shade_smooth()
+
+
+MAT_TINTS = {
+    "M_Gold": (0.86, 0.68, 0.24, 1.0),
+    "M_Marble": (0.90, 0.86, 0.78, 1.0),
+    "M_Crystal": (0.62, 0.42, 0.92, 1.0),
+    "M_Glass": (0.42, 0.68, 0.82, 1.0),
+    "M_Steel": (0.58, 0.62, 0.68, 1.0),
+    "M_Iron": (0.38, 0.36, 0.34, 1.0),
+    "M_DarkStone": (0.28, 0.27, 0.26, 1.0),
+    "M_Brick": (0.52, 0.46, 0.38, 1.0),
+    "M_RedBrick": (0.58, 0.32, 0.24, 1.0),
+    "M_Slate": (0.32, 0.34, 0.36, 1.0),
+    "M_Wood": (0.42, 0.28, 0.14, 1.0),
+    "M_PaleWood": (0.72, 0.58, 0.38, 1.0),
+    "M_Bark": (0.32, 0.22, 0.12, 1.0),
+    "M_Leather": (0.36, 0.22, 0.12, 1.0),
+    "M_Cloth": (0.72, 0.68, 0.62, 1.0),
+    "M_ClothDeep": (0.28, 0.32, 0.48, 1.0),
+    "M_ClothPurple": (0.42, 0.22, 0.55, 1.0),
+    "M_ClothGreen": (0.32, 0.48, 0.28, 1.0),
+    "M_ClothBlue": (0.22, 0.38, 0.58, 1.0),
+    "M_ClothSun": (0.86, 0.62, 0.22, 1.0),
+    "M_Skin": (0.82, 0.62, 0.48, 1.0),
+    "M_Ice": (0.72, 0.86, 0.92, 1.0),
+    "M_Plaster": (0.82, 0.78, 0.70, 1.0),
+    "M_Leaf": (0.28, 0.48, 0.22, 1.0),
+    "M_LeafDark": (0.18, 0.32, 0.14, 1.0),
+}
+
+
+def bake_vertex_colors(ob) -> None:
+    """Stamp material tints onto corners so Unity OBJ retains gold/cloth/stone."""
+    mesh = ob.data
+    if mesh is None or not mesh.polygons:
+        return
+    if mesh.color_attributes.get("Col") is None:
+        mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="CORNER")
+    attr = mesh.color_attributes["Col"]
+    tints = []
+    for mat in mesh.materials:
+        name = mat.name if mat is not None else ""
+        tints.append(MAT_TINTS.get(name, (0.72, 0.68, 0.62, 1.0)))
+    if not tints:
+        tints = [(0.72, 0.68, 0.62, 1.0)]
+    for poly in mesh.polygons:
+        col = tints[poly.material_index % len(tints)]
+        for li in poly.loop_indices:
+            attr.data[li].color = col
+
+
 class Mats:
     pass
 
 
 def make_materials(images):
     m = Mats()
-    m.brick = pbr_mat("M_Brick", images["stone_brick"], uv_scale=0.85, normal_str=1.35)
-    m.plaster = pbr_mat("M_Plaster", images["plaster"], uv_scale=0.7, normal_str=0.7)
-    m.slate = pbr_mat("M_Slate", images["slate"], uv_scale=1.1, normal_str=1.05)
-    m.gold = pbr_mat("M_Gold", images["gold"], metallic=0.62, uv_scale=1.0, normal_str=0.7)
+    m.marble = pbr_mat("M_Marble", images["marble"], uv_scale=1.35, normal_str=0.85, spec=0.55)
+    m.gold = pbr_mat("M_Gold", images["gold"], metallic=0.92, uv_scale=0.85, normal_str=0.35, spec=0.95, coord="Generated", clearcoat=0.55)
+    m.brick = pbr_mat("M_Brick", images["stone_brick"], uv_scale=3.2, normal_str=1.85)
     m.wood = pbr_mat("M_Wood", images["wood"], uv_scale=2.5, normal_str=0.85)
     m.leather = pbr_mat("M_Leather", images["leather"], uv_scale=2.8, normal_str=0.7)
     m.cloth = pbr_mat("M_Cloth", images["cloth"], uv_scale=0.85, normal_str=0.35)
@@ -282,13 +368,14 @@ def make_materials(images):
     m.leaf = pbr_mat("M_Leaf", images["leaf"], uv_scale=2.2, normal_str=0.7)
     m.leaf_d = pbr_mat("M_LeafDark", images["leaf_dark"], uv_scale=2.2, normal_str=0.7)
     m.grass = pbr_mat("M_Grass", images["grass"], uv_scale=8.0, normal_str=0.9)
-    m.crystal = pbr_mat("M_Crystal", images["crystal"], metallic=0.35, uv_scale=1.6, normal_str=0.6)
+    m.crystal = pbr_mat("M_Crystal", images["crystal"], metallic=0.04, uv_scale=1.1, normal_str=0.35, spec=0.95, transmission=0.82, coord="Generated")
+    m.glass = pbr_mat("M_Glass", images["glass"], metallic=0.0, uv_scale=0.6, normal_str=0.08, spec=1.0, transmission=0.94, coord="Generated")
     m.ice = pbr_mat("M_Ice", images["ice"], metallic=0.08, uv_scale=1.4, normal_str=0.55, spec=0.85)
-    m.glass = pbr_mat("M_Glass", images["glass"], metallic=0.04, uv_scale=1.2, normal_str=0.25, spec=0.95)
     m.steel = pbr_mat("M_Steel", images["steel"], metallic=0.82, uv_scale=2.2, normal_str=0.75)
-    m.dark_stone = pbr_mat("M_DarkStone", images["dark_stone"], uv_scale=0.8, normal_str=1.1)
-    m.red_brick = pbr_mat("M_RedBrick", images["red_brick"], uv_scale=0.9, normal_str=1.35)
-    m.marble = pbr_mat("M_Marble", images["marble"], uv_scale=0.7, normal_str=0.45, spec=0.7)
+    m.dark_stone = pbr_mat("M_DarkStone", images["dark_stone"], uv_scale=1.2, normal_str=1.25)
+    m.red_brick = pbr_mat("M_RedBrick", images["red_brick"], uv_scale=1.35, normal_str=1.45)
+    m.plaster = pbr_mat("M_Plaster", images["plaster"], uv_scale=1.1, normal_str=0.85)
+    m.slate = pbr_mat("M_Slate", images["slate"], uv_scale=1.6, normal_str=1.2)
     m.pale_wood = pbr_mat("M_PaleWood", images["pale_wood"], uv_scale=2.2, normal_str=0.8)
     return m
 
@@ -298,8 +385,8 @@ def setup_world():
     bpy.context.scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
-    bg.inputs[0].default_value = (0.48, 0.56, 0.64, 1.0)
-    bg.inputs[1].default_value = 0.9
+    bg.inputs[0].default_value = (0.42, 0.52, 0.62, 1.0)
+    bg.inputs[1].default_value = 1.15
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x = 1920
@@ -335,7 +422,7 @@ def setup_lights(m):
     rim.data.size = 8
     rim.data.color = (1.0, 0.86, 0.55)
     move_to(rim, c)
-    ground = cube("ground", (0, 30, -0.1), (160, 140, 0.2), m.grass, c, uv=12.0)
+    ground = cube("ground", (0, 0, -0.12), (80, 80, 0.24), m.grass, c, uv=18.0)
     return ground
 
 
@@ -871,7 +958,7 @@ def export_obj(ob, dest: Path):
     ob.select_set(True)
     bpy.context.view_layer.objects.active = ob
     dest.parent.mkdir(parents=True, exist_ok=True)
-    bpy.ops.wm.obj_export(
+    kwargs = dict(
         filepath=str(dest),
         export_selected_objects=True,
         export_materials=False,
@@ -879,6 +966,13 @@ def export_obj(ob, dest: Path):
         forward_axis="NEGATIVE_Z",
         up_axis="Y",
     )
+    try:
+        bpy.ops.wm.obj_export(export_colors="SRGB", **kwargs)
+    except TypeError:
+        try:
+            bpy.ops.wm.obj_export(export_vertex_colors=True, **kwargs)
+        except TypeError:
+            bpy.ops.wm.obj_export(**kwargs)
 
 
 def export_fbx(ob, dest: Path, armature=None):

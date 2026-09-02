@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Asterra.Gameplay.Presentation
 {
     /// <summary>
-    /// Loads low-poly meshes from Assets/Asterra/Shared/Art/Meshes/*.obj (Kenney / Quaternius CC0).
+    /// Loads authored roster meshes from Assets/Asterra/Shared/Art/Meshes/*.obj.
     /// No procedural mesh builders — missing files log an error and return an empty mesh.
     /// </summary>
     public static class AsterraMeshLibrary
@@ -223,26 +223,26 @@ namespace Asterra.Gameplay.Presentation
 
         private static readonly string[] KeepMeshes =
         {
-            "building_keep", "building_producer", "building_tower",
-            "building_outpost", "building_producer", "building_keep",
+            "building_arcaneum", "building_keep", "building_outcast_great_camp",
+            "building_freetown_tavern", "building_university_grand_college", "building_church_grand_temple",
         };
 
         private static readonly string[] ProducerMeshes =
         {
-            "building_producer", "building_keep", "building_outpost",
-            "building_tower", "building_keep", "building_producer",
+            "building_arcane_academy", "building_royal_barracks", "building_outcast_burrows",
+            "building_freetown_smugglers_den", "building_university_workshop", "building_church_warrior_monastery",
         };
 
         private static readonly string[] TowerMeshes =
         {
-            "building_tower", "building_turret", "building_keep",
-            "building_producer", "building_outpost", "building_tower",
+            "building_watchtower", "building_royal_outpost_tower", "building_outcast_treetop_watch",
+            "building_freetown_crows_nest", "building_university_clockwork_tower", "building_church_scorched_tower",
         };
 
         private static readonly string[] OutpostMeshes =
         {
-            "building_outpost", "building_producer", "building_keep",
-            "building_turret", "building_tower", "building_outpost",
+            "building_blackroot_conservatory", "building_royal_farm", "building_outcast_mine",
+            "building_freetown_black_market", "building_university_grand_observatory", "building_church_offering_shrine",
         };
 
         private static readonly Texture2D[] BuildingAlbedos = new Texture2D[6];
@@ -534,15 +534,23 @@ namespace Asterra.Gameplay.Presentation
 
         public static Color FactionColor(byte factionIndex)
         {
-            switch (factionIndex)
+            return TeamSwatch(factionIndex);
+        }
+
+        public const int TeamSwatchCount = 8;
+
+        public static Color TeamSwatch(int index)
+        {
+            switch (index % TeamSwatchCount)
             {
-                case 0: return new Color(0.42f, 0.22f, 0.55f); // uncrowned
-                case 1: return new Color(0.72f, 0.58f, 0.18f); // mundor crown
-                case 2: return new Color(0.38f, 0.48f, 0.22f); // outcast host
-                case 3: return new Color(0.22f, 0.42f, 0.58f); // freetown
-                case 4: return new Color(0.55f, 0.48f, 0.28f); // university guild
-                case 5: return new Color(0.85f, 0.62f, 0.18f); // rising sun
-                default: return Color.gray;
+                case 0: return new Color(0.42f, 0.22f, 0.55f);
+                case 1: return new Color(0.72f, 0.58f, 0.18f);
+                case 2: return new Color(0.38f, 0.48f, 0.22f);
+                case 3: return new Color(0.22f, 0.42f, 0.58f);
+                case 4: return new Color(0.85f, 0.28f, 0.22f);
+                case 5: return new Color(0.18f, 0.72f, 0.62f);
+                case 6: return new Color(0.95f, 0.55f, 0.18f);
+                default: return new Color(0.92f, 0.92f, 0.95f);
             }
         }
 
@@ -590,6 +598,8 @@ namespace Asterra.Gameplay.Presentation
                 return true;
             if (ObjMeshLoader.TryLoad(key, out mesh) && mesh != null && mesh.vertexCount > 0)
             {
+                if (IsBasePadMesh(key))
+                    mesh = StripGroundPad(mesh);
                 Cache[key] = mesh;
                 return true;
             }
@@ -604,6 +614,8 @@ namespace Asterra.Gameplay.Presentation
                 return mesh;
             if (ObjMeshLoader.TryLoad(key, out mesh) && mesh != null)
             {
+                if (IsBasePadMesh(key))
+                    mesh = StripGroundPad(mesh);
                 Cache[key] = mesh;
                 return mesh;
             }
@@ -612,6 +624,65 @@ namespace Asterra.Gameplay.Presentation
             mesh = new Mesh { name = key };
             Cache[key] = mesh;
             return mesh;
+        }
+
+        private static bool IsBasePadMesh(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+            return key.Contains("keep")
+                   || key.Contains("arcaneum")
+                   || key.Contains("citadel")
+                   || key.Contains("great_camp")
+                   || key.Contains("tavern")
+                   || key.Contains("grand_college")
+                   || key.Contains("grand_temple")
+                   || key.Contains("academy")
+                   || key.Contains("barracks")
+                   || key == "building_producer"
+                   || key == "building_outpost";
+        }
+
+        /// <summary>Drops the wide ground slab (plinth) under keeps / bases, keeps the building mass.</summary>
+        private static Mesh StripGroundPad(Mesh src)
+        {
+            if (src == null || src.vertexCount < 8)
+                return src;
+            var v = src.vertices;
+            var tris = src.triangles;
+            var b = src.bounds;
+            float yCut = b.min.y + Mathf.Max(1.2f, b.size.y * 0.11f);
+            float padR = Mathf.Max(b.extents.x, b.extents.z) * 0.55f;
+            float cx = b.center.x;
+            float cz = b.center.z;
+            var keep = new System.Collections.Generic.List<int>(tris.Length);
+            for (int i = 0; i + 2 < tris.Length; i += 3)
+            {
+                int a = tris[i];
+                int b0 = tris[i + 1];
+                int c = tris[i + 2];
+                bool low = v[a].y < yCut && v[b0].y < yCut && v[c].y < yCut;
+                if (low)
+                {
+                    float ra = Mathf.Sqrt((v[a].x - cx) * (v[a].x - cx) + (v[a].z - cz) * (v[a].z - cz));
+                    float rb = Mathf.Sqrt((v[b0].x - cx) * (v[b0].x - cx) + (v[b0].z - cz) * (v[b0].z - cz));
+                    float rc = Mathf.Sqrt((v[c].x - cx) * (v[c].x - cx) + (v[c].z - cz) * (v[c].z - cz));
+                    if (ra > padR && rb > padR && rc > padR)
+                        continue;
+                }
+
+                keep.Add(a);
+                keep.Add(b0);
+                keep.Add(c);
+            }
+
+            if (keep.Count < 3 || keep.Count == tris.Length)
+                return src;
+
+            src.triangles = keep.ToArray();
+            src.RecalculateBounds();
+            src.RecalculateNormals();
+            return src;
         }
     }
 }

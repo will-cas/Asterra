@@ -217,7 +217,13 @@ namespace Asterra.Gameplay.Sim
                 AttackTargetId.HasValue,
                 AttackTargetId.HasValue ? AttackTargetId.Value.Value : 0u,
                 AttackMoving,
-                Patrolling);
+                Patrolling,
+                GatherTargetId.HasValue,
+                ReturningToDeposit,
+                StunRemaining > 0.01f,
+                Airborne,
+                (TraversalCapabilities & TraversalCapability.Water) != 0
+                    && (DefinitionId != null && (DefinitionId.Contains("boat") || DefinitionId.Contains("ship") || DefinitionId.Contains("ferry"))));
         }
 
         public byte ComputeEquipmentVisualFlags()

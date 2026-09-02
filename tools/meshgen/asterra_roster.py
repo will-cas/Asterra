@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from asterra_buildings import BUILDINGS
 from asterra_keeps import KEEPS
+from asterra_props import PROPS
 from asterra_units import UNITS
 
 FACTIONS = {
@@ -17,6 +18,16 @@ SKIP_IDS = {"building_royal_citadel", "unit_royal_peasant"}
 
 
 def _coll_for(g, def_id):
+    if def_id.startswith("prop_tree"):
+        return g.coll("03_World/Trees")
+    if def_id.startswith("prop_rock"):
+        return g.coll("03_World/Rocks")
+    if def_id.startswith("prop_bridge"):
+        return g.coll("03_World/Bridges")
+    if def_id.startswith("resource_"):
+        return g.coll("03_World/Resources")
+    if def_id.startswith("scenery_"):
+        return g.coll("03_World/Trees")
     if def_id.startswith("unit_veiled") or def_id.startswith("building_arcane") or def_id in (
         "building_watchtower", "building_palisade", "building_outpost",
         "building_blackroot_conservatory", "building_ancient_ruins", "building_conjuring_hall",

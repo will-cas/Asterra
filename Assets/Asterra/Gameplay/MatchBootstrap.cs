@@ -66,6 +66,26 @@ namespace Asterra.Gameplay
         public MatchPlayMode PlayMode => playMode;
         public int CampaignMissionIndex { get; private set; }
         public bool IsMatchRunning { get; private set; }
+        public int PlayerTeamColorIndex { get; private set; }
+        public int EnemyTeamColorIndex { get; private set; }
+
+        private readonly int[] _teamColorByPlayer = { 0, 1, 2, 3, 4, 5, 6, 7 };
+
+        public Color TeamTintFor(PlayerId owner)
+        {
+            int i = owner.Value;
+            if (i < 0 || i >= _teamColorByPlayer.Length)
+                return AsterraMeshLibrary.TeamSwatch(0);
+            return AsterraMeshLibrary.TeamSwatch(_teamColorByPlayer[i]);
+        }
+
+        public void SetTeamColorIndex(PlayerId owner, int colorIndex)
+        {
+            if (owner.Value >= _teamColorByPlayer.Length)
+                return;
+            _teamColorByPlayer[owner.Value] = ((colorIndex % AsterraMeshLibrary.TeamSwatchCount)
+                + AsterraMeshLibrary.TeamSwatchCount) % AsterraMeshLibrary.TeamSwatchCount;
+        }
 
         /// <summary>True while pause/options/profile overlay is open (blocks orders).</summary>
         public bool IsMenuOverlayOpen { get; set; }
@@ -218,11 +238,28 @@ namespace Asterra.Gameplay
             AiDifficulty difficulty,
             int spawnSeat)
         {
+            ConfigureAndStartOffline(
+                playerFaction, enemyFaction, mapCatalogKey, difficulty, spawnSeat, playerFaction, enemyFaction);
+        }
+
+        public void ConfigureAndStartOffline(
+            int playerFaction,
+            int enemyFaction,
+            string mapCatalogKey,
+            AiDifficulty difficulty,
+            int spawnSeat,
+            int playerTeamColor,
+            int enemyTeamColor)
+        {
             PlayerFactionIndex = playerFaction;
             EnemyFactionIndex = enemyFaction;
             MapKey = mapCatalogKey;
             aiDifficulty = difficulty;
             LocalSpawnSeat = spawnSeat;
+            PlayerTeamColorIndex = playerTeamColor;
+            EnemyTeamColorIndex = enemyTeamColor;
+            SetTeamColorIndex(new PlayerId(0), playerTeamColor);
+            SetTeamColorIndex(new PlayerId(1), enemyTeamColor);
             StartOfflineVsAi();
         }
 
@@ -234,6 +271,10 @@ namespace Asterra.Gameplay
             CampaignMissionIndex = mission.Index;
             PlayerFactionIndex = CampaignCatalog.PlayerFactionIndex;
             EnemyFactionIndex = CampaignCatalog.RivalFactionIndex(PlayerFactionIndex);
+            PlayerTeamColorIndex = PlayerFactionIndex;
+            EnemyTeamColorIndex = EnemyFactionIndex;
+            SetTeamColorIndex(new PlayerId(0), PlayerTeamColorIndex);
+            SetTeamColorIndex(new PlayerId(1), EnemyTeamColorIndex);
             MapKey = mission.MapKey;
             aiDifficulty = CampaignCatalog.ClampDifficulty(difficulty);
             LocalSpawnSeat = mission.SpawnSeat;
@@ -369,6 +410,10 @@ namespace Asterra.Gameplay
             matchSeed = data.matchSeed;
             PlayerFactionIndex = data.playerFaction;
             EnemyFactionIndex = data.enemyFaction;
+            PlayerTeamColorIndex = data.playerFaction;
+            EnemyTeamColorIndex = data.enemyFaction;
+            SetTeamColorIndex(new PlayerId(0), PlayerTeamColorIndex);
+            SetTeamColorIndex(new PlayerId(1), EnemyTeamColorIndex);
             MapKey = string.IsNullOrEmpty(data.mapKey) ? MapCatalog.LushForestId : data.mapKey;
             aiDifficulty = data.formatVersion >= 2
                 ? (AiDifficulty)Mathf.Clamp(data.aiDifficulty, 0, 3)
@@ -442,6 +487,8 @@ namespace Asterra.Gameplay
             Lobby.ClaimSlot(enemy, "Enemy AI");
             Lobby.SetFaction(local, PlayerRoster.Id.Value);
             Lobby.SetFaction(enemy, EnemyRoster.Id.Value);
+            Lobby.SetTeamColor(local, (byte)PlayerTeamColorIndex);
+            Lobby.SetTeamColor(enemy, (byte)EnemyTeamColorIndex);
             Lobby.SetReady(local, true);
             Lobby.SetReady(enemy, true);
             Lobby.TryStart(out _);
@@ -475,6 +522,13 @@ namespace Asterra.Gameplay
             EnemyRoster = firstRemote != null
                 ? ResolveRoster(firstRemote.FactionIndex)
                 : ResolveRoster((localSlot.FactionIndex + 1) % FactionDefaultContent.All.Length);
+            PlayerTeamColorIndex = localSlot.TeamColorIndex;
+            EnemyTeamColorIndex = firstRemote != null ? firstRemote.TeamColorIndex : (localSlot.TeamColorIndex + 1) % 8;
+            for (int i = 0; i < startInfo.Players.Length; i++)
+            {
+                var slot = startInfo.Players[i];
+                SetTeamColorIndex(slot.Player, slot.TeamColorIndex);
+            }
 
             BeginMatchFromLobby(localPlayer, includeAi: false, startInfo.Players);
         }
@@ -517,6 +571,12 @@ namespace Asterra.Gameplay
                                 && (playMode != MatchPlayMode.Campaign || IsCapitalIslandDefence());
             int offlineCount = includeAi ? (fillAllKeeps ? keepCount : 2) : 1;
             Session = new LocalMatchSession(localPlayer, onlinePlayers != null ? onlinePlayers.Length : offlineCount);
+            if (onlinePlayers == null)
+            {
+                SetTeamColorIndex(localPlayer, PlayerTeamColorIndex);
+                for (int i = 1; i < (includeAi ? (fillAllKeeps ? keepCount : 2) : 1); i++)
+                    SetTeamColorIndex(new PlayerId((byte)i), EnemyTeamColorIndex);
+            }
 
             _participants.Clear();
             if (onlinePlayers != null)
@@ -565,6 +625,7 @@ namespace Asterra.Gameplay
                         {
                             Player = localPlayer,
                             FactionIndex = PlayerRoster.Id.Value,
+                            TeamColorIndex = (byte)PlayerTeamColorIndex,
                             IsReady = true,
                             DisplayName = "Player",
                         };
@@ -575,6 +636,7 @@ namespace Asterra.Gameplay
                         {
                             Player = new PlayerId(nextAi++),
                             FactionIndex = EnemyRoster.Id.Value,
+                            TeamColorIndex = (byte)EnemyTeamColorIndex,
                             IsReady = true,
                             DisplayName = "Enemy AI",
                         };
@@ -587,6 +649,7 @@ namespace Asterra.Gameplay
                 {
                     Player = localPlayer,
                     FactionIndex = PlayerRoster.Id.Value,
+                    TeamColorIndex = (byte)PlayerTeamColorIndex,
                     IsReady = true,
                     DisplayName = "Player",
                 };
@@ -594,6 +657,7 @@ namespace Asterra.Gameplay
                 {
                     Player = new PlayerId(1),
                     FactionIndex = EnemyRoster.Id.Value,
+                    TeamColorIndex = (byte)EnemyTeamColorIndex,
                     IsReady = true,
                     DisplayName = "Enemy AI",
                 };

@@ -5185,7 +5185,7 @@ namespace Asterra.Gameplay
                     tz = az;
                 }
 
-                _projectileSnapshots.Add(new ProjectileSnapshot(p.X, p.Z, tx, tz));
+                _projectileSnapshots.Add(new ProjectileSnapshot(p.X, p.Z, tx, tz, p.AttackerRole));
             }
         }
 

@@ -135,7 +135,7 @@ namespace Asterra.Gameplay
             for (int i = 0; i < units.Count; i++)
             {
                 var snap = units[i];
-                if (!snap.IsAlive || snap.IsGarrisoned)
+                if (!snap.IsAlive)
                     continue;
                 alive.Add(snap.Id.Value);
                 if (!_unitViews.TryGetValue(snap.Id.Value, out var view))
@@ -153,12 +153,57 @@ namespace Asterra.Gameplay
                     _unitViews[snap.Id.Value] = view;
                 }
 
-                view.SyncPresentation(new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z));
+                if (view.IsDying)
+                    continue;
+
+                view.SetGarrisoned(snap.IsGarrisoned);
+                if (snap.IsGarrisoned)
+                {
+                    view.SetHealth(snap.Health, snap.MaxHealth);
+                    continue;
+                }
+
+                float y = SampleY(snap.X, snap.Z);
+                float dx = 0f;
+                float dz = 1f;
+                if (snap.HasMoveTarget || snap.AttackMoving || snap.Patrolling)
+                {
+                    dx = snap.MoveTargetX - snap.X;
+                    dz = snap.MoveTargetZ - snap.Z;
+                    float mag = Mathf.Sqrt(dx * dx + dz * dz);
+                    if (mag > 0.01f)
+                    {
+                        dx /= mag;
+                        dz /= mag;
+                    }
+                }
+
+                float slope = Mathf.Atan2(
+                    SampleY(snap.X + dx * 2f, snap.Z + dz * 2f) - SampleY(snap.X - dx * 2f, snap.Z - dz * 2f),
+                    4f) * Mathf.Rad2Deg;
+
+                view.SyncPresentation(
+                    new Vector3(snap.X, y, snap.Z),
+                    locomoting: snap.HasMoveTarget || snap.AttackMoving || snap.Patrolling,
+                    attacking: snap.HasAttackTarget,
+                    idle: snap.IsIdle,
+                    hasCarry: snap.HasCarry,
+                    running: snap.AttackMoving || snap.Patrolling,
+                    gathering: snap.HasGatherTarget && !snap.HasAttackTarget,
+                    stunned: snap.Stunned,
+                    airborne: snap.Airborne,
+                    boat: snap.WaterCraft,
+                    wade: SampleWade(snap.X, snap.Z),
+                    carryTimber: snap.HasCarry && snap.CarryType == ResourceType.Timber,
+                    stance: snap.Stance,
+                    slopeDegrees: slope,
+                    facingYaw: Mathf.Atan2(dx, dz) * Mathf.Rad2Deg,
+                    hasFacing: snap.HasMoveTarget || snap.AttackMoving || snap.Patrolling);
                 view.SetHealth(snap.Health, snap.MaxHealth);
                 view.SetEquipmentVisuals(snap.EquipmentVisualFlags);
             }
 
-            RemoveMissing(_unitViews, alive);
+            RemoveMissingUnits(alive);
         }
 
         private void SyncBuildings(IReadOnlyList<BuildingSnapshot> buildings)
@@ -193,6 +238,13 @@ namespace Asterra.Gameplay
                 else if (Mathf.Abs(snap.YawDegrees) > 0.01f)
                     view.transform.rotation = Quaternion.Euler(0f, snap.YawDegrees, 0f);
                 view.SetBuildingVisual(snap.State, snap.BuildProgress);
+                view.SetBuildingActivity(
+                    snap.QueueCount > 0 || snap.ProductionProgress > 0.01f,
+                    snap.ProductionProgress,
+                    researching: !string.IsNullOrEmpty(snap.ResearchUpgradeDefId) || snap.ResearchProgress > 0.01f,
+                    research01: snap.ResearchProgress,
+                    kind: snap.Kind,
+                    disabled: snap.State == BuildingState.Disabled);
             }
 
             RemoveMissingBuildings(alive);
@@ -216,7 +268,8 @@ namespace Asterra.Gameplay
                     _resourceViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, SampleY(snap.X, snap.Z) + 2f, snap.Z);
+                view.SetWorldPose(new Vector3(snap.X, SampleY(snap.X, snap.Z) + 2f, snap.Z));
+                view.SetRemaining(snap.Remaining);
             }
 
             var stale = new List<uint>();
@@ -281,8 +334,11 @@ namespace Asterra.Gameplay
                     _destructibleViews[snap.Id.Value] = view;
                 }
 
-                view.transform.position = new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z);
-                view.transform.rotation = Quaternion.Euler(0f, snap.YawDegrees, 0f);
+                if (view.IsFalling)
+                    continue;
+                view.SetWorldPose(
+                    new Vector3(snap.X, SampleY(snap.X, snap.Z), snap.Z),
+                    snap.YawDegrees);
                 view.SetDamaged(snap.State == DestructibleState.Damaged);
             }
 
@@ -296,9 +352,19 @@ namespace Asterra.Gameplay
             for (int i = 0; i < stale.Count; i++)
             {
                 var id = stale[i];
-                if (_destructibleViews.TryGetValue(id, out var view) && view != null)
+                if (!_destructibleViews.TryGetValue(id, out var view) || view == null)
+                {
+                    _destructibleViews.Remove(id);
+                    continue;
+                }
+
+                if (!view.IsFalling)
+                    view.BeginFall();
+                if (view.FallFinished)
+                {
                     Destroy(view.gameObject);
-                _destructibleViews.Remove(id);
+                    _destructibleViews.Remove(id);
+                }
             }
         }
 
@@ -381,7 +447,7 @@ namespace Asterra.Gameplay
             return UnitSquadVisual.ResolveSquadSize(definitionId);
         }
 
-        private static EntityView SpawnEntity(
+        private EntityView SpawnEntity(
             Transform parent,
             string name,
             SimEntityId id,
@@ -394,7 +460,10 @@ namespace Asterra.Gameplay
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             var view = go.AddComponent<EntityView>();
-            view.Initialize(id, isUnit, owner, definitionId, factionIndex, squadSize);
+            Color teamColor = match != null
+                ? match.TeamTintFor(owner)
+                : AsterraMeshLibrary.FactionColor(factionIndex);
+            view.Initialize(id, isUnit, owner, definitionId, factionIndex, squadSize, teamColor);
             return view;
         }
 
@@ -436,10 +505,10 @@ namespace Asterra.Gameplay
             return yPosition;
         }
 
-        private static void RemoveMissing(Dictionary<uint, EntityView> views, HashSet<uint> alive)
+        private void RemoveMissingUnits(HashSet<uint> alive)
         {
             var stale = new List<uint>();
-            foreach (var pair in views)
+            foreach (var pair in _unitViews)
             {
                 if (!alive.Contains(pair.Key))
                     stale.Add(pair.Key);
@@ -448,10 +517,27 @@ namespace Asterra.Gameplay
             for (int i = 0; i < stale.Count; i++)
             {
                 var id = stale[i];
-                if (views.TryGetValue(id, out var view) && view != null)
+                if (!_unitViews.TryGetValue(id, out var view) || view == null)
+                {
+                    _unitViews.Remove(id);
+                    continue;
+                }
+
+                if (!view.IsDying)
+                    view.BeginDeath();
+                if (view.DeathFinished)
+                {
                     Destroy(view.gameObject);
-                views.Remove(id);
+                    _unitViews.Remove(id);
+                }
             }
+        }
+
+        private float SampleWade(float x, float z)
+        {
+            if (_terrain == null)
+                _terrain = FindFirstObjectByType<TerrainGridPresenter>();
+            return _terrain != null ? _terrain.SampleWade(x, z) : 0f;
         }
 
         private static Material CreateColorMaterial(Color color)

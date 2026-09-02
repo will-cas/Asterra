@@ -162,5 +162,10 @@ namespace Asterra.Gameplay.Presentation
             Shader.SetGlobalFloat("_AsterraCloudStrength", Mathf.Clamp01(strength));
             Shader.SetGlobalVector("_AsterraCloudParams", new Vector4(0.0036f, 0.0036f, offset.x, offset.y));
         }
+
+        public static void ApplyWindGlobals(float dirX, float dirZ, float intensity)
+        {
+            Shader.SetGlobalVector("_AsterraWind", new Vector4(dirX, Mathf.Clamp(intensity, 0.08f, 1.8f), dirZ, Time.time));
+        }
     }
 }
