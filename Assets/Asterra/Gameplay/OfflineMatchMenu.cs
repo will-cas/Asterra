@@ -19,7 +19,7 @@ namespace Asterra.Gameplay
         [SerializeField] private MatchBootstrap bootstrap;
 
         private View _view = View.Hub;
-        private int _playerFaction;
+        private int _playerFaction = 1; // Mundor Crown M1 default
         private int _enemyFaction = 1;
         private int _playerTeamColor;
         private int _enemyTeamColor = 1;
@@ -29,6 +29,7 @@ namespace Asterra.Gameplay
         private Texture2D _mapPreview;
         private string _previewMapId;
         private AsterraMenuPanels.Overlay _overlay = AsterraMenuPanels.Overlay.None;
+        private bool _quitConfirm;
 
         private GUIStyle _brandStyle;
         private GUIStyle _modeStyle;
@@ -53,6 +54,13 @@ namespace Asterra.Gameplay
                 _map = MapCatalog.FromId(bootstrap.MapKey);
                 _difficulty = bootstrap.AiDifficulty;
                 _spawnSeat = bootstrap.LocalSpawnSeat;
+                // M1: if scene still has pre-slice defaults, snap to Mundor + Blackridge.
+                if (_playerFaction == 0 && (_map.Id == MapCatalog.LushForestId || string.IsNullOrEmpty(bootstrap.MapKey)))
+                {
+                    _playerFaction = 1;
+                    _enemyFaction = 0;
+                    _map = MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass);
+                }
             }
 
             _ = AsterraAudio.Instance;
@@ -78,6 +86,11 @@ namespace Asterra.Gameplay
         {
             _view = View.Skirmish;
             _overlay = AsterraMenuPanels.Overlay.None;
+            _playerFaction = 1; // Mundor
+            if (_enemyFaction == _playerFaction)
+                _enemyFaction = 0;
+            _map = MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass);
+            RebuildPreviewIfNeeded();
         }
 
         private void OnDisable()
@@ -114,8 +127,16 @@ namespace Asterra.Gameplay
             HudStyle.Ensure();
             EnsureLocalStyles();
 
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape) && _overlay != AsterraMenuPanels.Overlay.None)
-                _overlay = AsterraMenuPanels.Overlay.None;
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (_quitConfirm)
+                    _quitConfirm = false;
+                else if (_overlay != AsterraMenuPanels.Overlay.None)
+                    _overlay = AsterraMenuPanels.Overlay.None;
+                else if (_view == View.Skirmish || _view == View.Campaign)
+                    ShowHub();
+                // Esc on Main: do nothing (Quit requires confirm).
+            }
 
             // Opaque full-screen cover — never show the skirmish world behind the lobby.
             var screen = new Rect(0f, 0f, Screen.width, Screen.height);
@@ -138,11 +159,11 @@ namespace Asterra.Gameplay
 
             GUI.Label(new Rect(x, y + 14f, w, 36f), "ASTERRA", _brandStyle);
             if (_view == View.Hub)
-                GUI.Label(new Rect(x, y + 48f, w, 20f), "MAIN MENU", _modeStyle);
+                GUI.Label(new Rect(x, y + 48f, w, 20f), "THE IRON PATH", _modeStyle);
             else if (_view == View.Campaign)
                 GUI.Label(new Rect(x, y + 48f, w, 20f), "CAMPAIGN", _modeStyle);
             else
-                GUI.Label(new Rect(x, y + 48f, w, 20f), "OFFLINE SKIRMISH", _modeStyle);
+                GUI.Label(new Rect(x, y + 48f, w, 20f), "SKIRMISH SETUP", _modeStyle);
             HudStyle.DrawAccentBar(
                 new Rect(x + w * 0.5f - 48f, y + 72f, 96f, 2f),
                 new Color(0.78f, 0.66f, 0.32f, 0.65f));
@@ -186,39 +207,83 @@ namespace Asterra.Gameplay
 
         private void DrawHub(Rect rect)
         {
-            GUI.color = new Color(0.82f, 0.84f, 0.78f, 0.95f);
-            GUI.Label(
-                new Rect(rect.x, rect.y, rect.width, 48f),
-                "Choose how you go to war.",
-                HudStyle.Body);
+            // M1 Main: Skirmish / Settings / Quit. Campaign + Multiplayer hidden (code kept).
+            float stackW = Mathf.Min(360f, rect.width * 0.42f);
+            float stackX = rect.x + 24f;
+            float y = rect.y + 12f;
+
+            GUI.color = new Color(0.92f, 0.88f, 0.72f, 1f);
+            GUI.Label(new Rect(stackX, y, stackW, 44f), "ASTERRA", HudStyle.Title);
+            GUI.color = new Color(0.78f, 0.72f, 0.55f, 0.95f);
+            GUI.Label(new Rect(stackX, y + 40f, stackW, 24f), "The Iron Path", HudStyle.Body);
             GUI.color = Color.white;
+            y += 84f;
 
-            float cardW = (rect.width - 18f) * 0.5f;
-            float cardH = Mathf.Clamp(rect.height * 0.55f, 220f, 340f);
-            float cardY = rect.y + 56f;
-
-            if (DrawModeCard(
-                    new Rect(rect.x, cardY, cardW, cardH),
-                    "CAMPAIGN",
-                    "Mundor Crown — first of six faction stories.\nLinear. Difficulty is the AI.\nBetween fights: story. Secrets: optional aims, a hidden map, a secret ending."))
+            float bh = 48f;
+            float gap = 16f;
+            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Skirmish"))
             {
-                ShowCampaign();
-            }
-
-            if (DrawModeCard(
-                    new Rect(rect.x + cardW + 18f, cardY, cardW, cardH),
-                    "SKIRMISH",
-                    "Pick factions, map, spawn, and AI difficulty.\nNo story. No campaign save. Just the field."))
-            {
+                AsterraAudio.PlayUiClick();
                 ShowSkirmish();
             }
+            y += bh + gap;
 
-            GUI.color = new Color(0.7f, 0.72f, 0.68f, 0.75f);
-            GUI.Label(
-                new Rect(rect.x, rect.yMax - 36f, rect.width, 32f),
-                CampaignCatalog.WhatItIsnt,
-                HudStyle.Caption);
-            GUI.color = Color.white;
+            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Settings"))
+            {
+                AsterraAudio.PlayUiClick();
+                _overlay = AsterraMenuPanels.Overlay.Options;
+            }
+            y += bh + gap;
+
+            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Quit"))
+            {
+                AsterraAudio.PlayUiClick();
+                _quitConfirm = true;
+            }
+
+            if (_quitConfirm)
+                DrawQuitConfirm();
+        }
+
+        private bool DrawPrimaryStackButton(Rect rect, string label)
+        {
+            HudClickBlocker.Block(rect);
+            bool hover = rect.Contains(Event.current.mousePosition);
+            Color fill = hover ? new Color(0.16f, 0.14f, 0.1f, 0.98f) : new Color(0.1f, 0.09f, 0.07f, 0.96f);
+            Color border = hover ? new Color(0.85f, 0.72f, 0.38f, 0.95f) : new Color(0.55f, 0.48f, 0.28f, 0.7f);
+            HudStyle.DrawFrame(rect, fill, border, 1.5f);
+            GUI.Label(rect, label, HudStyle.Button);
+            return GUI.Button(rect, GUIContent.none, GUIStyle.none);
+        }
+
+        private void DrawQuitConfirm()
+        {
+            var screen = new Rect(0f, 0f, Screen.width, Screen.height);
+            HudClickBlocker.Block(screen);
+            HudStyle.DrawPanel(screen, new Color(0.02f, 0.03f, 0.04f, 0.72f));
+            float w = 360f;
+            float h = 160f;
+            var box = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+            HudClickBlocker.Block(box);
+            HudStyle.DrawFrame(box, new Color(0.08f, 0.07f, 0.06f, 0.98f), new Color(0.55f, 0.48f, 0.28f, 0.8f), 2f);
+            GUI.Label(new Rect(box.x, box.y + 20f, box.width, 28f), "Quit Asterra?", HudStyle.Title);
+            GUI.Label(new Rect(box.x + 24f, box.y + 56f, box.width - 48f, 28f), "Leave the desktop client.", HudStyle.Caption);
+            if (HudStyle.FrameButton(new Rect(box.x + 24f, box.yMax - 52f, 140f, 34f), "Cancel",
+                    new Color(0.18f, 0.19f, 0.2f), new Color(0.45f, 0.48f, 0.5f)))
+            {
+                AsterraAudio.PlayUiClick();
+                _quitConfirm = false;
+            }
+            if (HudStyle.FrameButton(new Rect(box.xMax - 164f, box.yMax - 52f, 140f, 34f), "Quit",
+                    new Color(0.35f, 0.14f, 0.12f), new Color(0.75f, 0.35f, 0.28f)))
+            {
+                AsterraAudio.PlayUiClick();
+#if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+#else
+                Application.Quit();
+#endif
+            }
         }
 
         private bool DrawModeCard(Rect rect, string title, string body)
@@ -353,89 +418,164 @@ namespace Asterra.Gameplay
 
         private void DrawSkirmishLobby(float x, float y, float w, float h, float contentX, float contentW)
         {
-            if (LobbyChip(new Rect(contentX, y + 88f, 88f, 28f), "Back"))
+            // M1: three columns — Faction | Map | Summary + Start/Back
+            float topY = y + 88f;
+            float colGap = 14f;
+            float colW = (contentW - colGap * 2f) / 3f;
+            float colH = Mathf.Max(280f, h - 120f);
+
+            var colFaction = new Rect(contentX, topY, colW, colH);
+            var colMap = new Rect(contentX + colW + colGap, topY, colW, colH);
+            var colSummary = new Rect(contentX + (colW + colGap) * 2f, topY, colW, colH);
+
+            DrawSkirmishFactionColumn(colFaction);
+            DrawSkirmishMapColumn(colMap);
+            DrawSkirmishSummaryColumn(colSummary);
+        }
+
+        private void DrawSkirmishFactionColumn(Rect rect)
+        {
+            HudClickBlocker.Block(rect);
+            HudStyle.DrawFrame(rect, new Color(0.06f, 0.07f, 0.08f, 0.94f), new Color(0.55f, 0.48f, 0.28f, 0.5f), 1.5f);
+            GUI.Label(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), "FACTION", HudStyle.Subtitle);
+
+            var playerRoster = FactionDefaultContent.All[_playerFaction % FactionDefaultContent.All.Length];
+            Color playerColor = AsterraMeshLibrary.TeamSwatch(_playerTeamColor);
+            float cardH = Mathf.Min(200f, rect.height * 0.48f);
+            DrawFactionCard(
+                new Rect(rect.x + 10f, rect.y + 36f, rect.width - 20f, cardH),
+                "YOUR FORCE",
+                playerRoster,
+                playerColor,
+                ref _playerFaction,
+                ref _playerTeamColor);
+
+            var enemyRoster = FactionDefaultContent.All[_enemyFaction % FactionDefaultContent.All.Length];
+            Color enemyColor = AsterraMeshLibrary.TeamSwatch(_enemyTeamColor);
+            float enemyY = rect.y + 36f + cardH + 10f;
+            float enemyH = Mathf.Min(160f, rect.yMax - enemyY - 12f);
+            if (enemyH > 120f)
+            {
+                DrawFactionCard(
+                    new Rect(rect.x + 10f, enemyY, rect.width - 20f, enemyH),
+                    "ENEMY FORCE",
+                    enemyRoster,
+                    enemyColor,
+                    ref _enemyFaction,
+                    ref _enemyTeamColor);
+            }
+        }
+
+        private void DrawSkirmishMapColumn(Rect rect)
+        {
+            HudClickBlocker.Block(rect);
+            HudStyle.DrawFrame(rect, new Color(0.06f, 0.07f, 0.08f, 0.94f), new Color(0.45f, 0.5f, 0.55f, 0.5f), 1.5f);
+            GUI.Label(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), "MAP", HudStyle.Subtitle);
+
+            var choices = MapCatalog.ListChoices();
+            float listY = rect.y + 36f;
+            float rowH = 28f;
+            float listH = Mathf.Min(choices.Count * (rowH + 4f), rect.height * 0.42f);
+            var listRect = new Rect(rect.x + 10f, listY, rect.width - 20f, listH);
+            HudClickBlocker.Block(listRect);
+            float ly = listRect.y;
+            for (int i = 0; i < choices.Count; i++)
+            {
+                if (ly + rowH > listRect.yMax)
+                    break;
+                var choice = choices[i];
+                bool selected = choice.Id == _map.Id;
+                var row = new Rect(listRect.x, ly, listRect.width, rowH);
+                Color fill = selected
+                    ? new Color(0.22f, 0.18f, 0.1f, 0.98f)
+                    : new Color(0.1f, 0.11f, 0.12f, 0.9f);
+                Color border = selected
+                    ? new Color(0.9f, 0.75f, 0.35f, 0.85f)
+                    : new Color(0.35f, 0.38f, 0.4f, 0.45f);
+                if (HudStyle.FrameButton(row, StripStar(choice.DisplayName), fill, border, selected ? 1.5f : 1f))
+                {
+                    _map = choice;
+                    _spawnSeat = Mathf.Clamp(_spawnSeat, 0, SeatCount(_map) - 1);
+                    RebuildPreviewIfNeeded();
+                    AsterraAudio.PlayUiClick();
+                }
+                ly += rowH + 4f;
+            }
+
+            float previewY = listY + listH + 12f;
+            float previewSize = Mathf.Min(rect.width - 20f, rect.yMax - previewY - 12f, 220f);
+            if (previewSize > 80f)
+                DrawMapPreview(new Rect(rect.x + 10f, previewY, previewSize, previewSize));
+        }
+
+        private void DrawSkirmishSummaryColumn(Rect rect)
+        {
+            HudClickBlocker.Block(rect);
+            HudStyle.DrawFrame(rect, new Color(0.06f, 0.07f, 0.08f, 0.94f), new Color(0.55f, 0.48f, 0.28f, 0.5f), 1.5f);
+            GUI.Label(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), "SUMMARY", HudStyle.Subtitle);
+
+            var playerRoster = FactionDefaultContent.All[_playerFaction % FactionDefaultContent.All.Length];
+            var enemyRoster = FactionDefaultContent.All[_enemyFaction % FactionDefaultContent.All.Length];
+
+            float y = rect.y + 40f;
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 22f), "You · " + playerRoster.DisplayName, _cardTitleStyle);
+            y += 26f;
+            GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 18f), "vs " + enemyRoster.DisplayName, HudStyle.Caption);
+            GUI.color = Color.white;
+            y += 28f;
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 22f), StripStar(_map.DisplayName), _cardTitleStyle);
+            y += 24f;
+            GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 36f), MapBlurb(_map), HudStyle.Caption);
+            GUI.color = Color.white;
+            y += 44f;
+
+            DrawDifficultyStrip(new Rect(rect.x + 10f, y, rect.width - 20f, 72f));
+            y += 84f;
+
+            int seats = SeatCount(_map);
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 18f), "Spawn", HudStyle.Subtitle);
+            y += 22f;
+            float bw = Mathf.Min(72f, (rect.width - 28f - (seats - 1) * 6f) / Mathf.Max(1, seats));
+            for (int i = 0; i < seats; i++)
+            {
+                var r = new Rect(rect.x + 14f + i * (bw + 6f), y, bw, 26f);
+                bool picked = _spawnSeat == i;
+                if (picked)
+                    HudStyle.DrawFrame(r, new Color(0.22f, 0.18f, 0.1f, 0.95f), new Color(0.9f, 0.75f, 0.35f, 0.8f), 1.5f);
+                if (GUI.Button(r, SeatButtonLabel(_map, i)))
+                {
+                    _spawnSeat = i;
+                    AsterraAudio.PlayUiClick();
+                }
+            }
+
+            float btnW = rect.width - 28f;
+            float btnX = rect.x + 14f;
+            float actionsBottom = rect.yMax - 14f;
+            float startH = 44f;
+            float backH = 32f;
+            float startY = actionsBottom - startH;
+            float backY = startY - 10f - backH;
+
+            if (LobbyChip(new Rect(btnX, backY, btnW * 0.42f, backH), "Back"))
             {
                 AsterraAudio.PlayUiClick();
                 ShowHub();
                 return;
             }
 
-            float cardY = y + 124f;
-            float cardH = Mathf.Clamp(h * 0.24f, 168f, 210f);
-            float gap = 14f;
-            float cardW = (contentW - gap * 2f - 52f) * 0.5f;
-
-            var playerRoster = FactionDefaultContent.All[_playerFaction % FactionDefaultContent.All.Length];
-            var enemyRoster = FactionDefaultContent.All[_enemyFaction % FactionDefaultContent.All.Length];
-            Color playerColor = AsterraMeshLibrary.TeamSwatch(_playerTeamColor);
-            Color enemyColor = AsterraMeshLibrary.TeamSwatch(_enemyTeamColor);
-
-            DrawFactionCard(
-                new Rect(contentX, cardY, cardW, cardH),
-                "YOUR FORCE",
-                playerRoster,
-                playerColor,
-                ref _playerFaction,
-                ref _playerTeamColor);
-            DrawVsBadge(new Rect(contentX + cardW + gap, cardY + cardH * 0.5f - 20f, 52f, 40f));
-            DrawFactionCard(
-                new Rect(contentX + cardW + gap + 52f + gap, cardY, cardW, cardH),
-                "ENEMY FORCE",
-                enemyRoster,
-                enemyColor,
-                ref _enemyFaction,
-                ref _enemyTeamColor);
-
-            float stripY = cardY + cardH + 12f;
-            DrawMapStrip(new Rect(contentX, stripY, contentW, 72f));
-            float previewY = stripY + 84f;
-
-            const float footH = 18f;
-            const float startH = 44f;
-            const float contH = 28f;
-            const float actionGap = 8f;
-            float chromeH = footH + 8f + startH + actionGap + contH + 16f;
-            float previewAvailH = Mathf.Max(140f, y + h - previewY - chromeH);
-            float previewSize = Mathf.Min(previewAvailH, contentW * 0.42f, 320f);
-            DrawMapPreview(new Rect(contentX, previewY, previewSize, previewSize));
-            DrawSpawnAndDifficulty(
-                new Rect(contentX + previewSize + 18f, previewY, contentW - previewSize - 18f, previewSize));
-
-            float startW = Mathf.Min(360f, contentW);
-            float startX = x + (w - startW) * 0.5f;
-            float actionsBottom = y + h - footH - 8f;
-            float actionsY = previewY + previewSize + 12f;
-            float actionsNeeded = contH + actionGap + startH;
-            if (actionsY + actionsNeeded > actionsBottom)
-                actionsY = actionsBottom - actionsNeeded;
-
             bool hasSave = Asterra.Gameplay.Save.OfflineMatchSaveService.HasQuickSave;
-            var loadRect = new Rect(startX, actionsY, startW, contH);
-            if (hasSave)
+            if (hasSave && LobbyChip(new Rect(btnX + btnW * 0.48f, backY, btnW * 0.52f, backH), "Continue"))
             {
-                if (DrawSecondaryButton(loadRect, "CONTINUE SAVED GAME"))
-                {
-                    AsterraAudio.Play(AsterraSfx.OrderTrain, 0.8f);
-                    if (bootstrap.LoadOfflineQuick())
-                        enabled = false;
-                }
-            }
-            else
-            {
-                HudClickBlocker.Block(loadRect);
-                HudStyle.DrawFrame(
-                    loadRect,
-                    new Color(0.08f, 0.09f, 0.1f, 0.7f),
-                    new Color(0.35f, 0.35f, 0.32f, 0.35f),
-                    1f);
-                var prev = GUI.color;
-                GUI.color = new Color(1f, 1f, 1f, 0.4f);
-                GUI.Label(loadRect, "NO SAVE FOUND", HudStyle.Button);
-                GUI.color = prev;
+                AsterraAudio.Play(AsterraSfx.OrderTrain, 0.8f);
+                if (bootstrap.LoadOfflineQuick())
+                    enabled = false;
+                return;
             }
 
-            float startY = actionsY + contH + actionGap;
-            if (DrawStartButton(new Rect(startX, startY, startW, startH)))
+            if (DrawStartButton(new Rect(btnX, startY, btnW, startH), "START"))
             {
                 AsterraAudio.Play(AsterraSfx.OrderTrain, 0.8f);
                 bootstrap.ConfigureAndStartOffline(
@@ -443,13 +583,6 @@ namespace Asterra.Gameplay
                     _playerTeamColor, _enemyTeamColor);
                 enabled = false;
             }
-
-            GUI.color = new Color(0.7f, 0.72f, 0.68f, 0.75f);
-            GUI.Label(
-                new Rect(x + 28f, y + h - footH - 2f, w - 56f, footH),
-                "Click keep markers to pick spawn  ·  ‹ › cycle maps  ·  F5/F9 in match",
-                HudStyle.Caption);
-            GUI.color = Color.white;
         }
 
         private static bool LobbyChip(Rect rect, string label)

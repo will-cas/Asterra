@@ -15,6 +15,8 @@ namespace Asterra.Gameplay
             Pause = 3,
         }
 
+        static bool _pauseQuitConfirm;
+
         /// <summary>Profile is lobby / out-of-match only — never from Esc pause.</summary>
         public static bool IsProfileAllowedDuringMatch => false;
 
@@ -30,7 +32,10 @@ namespace Asterra.Gameplay
             quitMainMenu = false;
             navigateTo = overlay;
             if (overlay == Overlay.None)
+            {
+                _pauseQuitConfirm = false;
                 return false;
+            }
 
             HudStyle.Ensure();
             var screen = new Rect(0f, 0f, Screen.width, Screen.height);
@@ -232,54 +237,59 @@ namespace Asterra.Gameplay
         {
             quitMainMenu = false;
             navigateTo = Overlay.Pause;
-            GUI.Label(new Rect(box.x, box.y + HudStyle.S(18f), box.width, HudStyle.S(28f)), "PAUSED", HudStyle.Title);
-            GUI.Label(
-                new Rect(box.x + HudStyle.S(24f), box.y + HudStyle.S(52f), box.width - HudStyle.S(48f), HudStyle.S(36f)),
-                "Esc resumes. Soft pause keeps the sim ticking (lockstep-safe).",
-                HudStyle.Caption);
+            GUI.Label(new Rect(box.x, box.y + HudStyle.S(18f), box.width, HudStyle.S(28f)), "Paused", HudStyle.Title);
 
-            float y = box.y + HudStyle.S(100f);
+            if (_pauseQuitConfirm)
+            {
+                GUI.Label(
+                    new Rect(box.x + HudStyle.S(24f), box.y + HudStyle.S(64f), box.width - HudStyle.S(48f), HudStyle.S(40f)),
+                    "Quit match?",
+                    HudStyle.Body);
+                float yq = box.y + HudStyle.S(120f);
+                float bwq = box.width - HudStyle.S(80f);
+                float bxq = box.x + HudStyle.S(40f);
+                if (ChipButton(new Rect(bxq, yq, bwq * 0.48f, HudStyle.S(44f)), "Cancel"))
+                {
+                    AsterraAudio.PlayUiClick();
+                    _pauseQuitConfirm = false;
+                }
+                if (ChipButton(new Rect(bxq + bwq * 0.52f, yq, bwq * 0.48f, HudStyle.S(44f)), "Quit"))
+                {
+                    AsterraAudio.PlayUiClick();
+                    _pauseQuitConfirm = false;
+                    quitMainMenu = true;
+                    navigateTo = Overlay.None;
+                    return true;
+                }
+                return false;
+            }
+
+            float y = box.y + HudStyle.S(70f);
             float bw = box.width - HudStyle.S(80f);
             float bx = box.x + HudStyle.S(40f);
-            float bh = HudStyle.S(34f);
-            float gap = HudStyle.S(40f);
+            float bh = HudStyle.S(44f);
+            float gap = HudStyle.S(12f);
             if (ChipButton(new Rect(bx, y, bw, bh), "Resume"))
             {
                 AsterraAudio.PlayUiClick();
+                _pauseQuitConfirm = false;
                 navigateTo = Overlay.None;
                 return true;
             }
 
-            y += gap;
-            if (ChipButton(new Rect(bx, y, bw * 0.48f, bh), "Save (F5)"))
-            {
-                AsterraAudio.PlayUiClick();
-                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
-                match?.SaveOfflineQuick();
-            }
-
-            if (ChipButton(new Rect(bx + bw * 0.52f, y, bw * 0.48f, bh), "Load (F9)"))
-            {
-                AsterraAudio.PlayUiClick();
-                var match = UnityEngine.Object.FindFirstObjectByType<MatchBootstrap>();
-                match?.LoadOfflineQuick();
-            }
-
-            y += gap;
-            if (ChipButton(new Rect(bx, y, bw, bh), "Options"))
+            y += bh + gap;
+            if (ChipButton(new Rect(bx, y, bw, bh), "Settings"))
             {
                 AsterraAudio.PlayUiClick();
                 navigateTo = Overlay.Options;
                 return false;
             }
 
-            y += gap;
-            if (ChipButton(new Rect(bx, y, bw, bh), "Main Menu"))
+            y += bh + gap;
+            if (ChipButton(new Rect(bx, y, bw, bh), "Quit to menu"))
             {
                 AsterraAudio.PlayUiClick();
-                quitMainMenu = true;
-                navigateTo = Overlay.None;
-                return true;
+                _pauseQuitConfirm = true;
             }
 
             return false;

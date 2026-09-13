@@ -171,10 +171,10 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
-  playerFactionIndex: 0
-  enemyFactionIndex: 1
-  mapId: 4
-  mapKey: lush_forest
+  playerFactionIndex: 1
+  enemyFactionIndex: 0
+  mapId: 7
+  mapKey: blackridge_pass
   tickHz: 20
   commandDelayTicks: 2
   startingGold: 500
