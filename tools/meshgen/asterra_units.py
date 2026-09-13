@@ -297,49 +297,74 @@ def royal_builder_mallet(g, m, c):
 
 
 def royal_legion(g, m, c):
+    """Shield-and-spear levy — kite disc + spear must read in three-quarter."""
     p = []
-    p.append(g.cyl("mail", (0, 0.02, 1.26), 0.22, 0.5, m.iron, c, verts=12))
-    p.append(g.cube("tabard", (0, -0.16, 1.12), (0.26, 0.05, 0.82), m.cloth, c))
-    _legs(g, p, c, m.iron, boot=m.leather)
+    p.append(g.cyl("hips", (0, 0, 0.96), 0.17, 0.2, m.leather, c, verts=12))
+    p.append(g.cyl("mail", (0, 0.02, 1.28), 0.24, 0.55, m.iron, c, verts=12))
+    p.append(g.cube("tabard", (0, -0.18, 1.12), (0.32, 0.06, 0.95), m.cloth, c))
+    p.append(g.cube("belt", (0, 0.02, 1.02), (0.46, 0.26, 0.07), m.leather, c))
+    p.append(g.cube("buckle", (0, -0.16, 1.02), (0.08, 0.03, 0.08), m.gold, c))
+    _legs(g, p, c, m.iron, boot=m.leather, spread=0.13)
     _arms(g, p, c, m.iron, m.iron, m.leather)
     _head(g, p, c, m)
-    p.append(g.cyl("coif", (0, 0, 1.78), 0.15, 0.16, m.iron, c, verts=10))
-    p.append(g.cyl("nasal", (0, -0.13, 1.68), 0.02, 0.14, m.iron, c, verts=6))
-    p.append(g.cyl("spear", (0.62, -0.04, 1.25), 0.028, 2.2, m.wood, c, verts=8))
-    p.append(g.cone("tip", (0.62, -0.04, 2.38), 0.05, 0.22, m.iron, c, verts=6))
-    p.append(g.cube("kite", (-0.62, 0.14, 1.1), (0.5, 0.08, 0.95), m.wood, c, rot=(math.radians(10), 0, math.radians(8))))
-    p.append(g.cube("boss", (-0.58, 0.2, 1.15), (0.12, 0.06, 0.12), m.iron, c))
+    p.append(g.cyl("coif", (0, 0, 1.8), 0.16, 0.18, m.iron, c, verts=12))
+    p.append(g.cyl("nasal", (0, -0.14, 1.7), 0.025, 0.16, m.iron, c, verts=6))
+    p.append(g.cube("paul_l", (-0.34, 0.02, 1.46), (0.2, 0.18, 0.14), m.iron, c))
+    p.append(g.cube("paul_r", (0.34, 0.02, 1.46), (0.2, 0.18, 0.14), m.iron, c))
+    # Spear upright, kite shield left
+    p.append(g.cyl("spear", (0.62, -0.06, 1.35), 0.03, 2.35, m.wood, c, verts=8))
+    p.append(g.cone("tip", (0.62, -0.06, 2.55), 0.055, 0.26, m.iron, c, verts=6))
+    p.append(g.cyl("collar", (0.62, -0.06, 2.18), 0.04, 0.05, m.gold, c, verts=8))
+    p.append(g.cyl("kite", (-0.68, 0.16, 1.12), 0.42, 0.1, m.wood, c, verts=14, rot=(math.radians(82), 0, math.radians(14))))
+    p.append(g.cyl("boss", (-0.62, 0.24, 1.12), 0.1, 0.12, m.iron, c, verts=10, rot=(math.radians(82), 0, math.radians(14))))
+    p.append(g.cube("cross_h", (-0.62, 0.22, 1.12), (0.5, 0.05, 0.08), m.gold, c))
+    p.append(g.cube("cross_v", (-0.62, 0.22, 1.12), (0.08, 0.05, 0.5), m.gold, c))
     return finish(g, "unit_royal_legion", p, c, 0.012)
 
 
 def royal_guard(g, m, c):
+    """Elite plate — greathelm + heater + broad shoulders vs Legion."""
     p = []
-    p.append(g.cyl("plate", (0, 0.02, 1.28), 0.23, 0.52, m.iron, c, verts=12))
-    p.append(g.cube("surcoat", (0, -0.18, 1.1), (0.3, 0.05, 0.9), m.cloth_deep, c))
-    _legs(g, p, c, m.iron)
+    p.append(g.cyl("hips", (0, 0, 0.98), 0.19, 0.22, m.iron, c, verts=12))
+    p.append(g.cyl("plate", (0, 0.02, 1.3), 0.26, 0.58, m.iron, c, verts=12))
+    p.append(g.cube("surcoat", (0, -0.2, 1.12), (0.34, 0.06, 1.0), m.cloth_deep, c))
+    p.append(g.cube("belt", (0, 0.02, 1.04), (0.5, 0.28, 0.08), m.leather, c))
+    p.append(g.cube("buckle", (0, -0.18, 1.04), (0.1, 0.04, 0.1), m.gold, c))
+    _legs(g, p, c, m.iron, boot=m.iron, spread=0.14)
     _arms(g, p, c, m.iron, m.iron, m.iron)
     _head(g, p, c, m)
-    p.append(g.cyl("greathelm", (0, 0, 1.86), 0.16, 0.22, m.iron, c, verts=10))
-    p.append(g.cube("slot", (0, -0.14, 1.78), (0.16, 0.04, 0.04), m.slate, c))
-    p.append(g.cube("pl", (-0.42, 0, 1.48), (0.26, 0.26, 0.2), m.iron, c))
-    p.append(g.cube("pr", (0.42, 0, 1.48), (0.26, 0.26, 0.2), m.iron, c))
-    p.append(g.cube("sword", (0.58, -0.04, 1.4), (0.05, 0.02, 0.95), m.iron, c))
-    p.append(g.cube("heater", (-0.65, 0.12, 1.15), (0.48, 0.08, 0.7), m.wood, c))
+    p.append(g.cyl("greathelm", (0, 0.02, 1.9), 0.17, 0.26, m.iron, c, verts=12))
+    p.append(g.cube("slot", (0, -0.15, 1.8), (0.18, 0.04, 0.045), m.slate, c))
+    p.append(g.cube("crest", (0, 0.02, 2.1), (0.04, 0.22, 0.18), m.cloth_deep, c))
+    p.append(g.cube("pl", (-0.44, 0.02, 1.5), (0.28, 0.28, 0.22), m.iron, c))
+    p.append(g.cube("pr", (0.44, 0.02, 1.5), (0.28, 0.28, 0.22), m.iron, c))
+    p.append(g.cube("sword", (0.6, -0.05, 1.35), (0.055, 0.025, 1.05), m.steel, c))
+    p.append(g.cube("guard", (0.6, -0.05, 1.75), (0.18, 0.04, 0.05), m.gold, c))
+    p.append(g.cube("heater", (-0.7, 0.14, 1.18), (0.52, 0.09, 0.78), m.wood, c, rot=(math.radians(8), 0, math.radians(10))))
+    p.append(g.cube("boss", (-0.66, 0.2, 1.2), (0.12, 0.06, 0.12), m.iron, c))
     return finish(g, "unit_royal_guard", p, c, 0.012)
 
 
 def royal_longbow(g, m, c):
+    """Tall bow silhouette — longbow + quiver must read from RTS camera."""
     p = []
-    p.append(g.cyl("torso", (0, 0.02, 1.22), 0.19, 0.46, m.leather, c, verts=10))
-    _legs(g, p, c, m.cloth, boot=m.leather)
+    p.append(g.cyl("hips", (0, 0, 0.96), 0.16, 0.2, m.leather, c, verts=12))
+    p.append(g.cyl("torso", (0, 0.02, 1.24), 0.2, 0.5, m.leather, c, verts=12))
+    p.append(g.cube("jerkin", (0, -0.14, 1.15), (0.28, 0.05, 0.75), m.cloth, c))
+    p.append(g.cube("belt", (0, 0.02, 1.0), (0.42, 0.24, 0.07), m.leather, c))
+    _legs(g, p, c, m.cloth, boot=m.leather, spread=0.12)
     _arms(g, p, c, m.leather, m.skin, m.skin)
-    _head(g, p, c, m)
-    p.append(g.cyl("coif", (0, 0, 1.76), 0.14, 0.1, m.iron, c, verts=10))
-    p.append(g.cyl("bow", (0.08, -0.48, 1.15), 0.028, 1.85, m.wood, c, verts=8))
-    p.append(g.cyl("bow2", (0.08, -0.42, 1.15), 0.02, 1.7, m.wood, c, verts=8, rot=(0, 0, math.radians(8))))
-    p.append(g.cube("quiver", (-0.28, 0.22, 1.15), (0.1, 0.1, 0.65), m.leather, c))
-    p.append(g.cyl("arrow", (-0.28, 0.22, 1.55), 0.015, 0.7, m.wood, c, verts=6))
-    p.append(g.cube("bracer", (-0.46, 0.05, 1.05), (0.12, 0.1, 0.14), m.leather, c))
+    _head(g, p, c, m, hair="crop")
+    p.append(g.cyl("hood", (0, 0.04, 1.78), 0.15, 0.12, m.cloth, c, verts=12))
+    # Tall longbow in front-left of body
+    p.append(g.cyl("bow_u", (0.05, -0.5, 1.55), 0.03, 1.05, m.wood, c, verts=8, rot=(math.radians(8), 0, 0)))
+    p.append(g.cyl("bow_d", (0.05, -0.5, 0.65), 0.03, 1.0, m.wood, c, verts=8, rot=(math.radians(-8), 0, 0)))
+    p.append(g.cyl("string", (0.05, -0.22, 1.1), 0.012, 1.75, m.leather, c, verts=6))
+    p.append(g.cube("quiver", (-0.3, 0.24, 1.2), (0.12, 0.12, 0.75), m.leather, c))
+    for i, z in enumerate((1.45, 1.55, 1.65)):
+        p.append(g.cyl(f"arrow{i}", (-0.3, 0.24, z), 0.015, 0.55, m.wood, c, verts=6))
+        p.append(g.cone(f"fletch{i}", (-0.3, 0.24, z + 0.32), 0.03, 0.08, m.cloth, c, verts=5))
+    p.append(g.cube("bracer", (-0.48, 0.05, 1.05), (0.14, 0.1, 0.16), m.leather, c))
     return finish(g, "unit_royal_longbow", p, c, 0.012)
 
 
