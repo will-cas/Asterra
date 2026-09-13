@@ -21,6 +21,34 @@ namespace Asterra.Gameplay.Presentation
             return null;
         }
 
+        public static Mesh GetCrestMesh(string crestKey)
+        {
+            if (string.IsNullOrEmpty(crestKey))
+                return null;
+            if (TryExact(crestKey, out var mesh) && mesh != null && mesh.vertexCount > 0)
+                return mesh;
+            return null;
+        }
+
+        public static string CrestKeyForFaction(string factionDefinitionId)
+        {
+            if (string.IsNullOrEmpty(factionDefinitionId))
+                return null;
+            if (factionDefinitionId.Contains("mundor"))
+                return "crest_mundor_crown";
+            if (factionDefinitionId.Contains("veiled") || factionDefinitionId.Contains("uncrown"))
+                return "crest_uncrowned";
+            if (factionDefinitionId.Contains("outcast"))
+                return "crest_outcast_host";
+            if (factionDefinitionId.Contains("freetown"))
+                return "crest_freetown";
+            if (factionDefinitionId.Contains("university"))
+                return "crest_university_guild";
+            if (factionDefinitionId.Contains("church") || factionDefinitionId.Contains("rising"))
+                return "crest_rising_sun";
+            return null;
+        }
+
         public static Mesh GetUnitMesh(string definitionId)
         {
 

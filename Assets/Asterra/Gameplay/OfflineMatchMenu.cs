@@ -479,8 +479,8 @@ namespace Asterra.Gameplay
 
             var all = FactionDefaultContent.All;
             float tileY = rect.y + 36f;
-            float tileH = 36f;
-            float gap = 6f;
+            float tileH = 40f;
+            float gap = 5f;
             for (int i = 0; i < all.Length; i++)
             {
                 var roster = all[i];
@@ -489,6 +489,7 @@ namespace Asterra.Gameplay
                 var row = new Rect(rect.x + 10f, tileY, rect.width - 20f, tileH);
                 HudClickBlocker.Block(row);
 
+                Color facColor = AsterraMeshLibrary.FactionColor((byte)(roster.Id.Value));
                 Color fill = selected
                     ? new Color(0.2f, 0.17f, 0.1f, 0.98f)
                     : playable
@@ -502,15 +503,20 @@ namespace Asterra.Gameplay
                 HudStyle.DrawFrame(row, fill, border, selected ? 2f : 1f);
                 if (selected)
                 {
-                    // Inset selection plate + caption line (UX).
                     var inset = new Rect(row.x + 4f, row.y + 4f, row.width - 8f, row.height - 8f);
                     HudStyle.DrawPanel(inset, new Color(0.12f, 0.1f, 0.07f, 0.65f));
                 }
 
+                float crestSize = tileH - 8f;
+                var crest = MenuArt.CrestIcon(roster.DefinitionId, facColor, muted: !playable);
+                if (crest != null)
+                    GUI.DrawTexture(new Rect(row.x + 6f, row.y + 4f, crestSize, crestSize), crest, ScaleMode.ScaleToFit);
+
                 string label = playable ? roster.DisplayName : roster.DisplayName + "  ·  Coming";
                 var prev = GUI.color;
                 GUI.color = playable ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.85f);
-                GUI.Label(new Rect(row.x + 10f, row.y, row.width - 20f, row.height), label, HudStyle.Button);
+                float labelX = row.x + 6f + crestSize + 6f;
+                GUI.Label(new Rect(labelX, row.y, row.xMax - labelX - 6f, row.height), label, HudStyle.Button);
                 GUI.color = prev;
 
                 if (playable && GUI.Button(row, GUIContent.none, GUIStyle.none))
@@ -528,11 +534,24 @@ namespace Asterra.Gameplay
             {
                 var roster = all[_playerFaction];
                 float detailY = tileY + 8f;
-                GUI.Label(
-                    new Rect(rect.x + 12f, detailY, rect.width - 24f, 20f),
-                    "Selected · " + roster.DisplayName,
-                    HudStyle.Subtitle);
-                detailY += 22f;
+                var detailCrest = MenuArt.CrestIcon(roster.DefinitionId, AsterraMeshLibrary.FactionColor((byte)roster.Id.Value));
+                if (detailCrest != null)
+                {
+                    GUI.DrawTexture(new Rect(rect.x + 12f, detailY, 28f, 28f), detailCrest, ScaleMode.ScaleToFit);
+                    GUI.Label(
+                        new Rect(rect.x + 46f, detailY + 4f, rect.width - 58f, 20f),
+                        "Selected · " + roster.DisplayName,
+                        HudStyle.Subtitle);
+                    detailY += 32f;
+                }
+                else
+                {
+                    GUI.Label(
+                        new Rect(rect.x + 12f, detailY, rect.width - 24f, 20f),
+                        "Selected · " + roster.DisplayName,
+                        HudStyle.Subtitle);
+                    detailY += 22f;
+                }
                 string power = string.IsNullOrEmpty(roster.PowerDisplayName)
                     ? "Commander ready"
                     : roster.PowerDisplayName;
