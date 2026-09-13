@@ -44,12 +44,58 @@ namespace Asterra.Gameplay.Presentation
             string crestKey = AsterraMeshLibrary.CrestKeyForFaction(factionDefinitionId);
             if (string.IsNullOrEmpty(crestKey))
                 return null;
-            string cacheKey = crestKey + "_64" + (muted ? "_m" : "_f") + ColorUtility.ToHtmlStringRGB(accent);
+            string cacheKey = crestKey + "_64png" + (muted ? "_m" : "_f") + ColorUtility.ToHtmlStringRGB(accent);
             if (CrestIcons.TryGetValue(cacheKey, out var cached) && cached != null)
                 return cached;
-            var tex = BakeCrest(crestKey, accent, muted);
+
+            // Prefer Art PNG flats when present; mesh bake is fallback.
+            Texture2D tex = LoadCrestPng(crestKey);
+            if (tex != null)
+            {
+                if (muted)
+                    tex = TintCrestMuted(tex, accent);
+            }
+            else
+            {
+                tex = BakeCrest(crestKey, accent, muted);
+            }
+
             CrestIcons[cacheKey] = tex;
             return tex;
+        }
+
+        private static Texture2D LoadCrestPng(string crestKey)
+        {
+            // Art/UI/Menu/crests/crest_<faction>.png — crestKey already includes crest_ prefix.
+            return LoadPng(Path.Combine("crests", crestKey + ".png"));
+        }
+
+        private static Texture2D TintCrestMuted(Texture2D src, Color accent)
+        {
+            if (src == null)
+                return null;
+            int w = src.width;
+            int h = src.height;
+            var dst = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                name = src.name + "_muted",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            var pixels = src.GetPixels();
+            Color gray = new Color(0.45f, 0.45f, 0.48f, 1f);
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color p = pixels[i];
+                if (p.a < 0.01f)
+                    continue;
+                Color c = Color.Lerp(p, gray, 0.5f);
+                c.a = p.a;
+                pixels[i] = c;
+            }
+            dst.SetPixels(pixels);
+            dst.Apply(false, false);
+            return dst;
         }
 
         private static Texture2D BakeCrest(string crestKey, Color accent, bool muted)
@@ -174,7 +220,9 @@ namespace Asterra.Gameplay.Presentation
         private static Texture2D LoadPng(string fileName)
         {
             string path = Path.Combine(
-                Application.dataPath, "Asterra", "Shared", "Art", "UI", "Menu", fileName);
+                Application.dataPath, "Asterra", "Shared", "Art", "UI", "Menu");
+            // Allow subfolders like crests/crest_mundor_crown.png
+            path = Path.Combine(path, fileName.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path))
                 return null;
             try
