@@ -22,6 +22,7 @@ namespace Asterra.Gameplay
         private AsterraMenuPanels.Overlay _overlayReturn = AsterraMenuPanels.Overlay.None;
         private readonly ObjectiveHudRow[] _objRows = new ObjectiveHudRow[8];
         private int _cmdCardIndex;
+        private int _cmdForceCols;
         private int _cmdMaxRows = 2;
         private float _cmdGridX;
         private float _cmdGridY;
@@ -207,7 +208,7 @@ namespace Asterra.Gameplay
                     gold += $"  +{income}/s";
             }
 
-            float pillH = HudStyle.S(28f);
+            float pillH = HudStyle.S(34f);
             float pillY = strip.y + HudStyle.S(8f);
             if (MatchFeedback.Instance != null
                 && MatchFeedback.Instance.HasActiveMessage
@@ -418,6 +419,8 @@ namespace Asterra.Gameplay
                 : $"{activateCost}g";
             string label = $"{ShortPowerName(heroDef.DisplayName)}\n{status}";
             bool targeting = orders.IsRoyalStandardTargeting;
+            // UX: 2px gold rim on commander slot.
+            HudStyle.DrawFrame(rect, HudStyle.PanelFill, HudStyle.Gold, 2f);
             if (HudStyle.CommandCard(rect, "hero", label, HudStyle.Accent, out bool hovered, canClick || !unlocked, selected: buff > 0.05f || targeting))
             {
                 AsterraAudio.PlayUiClick();
@@ -844,30 +847,11 @@ namespace Asterra.Gameplay
             bool isKeep = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId);
             if (isKeep)
             {
-                if (match.Definitions != null && match.Definitions.TryGetBuilding(b.DefinitionId, out var keepDef)
-                    && keepDef.TrainableUnitIds != null)
-                {
-                    for (int i = 0; i < keepDef.TrainableUnitIds.Length; i++)
-                    {
-                        string uid = keepDef.TrainableUnitIds[i];
-                        if (match.Definitions.TryGetUnit(uid, out var udef) && udef.IsBuilder)
-                            PushTrainCard("worker", udef.DisplayName, uid);
-                    }
-
-                    for (int i = 0; i < keepDef.TrainableUnitIds.Length; i++)
-                    {
-                        string uid = keepDef.TrainableUnitIds[i];
-                        if (match.Definitions.TryGetUnit(uid, out var udef) && udef.IsLeader)
-                            PushTrainCard("leader", udef.DisplayName, uid);
-                    }
-                }
-                else
-                {
-                    PushTrainCard("worker", "Builder", r.BuilderUnitId);
-                    PushTrainCard("leader", "Leader", r.LeaderUnitId);
-                }
-
-                DrawResearchCards(player, b, keepTechs: true);
+                DrawKeepM1CommandGrid(player, b, r);
+                if (producing)
+                    PushCard("cancel", "Cancel", "Cancel production", HudStyle.Danger,
+                        () => orders.CancelProduction());
+                return; // no tech / turret junk on keep for M1
             }
             else if (b.CanProduce || producing)
             {
@@ -1080,20 +1064,8 @@ namespace Asterra.Gameplay
 
         private void PushCard(string icon, string label, string tip, Color accent, System.Action onClick, bool enabled = true)
         {
-            float maxX = HudStyle.ContentRight - HudStyle.S(8f);
-            float cell = _cmdCardW + _cmdGap;
-            int maxCols = Mathf.Max(1, Mathf.FloorToInt((maxX - _cmdGridX + _cmdGap) / cell));
-
-            int col = _cmdCardIndex % maxCols;
-            int row = _cmdCardIndex / maxCols;
-            if (row >= _cmdMaxRows)
+            if (!TryNextCommandCell(out var rect))
                 return;
-
-            var rect = new Rect(
-                _cmdGridX + col * cell,
-                _cmdGridY + row * (_cmdCardH + _cmdGap),
-                _cmdCardW,
-                _cmdCardH);
 
             if (HudStyle.CommandCard(rect, icon, label, accent, out bool hovered, enabled))
             {
@@ -1103,7 +1075,40 @@ namespace Asterra.Gameplay
 
             if (hovered && !string.IsNullOrEmpty(tip))
                 _hoverTip = tip;
+        }
+
+        private void PushEmptyCommandCell()
+        {
+            if (!TryNextCommandCell(out var rect))
+                return;
+            // Empty cell: iron plate only — no icon, no fake button chrome.
+            HudClickBlocker.Block(rect);
+            HudStyle.DrawFrame(rect, HudStyle.PanelFill, new Color(0.35f, 0.3f, 0.22f, 0.35f), 1f);
+        }
+
+        private bool TryNextCommandCell(out Rect rect)
+        {
+            float maxX = HudStyle.ContentRight - HudStyle.S(8f);
+            float cell = _cmdCardW + _cmdGap;
+            int maxCols = _cmdForceCols > 0
+                ? _cmdForceCols
+                : Mathf.Max(1, Mathf.FloorToInt((maxX - _cmdGridX + _cmdGap) / cell));
+
+            int col = _cmdCardIndex % maxCols;
+            int row = _cmdCardIndex / maxCols;
             _cmdCardIndex++;
+            if (row >= _cmdMaxRows)
+            {
+                rect = default;
+                return false;
+            }
+
+            rect = new Rect(
+                _cmdGridX + col * cell,
+                _cmdGridY + row * (_cmdCardH + _cmdGap),
+                _cmdCardW,
+                _cmdCardH);
+            return true;
         }
 
         private void DrawCommandBar(PlayerId player) => DrawCommandDock(player);

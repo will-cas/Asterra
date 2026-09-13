@@ -238,27 +238,31 @@ namespace Asterra.Gameplay
 
         private void DrawHub(Rect rect)
         {
-            // Hub: Skirmish (heavy) + Campaign; Settings/Quit chips. No parchment.
+            // Hub: diorama + 380px iron veil + gold-rim Skirmish card.
             DrawHubDiorama(rect);
-            float stackW = Mathf.Min(360f, rect.width * 0.42f);
-            float stackX = rect.x + 24f;
-            float y = rect.y + 12f;
+            float veilW = Mathf.Min(380f, rect.width * 0.48f);
+            var veil = new Rect(rect.x, rect.y, veilW, rect.height);
+            HudStyle.DrawPanel(veil, new Color(HudStyle.Iron.r, HudStyle.Iron.g, HudStyle.Iron.b, 0.82f));
 
-            GUI.color = new Color(0.92f, 0.88f, 0.72f, 1f);
+            float stackW = Mathf.Min(320f, veilW - 48f);
+            float stackX = rect.x + 24f;
+            float y = rect.y + 20f;
+
+            GUI.color = HudStyle.Cream;
             GUI.Label(new Rect(stackX, y, stackW, 44f), "ASTERRA", HudStyle.Title);
-            GUI.color = new Color(0.78f, 0.72f, 0.55f, 0.95f);
+            GUI.color = new Color(HudStyle.Cream.r, HudStyle.Cream.g, HudStyle.Cream.b, 0.75f);
             GUI.Label(new Rect(stackX, y + 40f, stackW, 24f), "The Iron Path", HudStyle.Body);
             GUI.color = Color.white;
-            y += 84f;
+            y += 92f;
 
-            float bh = 56f;
+            float skirmishH = 72f;
             float gap = 14f;
-            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Skirmish"))
+            if (DrawGoldRimCard(new Rect(stackX, y, stackW, skirmishH), "Skirmish"))
             {
                 AsterraAudio.PlayUiClick();
                 ShowSkirmish();
             }
-            y += bh + gap;
+            y += skirmishH + gap;
 
             if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, 48f), "Campaign"))
             {
@@ -283,14 +287,36 @@ namespace Asterra.Gameplay
                 DrawQuitConfirm();
         }
 
+        private bool DrawGoldRimCard(Rect rect, string label)
+        {
+            HudClickBlocker.Block(rect);
+            bool hover = rect.Contains(Event.current.mousePosition);
+            Color fill = hover
+                ? Color.Lerp(HudStyle.Iron, HudStyle.Gold, 0.12f)
+                : HudStyle.PanelFill;
+            HudStyle.DrawFrame(rect, fill, HudStyle.Gold, 2f);
+            var style = new GUIStyle(HudStyle.Button)
+            {
+                fontSize = Mathf.RoundToInt(18f * HudStyle.Scale),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+            };
+            style.normal.textColor = HudStyle.Cream;
+            GUI.Label(rect, label, style);
+            return GUI.Button(rect, GUIContent.none, GUIStyle.none);
+        }
+
         private bool DrawPrimaryStackButton(Rect rect, string label)
         {
             HudClickBlocker.Block(rect);
             bool hover = rect.Contains(Event.current.mousePosition);
-            Color fill = hover ? new Color(0.16f, 0.14f, 0.1f, 0.98f) : new Color(0.1f, 0.09f, 0.07f, 0.96f);
-            Color border = hover ? new Color(0.85f, 0.72f, 0.38f, 0.95f) : new Color(0.55f, 0.48f, 0.28f, 0.7f);
+            Color fill = hover ? Color.Lerp(HudStyle.Iron, HudStyle.Cream, 0.08f) : HudStyle.PanelFill;
+            Color border = hover ? HudStyle.Gold : HudStyle.PanelBorder;
             HudStyle.DrawFrame(rect, fill, border, 1.5f);
+            var prev = GUI.color;
+            GUI.color = HudStyle.Cream;
             GUI.Label(rect, label, HudStyle.Button);
+            GUI.color = prev;
             return GUI.Button(rect, GUIContent.none, GUIStyle.none);
         }
 

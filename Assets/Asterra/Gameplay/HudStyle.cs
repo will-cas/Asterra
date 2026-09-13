@@ -6,17 +6,20 @@ namespace Asterra.Gameplay
     /// <summary>Shared OnGUI chrome: panels, icon command cards, selection portraits, layout scale.</summary>
     public static class HudStyle
     {
-        public static readonly Color PanelFill = new Color(0.06f, 0.075f, 0.09f, 0.94f);
-        public static readonly Color PanelFillDeep = new Color(0.035f, 0.045f, 0.055f, 0.96f);
-        public static readonly Color PanelBorder = new Color(0.42f, 0.38f, 0.28f, 0.55f);
+        // UX chrome: iron plates #1A1714 / cream #E8DCC4
+        public static readonly Color Iron = new Color(0x1A / 255f, 0x17 / 255f, 0x14 / 255f, 1f);
+        public static readonly Color Cream = new Color(0xE8 / 255f, 0xDC / 255f, 0xC4 / 255f, 1f);
+        public static readonly Color PanelFill = new Color(0x1A / 255f, 0x17 / 255f, 0x14 / 255f, 0.96f);
+        public static readonly Color PanelFillDeep = new Color(0x14 / 255f, 0x11 / 255f, 0x0F / 255f, 0.98f);
+        public static readonly Color PanelBorder = new Color(0.55f, 0.48f, 0.32f, 0.7f);
         public static readonly Color Accent = new Color(0.86f, 0.72f, 0.38f, 1f);
-        public static readonly Color AccentSoft = new Color(0.86f, 0.72f, 0.38f, 0.35f);
-        public static readonly Color Gold = new Color(0.95f, 0.82f, 0.35f, 1f);
+        public static readonly Color AccentSoft = new Color(0.86f, 0.72f, 0.38f, 0.4f);
+        public static readonly Color Gold = new Color(0.92f, 0.78f, 0.35f, 1f);
         public static readonly Color Timber = new Color(0.55f, 0.78f, 0.42f, 1f);
         public static readonly Color Hp = new Color(0.32f, 0.82f, 0.42f, 0.95f);
         public static readonly Color Danger = new Color(0.85f, 0.32f, 0.28f, 0.95f);
-        public static readonly Color Text = new Color(0.9f, 0.91f, 0.88f, 1f);
-        public static readonly Color TextDim = new Color(0.7f, 0.72f, 0.68f, 0.85f);
+        public static readonly Color Text = Cream;
+        public static readonly Color TextDim = new Color(Cream.r, Cream.g, Cream.b, 0.72f);
 
         private static GUIStyle _panel;
         private static GUIStyle _title;
@@ -71,7 +74,7 @@ namespace Asterra.Gameplay
             int fsButton = Mathf.RoundToInt(12f * scale);
             int fsToast = Mathf.RoundToInt(14f * scale);
             int fsCard = Mathf.RoundToInt(11f * scale);
-            int fsRes = Mathf.RoundToInt(15f * scale);
+            int fsRes = Mathf.RoundToInt(22f * scale);
 
             _panel = new GUIStyle(GUI.skin.box)
             {
@@ -211,9 +214,9 @@ namespace Asterra.Gameplay
             HudClickBlocker.Block(rect);
             hovered = Event.current != null && rect.Contains(Event.current.mousePosition);
             Color fill = selected
-                ? Color.Lerp(PanelFill, accent, 0.28f)
+                ? Color.Lerp(Iron, accent, 0.22f)
                 : hovered && enabled
-                    ? Color.Lerp(PanelFill, Color.white, 0.1f)
+                    ? Color.Lerp(Iron, Cream, 0.08f)
                     : PanelFill;
             Color border = selected || (hovered && enabled)
                 ? Color.Lerp(accent, Color.white, 0.25f)

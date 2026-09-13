@@ -1907,13 +1907,12 @@ namespace Asterra.Gameplay.Content
                 SightRadius = 90f,
                 FootprintX = 13f,
                 FootprintZ = 13f,
+                // M1 barracks: core infantry/ranged only.
                 TrainableUnitIds = new[]
                 {
-                    RoyalPeasantId,
                     RoyalLegionId,
+                    RoyalLongbowId,
                     RoyalGuardId,
-                    RoyalCommanderId,
-                    RoyalSpyId,
                 },
             });
             registry.Register(new BuildingDefData
@@ -1978,14 +1977,13 @@ namespace Asterra.Gameplay.Content
                 SightRadius = 165f,
                 FootprintX = 18f,
                 FootprintZ = 18f,
+                // M1 keep card: Engineer / Legion / Longbow / Guard only (heroes → later).
                 TrainableUnitIds = new[]
                 {
                     RoyalBuilderId,
-                    RoyalKingId,
-                    RoyalLegionMarshalId,
-                    RoyalSpymasterId,
-                    RoyalTombWardenId,
-                    RoyalJusticiarId,
+                    RoyalLegionId,
+                    RoyalLongbowId,
+                    RoyalGuardId,
                 },
                 AttachmentSlotCount = 4,
                 AttachmentAllowedBuildingIds = new[] { KeepTurretId },
