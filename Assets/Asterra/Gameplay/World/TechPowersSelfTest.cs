@@ -473,6 +473,9 @@ namespace Asterra.Gameplay
             sim.SpawnUnit(ids.Next(), p, faction, FactionDefaultContent.RoyalKingId, 0f, 0f);
             var peasant = sim.SpawnUnit(
                 ids.Next(), p, faction, FactionDefaultContent.RoyalPeasantId, 2f, 0f);
+            // ~8 from plant (4,0) → outer falloff ring (full≤7.2, outer≤14.4).
+            var outerPeasant = sim.SpawnUnit(
+                ids.Next(), p, faction, FactionDefaultContent.RoyalPeasantId, 12f, 0f);
             wallet.Seed(p, ResourceType.Gold, 500);
             int g0 = wallet.Get(p, ResourceType.Gold);
             sim.ApplyCommands(new GameCommand[]
@@ -503,6 +506,13 @@ namespace Asterra.Gameplay
                            && buff > 0.05f;
             bool goldSpent = wallet.Get(p, ResourceType.Gold) <= g1 - 55;
             bool armored = peasant.CommanderArmorBonus >= 1.9f;
+            // NeedsTesting lock: full-zone move −15%, damage-taken −10%.
+            bool slowed = System.Math.Abs(peasant.CommanderMoveMul - 0.85f) < 0.01f;
+            bool mitigated = System.Math.Abs(peasant.CommanderDamageTakenMul - 0.90f) < 0.01f;
+            bool outerHalf = outerPeasant.CommanderArmorBonus >= 0.9f
+                             && outerPeasant.CommanderArmorBonus < 1.5f
+                             && System.Math.Abs(outerPeasant.CommanderMoveMul - 0.92f) < 0.01f
+                             && System.Math.Abs(outerPeasant.CommanderDamageTakenMul - 0.95f) < 0.01f;
             int banners = 0;
             for (int i = 0; i < sim.Destructibles.Count; i++)
             {
@@ -549,7 +559,7 @@ namespace Asterra.Gameplay
                                        out float buffFar)
                                    || buffFar < 0.05f);
 
-            return status && goldSpent && armored && banners >= 1 && farRejected && g1 < g0;
+            return status && goldSpent && armored && slowed && mitigated && outerHalf && banners >= 1 && farRejected && g1 < g0;
         }
 
         private static bool TwinGatesPlacePair()

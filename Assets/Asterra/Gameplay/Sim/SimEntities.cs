@@ -37,6 +37,10 @@ namespace Asterra.Gameplay.Sim
         public float CommanderMoveBonus;
         /// <summary>Temporary flat damage bonus from a commander power.</summary>
         public float CommanderDamageBonus;
+        /// <summary>Active commander move-speed multiplier (1 = none). Royal Standard formation hold.</summary>
+        public float CommanderMoveMul = 1f;
+        /// <summary>Active commander damage-taken multiplier (1 = none). Applied after Armor.</summary>
+        public float CommanderDamageTakenMul = 1f;
         /// <summary>Legacy single-slot id (first applied equipment); prefer AppliedEquipmentIds.</summary>
         public string AppliedUpgradeId;
         public const int MaxAppliedEquipment = 4;

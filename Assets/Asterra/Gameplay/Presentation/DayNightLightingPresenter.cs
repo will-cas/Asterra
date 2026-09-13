@@ -58,6 +58,12 @@ namespace Asterra.Gameplay.Presentation
                 AsterraLightingLook.ConfigureSun(sunLight);
             _moon = AsterraLightingLook.EnsureMoon(transform);
             _sky = AsterraLightingLook.EnsureProceduralSky(_sky);
+            if (_sky != null)
+                RenderSettings.skybox = _sky;
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = _smoothedSky;
+            RenderSettings.ambientEquatorColor = _smoothedEquator;
+            RenderSettings.ambientGroundColor = _smoothedGround;
             EnsureVolume();
             if (Camera.main != null)
                 AsterraLightingLook.ConfigureCamera(Camera.main);

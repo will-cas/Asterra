@@ -75,6 +75,10 @@ namespace Asterra.Gameplay
             public float AuraRadius;
             public float AuraFullRadius;
             public uint BannerEntityId;
+            /// <summary>NeedsTesting: move mul at full radius (e.g. 0.85 = −15%).</summary>
+            public float MoveMul = 1f;
+            /// <summary>NeedsTesting: damage-taken mul at full radius (e.g. 0.90 = −10%).</summary>
+            public float DamageTakenMul = 1f;
         }
 
         private readonly Dictionary<string, CommanderAbilityRuntime> _commanderAbilities = new();
@@ -2357,6 +2361,9 @@ namespace Asterra.Gameplay
                 state.AnchorZ = plantZ;
                 state.AuraRadius = 14.4f;
                 state.AuraFullRadius = 7.2f;
+                // NeedsTesting lock: full −15% move / −10% damage-taken (outer via ApplyPowerBuff).
+                state.MoveMul = 0.85f;
+                state.DamageTakenMul = 0.90f;
                 var banner = SpawnDestructible(_ids.Next(), DefaultDestructibleCatalog.RoyalStandard(), plantX, plantZ);
                 state.BannerEntityId = banner.Id.Value;
                 fx = plantX;
@@ -3133,6 +3140,8 @@ namespace Asterra.Gameplay
                         state.MoveBonus = 0f;
                         state.DamageBonus = 0f;
                         state.BuildingMitigation = 0f;
+                        state.MoveMul = 1f;
+                        state.DamageTakenMul = 1f;
                     }
 
                     changed = true;
@@ -3140,16 +3149,26 @@ namespace Asterra.Gameplay
 
                 if (state.HasPlantAnchor && state.BuffRemaining > 0f && state.BannerEntityId != 0)
                 {
+                    byte playerAura = 0;
+                    int colonAura = pair.Key.IndexOf(':');
+                    if (colonAura > 0 && byte.TryParse(pair.Key.Substring(0, colonAura), out var pa))
+                        playerAura = pa;
+                    var ownerAura = new PlayerId(playerAura);
                     if (!_destructiblesById.TryGetValue(state.BannerEntityId, out var banner) || !banner.IsAlive)
                     {
-                        byte playerDead = 0;
-                        int colonDead = pair.Key.IndexOf(':');
-                        if (colonDead > 0 && byte.TryParse(pair.Key.Substring(0, colonDead), out var pd))
-                            playerDead = pd;
-                        ClearPowerBuff(new PlayerId(playerDead), state);
+                        ClearPowerBuff(ownerAura, state);
                         state.BuffRemaining = 0f;
                         state.HasPlantAnchor = false;
                         state.BannerEntityId = 0;
+                        state.MoveMul = 1f;
+                        state.DamageTakenMul = 1f;
+                        changed = true;
+                    }
+                    else
+                    {
+                        // Re-sync falloff as units enter/leave the zone.
+                        ClearPowerBuff(ownerAura, state);
+                        ApplyPowerBuff(ownerAura, state);
                         changed = true;
                     }
                 }
@@ -3175,9 +3194,15 @@ namespace Asterra.Gameplay
                     if (distSq > r * r)
                         continue;
                     float dist = MathF.Sqrt(distSq);
-                    float scale = 1f;
-                    if (state.AuraFullRadius > 0f && dist > state.AuraFullRadius)
-                        scale = 0.5f; // design falloff half effect 4–8
+                    bool full = state.AuraFullRadius <= 0f || dist <= state.AuraFullRadius;
+                    float scale = full ? 1f : 0.5f; // armor half in outer ring
+                    // NeedsTesting lock: move −15%/−8%, damage-taken −10%/−5% (not pure half for move).
+                    float moveMul = full ? 0.85f : 0.92f;
+                    float dmgTakenMul = full ? 0.90f : 0.95f;
+                    if (MathF.Abs(state.MoveMul - 1f) > 0.001f)
+                        moveMul = full ? state.MoveMul : 0.92f;
+                    if (MathF.Abs(state.DamageTakenMul - 1f) > 0.001f)
+                        dmgTakenMul = full ? state.DamageTakenMul : 0.95f;
                     var scaled = new CommanderAbilityRuntime
                     {
                         PowerDefId = state.PowerDefId,
@@ -3187,6 +3212,8 @@ namespace Asterra.Gameplay
                         BuildingMitigation = state.BuildingMitigation,
                         Effect = state.Effect,
                         PercentBonus = state.PercentBonus,
+                        MoveMul = moveMul,
+                        DamageTakenMul = dmgTakenMul,
                     };
                     ApplyPowerBuffToUnit(unit, scaled);
                     continue;
@@ -3208,6 +3235,15 @@ namespace Asterra.Gameplay
                 unit.MoveSpeed += state.MoveBonus;
                 unit.CommanderMoveBonus = state.MoveBonus;
             }
+
+            if (MathF.Abs(state.MoveMul - 1f) > 0.001f && MathF.Abs(unit.CommanderMoveMul - 1f) < 0.001f)
+            {
+                unit.MoveSpeed *= state.MoveMul;
+                unit.CommanderMoveMul = state.MoveMul;
+            }
+
+            if (MathF.Abs(state.DamageTakenMul - 1f) > 0.001f && MathF.Abs(unit.CommanderDamageTakenMul - 1f) < 0.001f)
+                unit.CommanderDamageTakenMul = state.DamageTakenMul;
 
             if (state.DamageBonus > 0f && unit.CommanderDamageBonus <= 0f)
             {
@@ -3233,17 +3269,24 @@ namespace Asterra.Gameplay
                     continue;
                 if (unit.CommanderArmorBonus > 0f)
                 {
-                    float remove = state.ArmorBonus > 0f ? state.ArmorBonus : unit.CommanderArmorBonus;
-                    unit.Armor = Math.Max(0f, unit.Armor - remove);
+                    unit.Armor = Math.Max(0f, unit.Armor - unit.CommanderArmorBonus);
                     unit.CommanderArmorBonus = 0f;
                 }
 
                 if (unit.CommanderMoveBonus > 0f)
                 {
-                    float remove = state.MoveBonus > 0f ? state.MoveBonus : unit.CommanderMoveBonus;
-                    unit.MoveSpeed = Math.Max(0.5f, unit.MoveSpeed - remove);
+                    unit.MoveSpeed = Math.Max(0.5f, unit.MoveSpeed - unit.CommanderMoveBonus);
                     unit.CommanderMoveBonus = 0f;
                 }
+
+                if (MathF.Abs(unit.CommanderMoveMul - 1f) > 0.001f)
+                {
+                    unit.MoveSpeed = Math.Max(0.5f, unit.MoveSpeed / unit.CommanderMoveMul);
+                    unit.CommanderMoveMul = 1f;
+                }
+
+                if (MathF.Abs(unit.CommanderDamageTakenMul - 1f) > 0.001f)
+                    unit.CommanderDamageTakenMul = 1f;
 
                 if (unit.CommanderDamageBonus > 0f)
                 {
@@ -4248,6 +4291,9 @@ namespace Asterra.Gameplay
 
                 damage *= GroundCoverMitigation(targetUnit, attackerRole);
                 float applied = CombatMath.ApplyArmor(damage, targetUnit.Armor);
+                // NeedsTesting: commander damage-taken mul (Royal Standard) after Armor.
+                if (MathF.Abs(targetUnit.CommanderDamageTakenMul - 1f) > 0.001f)
+                    applied *= targetUnit.CommanderDamageTakenMul;
                 targetUnit.Health -= applied;
                 _combatEvents.Add(new CombatEvent(CombatEventKind.Hit, targetUnit.Id, targetUnit.X, targetUnit.Z, false));
                 if (targetUnit.Health <= 0f)
@@ -5389,6 +5435,8 @@ namespace Asterra.Gameplay
                     commanderArmorBonus = u.CommanderArmorBonus,
                     commanderMoveBonus = u.CommanderMoveBonus,
                     commanderDamageBonus = u.CommanderDamageBonus,
+                    commanderMoveMul = u.CommanderMoveMul,
+                    commanderDamageTakenMul = u.CommanderDamageTakenMul,
                     carryAmount = u.CarryAmount,
                     carryType = u.CarryType.HasValue ? (int)u.CarryType.Value : 0,
                     hasCarry = u.CarryAmount > 0 && u.CarryType.HasValue,
@@ -5746,6 +5794,8 @@ namespace Asterra.Gameplay
                     unit.CommanderArmorBonus = u.commanderArmorBonus;
                     unit.CommanderMoveBonus = u.commanderMoveBonus;
                     unit.CommanderDamageBonus = u.commanderDamageBonus;
+                    unit.CommanderMoveMul = u.commanderMoveMul > 0.01f ? u.commanderMoveMul : 1f;
+                    unit.CommanderDamageTakenMul = u.commanderDamageTakenMul > 0.01f ? u.commanderDamageTakenMul : 1f;
                     unit.AppliedEquipmentCount = 0;
                     void AddEq(string eq)
                     {

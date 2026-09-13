@@ -90,6 +90,8 @@ namespace Asterra.Gameplay.Save
         public float commanderArmorBonus;
         public float commanderMoveBonus;
         public float commanderDamageBonus;
+        public float commanderMoveMul = 1f;
+        public float commanderDamageTakenMul = 1f;
         public int carryAmount;
         public int carryType;
         public bool hasCarry;

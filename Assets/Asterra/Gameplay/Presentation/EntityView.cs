@@ -754,7 +754,7 @@ namespace Asterra.Gameplay.Presentation
                 UnitRole.Cavalry => 7.4f,
                 UnitRole.Siege => 4.2f,
                 UnitRole.Ranged => 8.6f,
-                UnitRole.Builder => 7.6f,
+                UnitRole.Builder => 5.4f,
                 _ => 8.2f,
             };
             if (_gaitFrame != Time.frameCount)
@@ -820,9 +820,100 @@ namespace Asterra.Gameplay.Presentation
                 mat.SetVector("_AnimParams3", new Vector4(_deathWeight, _runWeight, _wadeWeight, _carryWeight));
         }
 
+
+        /// <summary>
+        /// Workman gait: grounded plant, lateral weight shift, hammer swing when working,
+        /// load lean when carrying. Replaces the generic infantry bob that read as floaty.
+        /// </summary>
+        private void SampleBuilderPose(float t, float phase, out Vector3 pos, out Quaternion rot, out Vector3 scale)
+        {
+            float loc = _moveWeight;
+            float work = Mathf.Max(_gatherWeight, _attackWeight);
+            float gait = _gait + phase;
+
+            // Dual-phase walk: plant on each foot, weight transfers left/right.
+            float stride = Mathf.Sin(gait);
+            float plant = Mathf.Max(0f, -Mathf.Sin(gait * 2f));
+            float lift = Mathf.Max(0f, Mathf.Sin(gait * 2f));
+
+            float y = (plant * 0.028f + lift * 0.018f) * loc;
+            float x = stride * 0.045f * loc; // hip sway
+            float z = -Mathf.Abs(stride) * 0.012f * loc;
+            float pitch = -5.5f * loc - _slopePitch * 0.4f;
+            float yaw = stride * 6.5f * loc;
+            float roll = -stride * 4.5f * loc;
+
+            if (_runWeight > 0.2f)
+            {
+                pitch -= 3.5f * _runWeight;
+                y += lift * 0.012f * _runWeight;
+            }
+
+            if (_wadeWeight > 0.1f)
+                y -= 0.05f * _wadeWeight;
+
+            // Hammer / tool swing while gathering or striking — deliberate, not twitchy.
+            if (work > 0.05f)
+            {
+                float swing = Mathf.Sin((t + phase) * 5.6f);
+                float impact = Mathf.Max(0f, Mathf.Sin((t + phase) * 5.6f + 1.2f));
+                pitch += swing * 11f * work;
+                z += impact * 0.05f * work;
+                y += impact * 0.02f * work;
+                roll += swing * 3f * work;
+            }
+            else if (_idleWeight > 0.45f && loc < 0.15f)
+            {
+                // Idle: shift weight, slight tool rest — no vertical "breath" scale.
+                float shift = Mathf.Sin((t + phase) * 0.55f);
+                x += shift * 0.018f * _idleWeight;
+                roll += shift * 2.2f * _idleWeight;
+                pitch += Mathf.Sin((t + phase) * 0.9f) * 1.2f * _idleWeight;
+            }
+
+            if (_hasCarry && work < 0.25f)
+            {
+                pitch += 5.5f;
+                y -= 0.015f;
+                z -= 0.01f;
+            }
+
+            pos = new Vector3(x, y, z);
+            rot = Quaternion.Euler(pitch, yaw, roll);
+            scale = Vector3.one;
+
+            if (Time.time < _ackUntil)
+            {
+                float u = 1f - ((_ackUntil - Time.time) / 0.32f);
+                pitch -= Mathf.Sin(u * Mathf.PI) * 6f;
+                rot = Quaternion.Euler(pitch, yaw, roll);
+            }
+
+            if (Time.time < _spawnUntil)
+            {
+                float u = 1f - ((_spawnUntil - Time.time) / 0.38f);
+                pos.y += (1f - u) * 0.1f;
+                scale = new Vector3(1f, 0.6f + u * 0.4f, 1f);
+            }
+
+            if (_deathWeight > 0.01f)
+            {
+                float d = _deathWeight;
+                pos.y -= d * 0.35f;
+                rot = Quaternion.Euler(pitch + d * 50f, yaw + d * 20f, roll - d * 25f);
+                scale = new Vector3(1f + d * 0.15f, Mathf.Max(0.2f, 1f - d * 0.75f), 1f + d * 0.1f);
+            }
+        }
+
         private void SampleUnitPose(float t, int index, out Vector3 pos, out Quaternion rot, out Vector3 scale)
         {
             float phase = _animPhase + index * 0.73f;
+            if (_unitRole == UnitRole.Builder)
+            {
+                SampleBuilderPose(t, phase, out pos, out rot, out scale);
+                return;
+            }
+
             float bobAmp;
             float lean;
             switch (_unitRole)
@@ -838,10 +929,6 @@ namespace Asterra.Gameplay.Presentation
                 case UnitRole.Ranged:
                     bobAmp = 0.045f;
                     lean = 6f;
-                    break;
-                case UnitRole.Builder:
-                    bobAmp = 0.09f;
-                    lean = 9f;
                     break;
                 default:
                     bobAmp = 0.055f;
@@ -965,8 +1052,8 @@ namespace Asterra.Gameplay.Presentation
                     rise,
                     Mathf.Lerp(0.72f, 1f, p));
                 pos = new Vector3(0f, (rise - 1f) * 0.55f, 0f);
-                float wobble = Mathf.Sin((t + _animPhase) * 6f) * 0.8f * (1f - p);
-                rot = Quaternion.Euler(0f, wobble, 0f);
+                // Keep constructing rise clean — yaw wobble read as mesh flex in playtests.
+                rot = Quaternion.identity;
                 if (_hitFlashUntil <= 0f)
                     ApplyBodyColor(ConstructionTint(_baseColor));
                 if (_scaffold != null)

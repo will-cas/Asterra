@@ -77,6 +77,10 @@ namespace Asterra.Gameplay.Presentation
             cam.allowHDR = true;
             cam.allowMSAA = true;
             cam.clearFlags = CameraClearFlags.Skybox;
+            // Avoid Unity's default blue flash before procedural sky is bound.
+            cam.backgroundColor = new Color(0.42f, 0.55f, 0.62f, 1f);
+            if (RenderSettings.skybox == null)
+                RenderSettings.skybox = EnsureProceduralSky(null);
             var data = cam.GetComponent<UniversalAdditionalCameraData>();
             if (data == null)
                 data = cam.gameObject.AddComponent<UniversalAdditionalCameraData>();
