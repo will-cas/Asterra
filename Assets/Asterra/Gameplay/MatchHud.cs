@@ -351,6 +351,9 @@ namespace Asterra.Gameplay
                     continue;
                 if (powerDef.HeroMoment)
                     continue;
+                // M1: right stack is Crown essentials only (RS lives in commander slot).
+                if (!IsM1HudPower(powerId))
+                    continue;
 
                 match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, powerId, out float cd, out float buff);
                 bool unlocked = match.World.HasPower(match.Session.LocalPlayer, powerId);
@@ -499,13 +502,25 @@ namespace Asterra.Gameplay
         {
             if (string.IsNullOrEmpty(displayName))
                 return "Power";
-            // Prefer a readable two-word clip for the small card.
-            string[] parts = displayName.Split(' ');
-            if (parts.Length >= 2 && (parts[0].Length + parts[1].Length) <= 12)
-                return parts[0] + " " + parts[1];
+            // Prefer a readable clip that fits the 64px card without "Rain of…" scrap.
+            string[] parts = displayName.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
+            {
+                // "Rain of Arrows" → "Arrows"; "Eyes of the Crown" → "Eyes"; "Levy Horn" → "Levy Horn"
+                if (parts.Length >= 3 && (parts[1].Equals("of", System.StringComparison.OrdinalIgnoreCase)
+                                         || parts[1].Equals("of", System.StringComparison.Ordinal)))
+                {
+                    string tail = parts[parts.Length - 1];
+                    if (parts[0].Length + 1 + tail.Length <= 12)
+                        return parts[0] + " " + tail;
+                    return parts[0];
+                }
+                if ((parts[0].Length + 1 + parts[1].Length) <= 12)
+                    return parts[0] + " " + parts[1];
+            }
             if (displayName.Length <= 11)
                 return displayName;
-            return displayName.Substring(0, 10) + "…";
+            return displayName.Substring(0, 10);
         }
 
         private void DrawCommandDock(PlayerId player)
@@ -658,9 +673,43 @@ namespace Asterra.Gameplay
             }
 
             if (selected.Count > 5)
+            {
                 GUI.Label(new Rect(x, y + portrait + 10f, area.width, 18f), $"+{selected.Count - 5} more", HudStyle.Caption);
-            else if (selected.Count > 0)
-                GUI.Label(new Rect(x, y + portrait + 10f, area.width, 18f), $"{selected.Count} selected", HudStyle.Caption);
+            }
+            else if (selected.Count == 1)
+            {
+                string unitName = SelectionUnitDisplayName(selected[0].Value);
+                GUI.Label(
+                    new Rect(x, y + portrait + 10f, area.width, 18f),
+                    string.IsNullOrEmpty(unitName) ? "1 selected" : unitName,
+                    HudStyle.Caption);
+            }
+            else if (selected.Count > 1)
+            {
+                string unitName = SelectionUnitDisplayName(selected[0].Value);
+                string label = string.IsNullOrEmpty(unitName)
+                    ? $"{selected.Count} selected"
+                    : $"{selected.Count}× {unitName}";
+                GUI.Label(new Rect(x, y + portrait + 10f, area.width, 18f), label, HudStyle.Caption);
+            }
+        }
+
+        private string SelectionUnitDisplayName(uint unitId)
+        {
+            if (match.World == null)
+                return null;
+            for (int u = 0; u < match.World.Units.Count; u++)
+            {
+                var unit = match.World.Units[u];
+                if (unit.Id.Value != unitId)
+                    continue;
+                if (match.Definitions != null
+                    && match.Definitions.TryGetUnit(unit.DefinitionId, out var def)
+                    && !string.IsNullOrEmpty(def.DisplayName))
+                    return def.DisplayName;
+                return ShortName(unit.DefinitionId);
+            }
+            return null;
         }
 
         private void DrawCombatCommands(PlayerId player)
@@ -708,56 +757,58 @@ namespace Asterra.Gameplay
             if (roster == null)
                 return;
 
+            // M1 whitelist: keep / barracks / farm / walls / repair.
+            // Terrain junk-drawer (trench/moat/ferry/berm/…) parked until UX unlocks it.
             string producerLabel = "Barracks";
             if (match.Definitions != null
                 && roster.ProducerBuildingId != null
                 && match.Definitions.TryGetBuilding(roster.ProducerBuildingId, out var producer))
                 producerLabel = producer.DisplayName;
             PushBuildCard("hammer", producerLabel, roster.ProducerBuildingId);
-            if (roster.ExtraBuildingIds != null)
+
+            // Farm / economy outpost
+            if (!string.IsNullOrEmpty(roster.OutpostBuildingId))
+                PushBuildCard("outpost", BuildingLabel(roster.OutpostBuildingId, "Farm"), roster.OutpostBuildingId);
+
+            // Signature keep / court
+            if (!string.IsNullOrEmpty(roster.SignatureBuildingId))
+            {
+                string keepLabel = BuildingLabel(roster.SignatureBuildingId, "Keep");
+                PushBuildCard("keep", keepLabel, roster.SignatureBuildingId);
+            }
+            else if (roster.ExtraBuildingIds != null)
             {
                 for (int i = 0; i < roster.ExtraBuildingIds.Length; i++)
                 {
                     string extraId = roster.ExtraBuildingIds[i];
-                    string extraLabel = extraId;
-                    string extraIcon = "hammer";
-                    if (match.Definitions != null && match.Definitions.TryGetBuilding(extraId, out var extra))
-                    {
-                        extraLabel = extra.DisplayName;
-                        extraIcon = extra.GoldPerSecond > 0
-                            ? "outpost"
-                            : extra.Kind == BuildingKind.Special ? "power" : "hammer";
-                    }
-
-                    if (!string.IsNullOrEmpty(roster.SignatureBuildingId) && extraId == roster.SignatureBuildingId)
-                    {
-                        extraIcon = "keep";
-                        extraLabel = "Keep " + extraLabel;
-                    }
-
-                    PushBuildCard(extraIcon, extraLabel, extraId);
+                    if (!IsM1BuilderBuilding(roster, extraId))
+                        continue;
+                    PushBuildCard("hammer", BuildingLabel(extraId, extraId), extraId);
                 }
             }
-            PushBuildCard("tower", BuildingLabel(roster.TowerBuildingId, "Tower"), roster.TowerBuildingId);
-            PushBuildCard("wall", BuildingLabel(roster.WallBuildingId, "Wall"), roster.WallBuildingId);
-            PushBuildCard("trench", "Trench", FactionDefaultContent.TrenchWorksId);
-            bool showBridge = roster.DefinitionId != FactionDefaultContent.UniversityId
-                || (match.World != null && match.World.HasUpgrade(player, FactionDefaultContent.AdvancedConstructionUpgradeId));
-            if (showBridge)
-                PushBuildCard("bridge", "Bridge", FactionDefaultContent.BridgeId);
-            PushBuildCard("barricade", "Barrier", FactionDefaultContent.BarricadeId);
-            PushBuildCard("ferry", "Ferry", FactionDefaultContent.FerryDockId);
-            PushBuildCard("outpost", BuildingLabel(roster.OutpostBuildingId, "Mine"), roster.OutpostBuildingId);
-            PushBuildCard("earth", "Berm", FactionDefaultContent.BermWorksId);
-            PushBuildCard("trench", "Fill", FactionDefaultContent.FillWorksId);
-            PushBuildCard("ferry", "Moat", FactionDefaultContent.MoatWorksId);
-            PushBuildCard("timber", "Clear", FactionDefaultContent.ClearWorksId);
-            PushBuildCard("power", "Burn", FactionDefaultContent.BurnWorksId);
-            PushBuildCard("stone", "Quarry", FactionDefaultContent.QuarryWorksId);
-            PushBuildCard("sapper", "Spikes", FactionDefaultContent.SpikesWorksId);
-            PushBuildCard("hammer", "Debris", FactionDefaultContent.DebrisWorksId);
-            PushCard("repair", "Repair", "Repair bridge", HudStyle.Timber,
+
+            if (!string.IsNullOrEmpty(roster.WallBuildingId))
+                PushBuildCard("wall", BuildingLabel(roster.WallBuildingId, "Wall"), roster.WallBuildingId);
+
+            PushCard("repair", "Repair", "Repair nearby structure / bridge", HudStyle.Timber,
                 () => orders.RepairBridgeAtCursor());
+        }
+
+        private static bool IsM1BuilderBuilding(FactionRoster roster, string buildingId)
+        {
+            if (string.IsNullOrEmpty(buildingId) || roster == null)
+                return false;
+            if (buildingId == roster.ProducerBuildingId)
+                return true;
+            if (buildingId == roster.OutpostBuildingId)
+                return true;
+            if (buildingId == roster.WallBuildingId)
+                return true;
+            if (buildingId == roster.SignatureBuildingId)
+                return true;
+            if (buildingId == roster.KeepBuildingId)
+                return true;
+            return false;
         }
 
         private string BuildingLabel(string buildingId, string fallback)
