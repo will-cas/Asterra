@@ -13,6 +13,9 @@ namespace Asterra.Gameplay.Presentation
         public SimEntityId Id { get; private set; }
         public bool IsUnit { get; private set; }
         public PlayerId Owner { get; private set; }
+        /// <summary>Set by presentation bridge so selection shapes can differ for own vs enemy.</summary>
+        public static PlayerId LocalPlayerForSelection { get; set; }
+        private bool _hovered;
         public string DefinitionId { get; private set; }
         public bool IsRevealed { get; private set; } = true;
         /// <summary>True while a building death collapse is playing (delay Destroy).</summary>
@@ -396,8 +399,7 @@ namespace Asterra.Gameplay.Presentation
             _maxHealth = Mathf.Max(0.01f, max);
             float ratio = Mathf.Clamp01(_health / _maxHealth);
 
-            if (_hpRoot != null)
-                _hpRoot.gameObject.SetActive(IsRevealed && ratio < 0.999f);
+            RefreshHpVisibility();
 
             if (_hpFill != null)
             {
@@ -542,7 +544,7 @@ namespace Asterra.Gameplay.Presentation
         {
             _hitFlashUntil = Time.time + (IsUnit ? 0.18f : 0.22f);
             _hitBobUntil = Time.time + (IsUnit ? 0.22f : 0.32f);
-            ApplyBodyColor(new Color(1f, 0.25f, 0.2f));
+            ApplyBodyColor(new Color(1f, 1f, 1f)); // M1 polish: white damage flash
         }
 
         /// <summary>Client sync: face move direction and apply hit bob / building anim.</summary>
@@ -1041,9 +1043,26 @@ namespace Asterra.Gameplay.Presentation
             _scaffold = go;
         }
 
+        public void SetHovered(bool hovered)
+        {
+            _hovered = hovered;
+            RefreshHpVisibility();
+        }
+
+        private void RefreshHpVisibility()
+        {
+            if (_hpRoot == null)
+                return;
+            float ratio = _maxHealth > 0f ? _health / _maxHealth : 1f;
+            bool damaged = ratio < 0.999f;
+            _hpRoot.gameObject.SetActive(IsRevealed && (damaged || (_hovered && IsUnit)));
+        }
+
         public void SetSelected(bool selected)
         {
             bool on = selected && IsRevealed && !_dying && !_garrisonedHidden;
+            if (on)
+                EnsureSelectionRing(IsUnit); // rebuild-safe; uses current LocalPlayerForSelection
             if (on && (_selectionRing == null || !_selectionRing.gameObject.activeSelf))
                 _ackUntil = Time.time + 0.32f;
             if (_selectionRing != null)
@@ -1072,11 +1091,7 @@ namespace Asterra.Gameplay.Presentation
                     _selectionRing.gameObject.SetActive(false);
             }
 
-            if (_hpRoot != null)
-            {
-                float ratio = _maxHealth > 0f ? _health / _maxHealth : 1f;
-                _hpRoot.gameObject.SetActive(revealed && ratio < 0.999f);
-            }
+            RefreshHpVisibility();
         }
 
         private void EnsurePickCollider(bool isUnit, Mesh mesh)
@@ -1150,21 +1165,34 @@ namespace Asterra.Gameplay.Presentation
 
         private void EnsureSelectionRing(bool isUnit)
         {
+            bool friendly = Owner == LocalPlayerForSelection;
             if (_selectionRing != null)
-                return;
+            {
+                // Rebuild once LocalPlayer is known if ownership shape would differ.
+                bool wantFriendlyMesh = !isUnit || friendly;
+                bool isRect = _selectionRing.name == "SelectionRect";
+                if (wantFriendlyMesh == isRect || !isUnit)
+                    return;
+                Object.Destroy(_selectionRing.gameObject);
+                _selectionRing = null;
+            }
 
             float outer = isUnit ? (_squadSize > 1 ? 1.35f + _squadSize * 0.12f : 2.6f) : 5.8f;
             if (isUnit && _squadSize > 1)
                 outer = Mathf.Clamp(outer, 4.0f, 7.5f);
-
-            var ring = new GameObject("SelectionHalo");
+            var ring = new GameObject(friendly ? "SelectionRect" : "SelectionTriangle");
             ring.transform.SetParent(transform, false);
             ring.transform.localPosition = new Vector3(0f, 0.12f, 0f);
             ring.transform.localScale = new Vector3(outer, 1f, outer);
             var filter = ring.AddComponent<MeshFilter>();
-            filter.sharedMesh = HaloRingMesh();
+            // M1 polish: own = rectangle, enemy = triangle (buildings keep rect).
+            filter.sharedMesh = (!isUnit || friendly) ? SelectionRectMesh() : SelectionTriangleMesh();
             var ringRend = ring.AddComponent<MeshRenderer>();
-            Color halo = _factionColor;
+            Color halo = friendly
+                ? new Color(0.25f, 0.55f, 1f, 0.95f)
+                : new Color(0.95f, 0.35f, 0.25f, 0.95f);
+            if (!isUnit)
+                halo = _factionColor;
             halo.a = 0.95f;
             ringRend.sharedMaterial = CreateColorMaterial(halo);
             ringRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;

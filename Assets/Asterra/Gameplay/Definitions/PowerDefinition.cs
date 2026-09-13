@@ -18,6 +18,7 @@ namespace Asterra.Gameplay
         public float BuildingMitigation;
         public bool IsPassive;
         public bool HeroMoment;
+        public int ActivateGoldCost;
 
         public PowerDefData ToData()
         {
@@ -33,6 +34,7 @@ namespace Asterra.Gameplay
                 BuildingMitigation = BuildingMitigation,
                 IsPassive = IsPassive,
                 HeroMoment = HeroMoment,
+                ActivateGoldCost = ActivateGoldCost,
             };
         }
     }

@@ -425,6 +425,9 @@ namespace Asterra.Gameplay
                 }
             }
 
+            if (match != null && match.Session != null)
+                EntityView.LocalPlayerForSelection = match.Session.LocalPlayer;
+
             foreach (var pair in _unitViews)
             {
                 // Building selection is exclusive — hide unit rings while a building is selected.
@@ -437,6 +440,27 @@ namespace Asterra.Gameplay
                                 || (!hasBuilding && selectedSet.Contains(pair.Key));
                 pair.Value.SetSelected(selected);
             }
+
+            // M1 polish: HP bar also when hovered.
+            uint hoverId = 0;
+            bool hasHover = false;
+            if (Camera.main != null)
+            {
+                var ray = Camera.main.ScreenPointToRay(UnityEngine.Input.mousePosition);
+                if (Physics.Raycast(ray, out var hit, 5000f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    var view = hit.collider.GetComponentInParent<EntityView>();
+                    if (view != null && view.IsRevealed)
+                    {
+                        hoverId = view.Id.Value;
+                        hasHover = true;
+                    }
+                }
+            }
+            foreach (var pair in _unitViews)
+                pair.Value.SetHovered(hasHover && pair.Key == hoverId);
+            foreach (var pair in _buildingViews)
+                pair.Value.SetHovered(hasHover && pair.Key == hoverId);
         }
 
         private int ResolveSquadSize(string definitionId)

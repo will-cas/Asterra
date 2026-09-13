@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Asterra.AI;
 using Asterra.Core;
+using Asterra.Gameplay.Analytics;
 using Asterra.Gameplay.Audio;
 using Asterra.Gameplay.Content;
 using Asterra.Gameplay.Player;
@@ -770,6 +771,8 @@ namespace Asterra.Gameplay
 
             IsMatchRunning = true;
             Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} map={MapKey} players={_participants.Count}");
+            CloudBuildInfo.LogBootstrap();
+            MatchAnalytics.RecordMatchStart(MapKey, playMode, _participants.Count, matchSeed);
         }
 
         private void BindTerrainTexturePaint()
@@ -864,6 +867,8 @@ namespace Asterra.Gameplay
             IsMatchRunning = false;
             coordinator.Stop();
             Debug.Log($"[Asterra] MATCH OVER winner=P{result.Winner.Value} reason={result.Reason}");
+            var local = Session != null ? Session.LocalPlayer : new PlayerId(0);
+            MatchAnalytics.RecordMatchEnd(result, local, MapKey);
         }
 
         private void OnDestroy()

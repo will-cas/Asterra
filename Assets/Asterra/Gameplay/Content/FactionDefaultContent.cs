@@ -1617,111 +1617,117 @@ namespace Asterra.Gameplay.Content
 
         private static void RegisterMundorCrown(DefinitionRegistry registry)
         {
+            // M1 Unit DB import (Notion Mundor Crown) — provisional / Needs Testing where noted.
+            // MoveSpeed/AttackRange scaled from design units (x1.6 move; x1.8 close range; x2.7 ranged/siege).
             registry.Register(new UnitDefData
             {
                 Id = RoyalPeasantId,
                 DisplayName = "Peasant",
-                MaxHealth = 78f,
-                MoveSpeed = 5.1f,
-                AttackDamage = 9f,
-                AttackRange = 1.7f,
-                AttackCooldown = 1.05f,
-                GoldCost = 38,
-                TrainSeconds = 3.2f,
+                MaxHealth = 70f, // Needs Testing
+                MoveSpeed = 4.8f,
+                AttackDamage = 5f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.0f,
+                GoldCost = 40, // Notion Gold Cost 0; Resource Cost 40 used for economy
+                TrainSeconds = 12f,
                 Role = UnitRole.Infantry,
                 SquadSize = 16,
+                Armor = 1f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalBuilderId,
                 DisplayName = "Royal Engineer",
-                MaxHealth = 62f,
+                MaxHealth = 80f, // Needs Testing
                 MoveSpeed = 4.8f,
-                AttackDamage = 0f,
-                AttackRange = 0f,
-                AttackCooldown = 1f,
-                GoldCost = 32,
-                TrainSeconds = 2.8f,
+                AttackDamage = 5f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.25f,
+                GoldCost = 60,
+                TrainSeconds = 18f,
                 IsBuilder = true,
                 CanGather = false,
                 CarryCapacity = 15,
                 GatherRate = 5.6f,
                 Role = UnitRole.Builder,
                 SquadSize = 1,
+                Armor = 2f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalLegionId,
                 DisplayName = "Legion",
-                MaxHealth = 108f,
-                MoveSpeed = 4.9f,
-                AttackDamage = 13f,
+                MaxHealth = 120f,
+                MoveSpeed = 4.8f,
+                AttackDamage = 12f,
                 AttackRange = 1.8f,
-                AttackCooldown = 1f,
-                GoldCost = 58,
-                TrainSeconds = 4.4f,
+                AttackCooldown = 1.0f,
+                GoldCost = 50,
+                TrainSeconds = 15f,
                 Role = UnitRole.Infantry,
                 SquadSize = 16,
-                Armor = 1.5f,
+                Armor = 3f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalGuardId,
                 DisplayName = "Royal Guard",
-                MaxHealth = 158f,
-                MoveSpeed = 4.2f,
+                MaxHealth = 260f,
+                MoveSpeed = 4.0f,
                 AttackDamage = 16f,
-                AttackRange = 1.7f,
-                AttackCooldown = 1.05f,
-                GoldCost = 128,
-                TrainSeconds = 7.2f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.25f,
+                GoldCost = 140,
+                TrainSeconds = 28f,
                 Role = UnitRole.Infantry,
                 SquadSize = 16,
-                Armor = 4.5f,
+                Armor = 8f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalLongbowId,
                 DisplayName = "Longbowman",
-                MaxHealth = 64f,
+                MaxHealth = 65f,
                 MoveSpeed = 4.8f,
-                AttackDamage = 15f,
-                AttackRange = 16f,
-                AttackCooldown = 1.35f,
-                GoldCost = 68,
-                TrainSeconds = 5.2f,
+                AttackDamage = 11f,
+                AttackRange = 13.5f,
+                AttackCooldown = 0.9091f,
+                GoldCost = 55,
+                TrainSeconds = 16f,
                 Role = UnitRole.Ranged,
                 SquadSize = 12,
+                Armor = 1f,
                 ProjectileSpeed = 52f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalCommanderId,
                 DisplayName = "Commander",
-                MaxHealth = 118f,
-                MoveSpeed = 7.4f,
-                AttackDamage = 15f,
-                AttackRange = 1.9f,
-                AttackCooldown = 0.95f,
-                GoldCost = 112,
-                TrainSeconds = 6.2f,
+                MaxHealth = 170f,
+                MoveSpeed = 8.0f,
+                AttackDamage = 19f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.0f,
+                GoldCost = 125,
+                TrainSeconds = 22f,
                 Role = UnitRole.Cavalry,
                 SquadSize = 4,
-                Armor = 3f,
+                Armor = 5f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalSpyId,
                 DisplayName = "Spy",
-                MaxHealth = 48f,
-                MoveSpeed = 6.6f,
-                AttackDamage = 8f,
-                AttackRange = 1.5f,
-                AttackCooldown = 0.9f,
-                GoldCost = 78,
-                TrainSeconds = 5f,
+                MaxHealth = 55f, // Needs Testing
+                MoveSpeed = 7.2f,
+                AttackDamage = 4f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.25f,
+                GoldCost = 80,
+                TrainSeconds = 20f,
                 Role = UnitRole.Infantry,
                 SquadSize = 2,
+                Armor = 0f,
                 SightRadius = 190f,
             });
             registry.Register(new UnitDefData
@@ -1760,33 +1766,33 @@ namespace Asterra.Gameplay.Content
             {
                 Id = RoyalOnagerId,
                 DisplayName = "Onager",
-                MaxHealth = 95f,
-                MoveSpeed = 2.7f,
-                AttackDamage = 23f,
-                AttackRange = 10.5f,
-                AttackCooldown = 2.3f,
-                GoldCost = 145,
-                TrainSeconds = 9.5f,
+                MaxHealth = 90f, // Needs Testing
+                MoveSpeed = 1.92f,
+                AttackDamage = 42f,
+                AttackRange = 21.6f,
+                AttackCooldown = 2.5f,
+                GoldCost = 160,
+                TrainSeconds = 32f,
                 Role = UnitRole.Siege,
                 SquadSize = 1,
                 BuildingDamageMultiplier = 3.4f,
-                Armor = 1f,
+                Armor = 2f,
                 ProjectileSpeed = 30f,
             });
             registry.Register(new UnitDefData
             {
                 Id = RoyalKingId,
                 DisplayName = "King of Mundor",
-                MaxHealth = 270f,
-                MoveSpeed = 5.1f,
-                AttackDamage = 22f,
-                AttackRange = 2.1f,
-                AttackCooldown = 0.9f,
-                GoldCost = 260,
-                TrainSeconds = 14.5f,
+                MaxHealth = 130f, // Needs Testing — Unit DB
+                MoveSpeed = 4.8f,
+                AttackDamage = 8f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.0f,
+                GoldCost = 150,
+                TrainSeconds = 30f,
                 Role = UnitRole.Infantry,
                 SquadSize = 1,
-                Armor = 4.5f,
+                Armor = 4f,
                 IsLeader = true,
                 SightRadius = 145f,
             });
@@ -1794,16 +1800,16 @@ namespace Asterra.Gameplay.Content
             {
                 Id = RoyalLegionMarshalId,
                 DisplayName = "Legion Commander",
-                MaxHealth = 245f,
-                MoveSpeed = 5.4f,
-                AttackDamage = 21f,
-                AttackRange = 2f,
-                AttackCooldown = 0.88f,
-                GoldCost = 250,
-                TrainSeconds = 13.5f,
+                MaxHealth = 210f, // Needs Testing
+                MoveSpeed = 5.12f,
+                AttackDamage = 18f,
+                AttackRange = 1.8f,
+                AttackCooldown = 1.1111f,
+                GoldCost = 180,
+                TrainSeconds = 35f,
                 Role = UnitRole.Infantry,
                 SquadSize = 1,
-                Armor = 3.5f,
+                Armor = 6f,
                 IsLeader = true,
                 SightRadius = 140f,
             });
@@ -1811,13 +1817,13 @@ namespace Asterra.Gameplay.Content
             {
                 Id = RoyalSpymasterId,
                 DisplayName = "Spy Master",
-                MaxHealth = 210f,
-                MoveSpeed = 6.4f,
-                AttackDamage = 16f,
+                MaxHealth = 130f, // Needs Testing
+                MoveSpeed = 6.72f,
+                AttackDamage = 7f,
                 AttackRange = 1.8f,
-                AttackCooldown = 0.8f,
-                GoldCost = 245,
-                TrainSeconds = 13f,
+                AttackCooldown = 1.25f,
+                GoldCost = 220,
+                TrainSeconds = 45f,
                 Role = UnitRole.Infantry,
                 SquadSize = 1,
                 Armor = 2f,
@@ -2096,14 +2102,16 @@ namespace Asterra.Gameplay.Content
             });
             registry.Register(new PowerDefData
             {
+                // M1 Unit DB / Royal Standard spec — Needs Testing
                 Id = RoyalStandardAbilityId,
                 DisplayName = "Royal Standard",
                 UnlockGoldCost = 150,
+                ActivateGoldCost = 60, // Ability Resource Cost
                 CooldownSeconds = 45f,
                 DurationSeconds = 12f,
                 Effect = PowerEffectKind.ArmorAura,
-                EffectMagnitude = 3f,
-                BuildingMitigation = 3f,
+                EffectMagnitude = 2f, // Armor +2
+                BuildingMitigation = 0f,
                 HeroMoment = true,
             });
             registry.Register(new PowerDefData

@@ -248,6 +248,8 @@ namespace Asterra.Core
         public bool IsPassive;
         /// <summary>Named map-scale chapter (Halo Wars / BFME hero beat). HUD highlights this.</summary>
         public bool HeroMoment;
+        /// <summary>Gold spent on activate (0 = free). Unit DB Ability Resource Cost maps here for M1.</summary>
+        public int ActivateGoldCost;
         /// <summary>Optional unit spawned by <see cref="PowerEffectKind.SpawnScouts"/>.</summary>
         public string SpawnUnitDefinitionId;
     }

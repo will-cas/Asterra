@@ -68,6 +68,13 @@ namespace Asterra.Gameplay
             public float BuildingMitigation;
             public PowerEffectKind Effect;
             public float PercentBonus;
+            // Royal Standard plant zone (world units). Radius<=0 = faction-wide buff (legacy).
+            public bool HasPlantAnchor;
+            public float AnchorX;
+            public float AnchorZ;
+            public float AuraRadius;
+            public float AuraFullRadius;
+            public uint BannerEntityId;
         }
 
         private readonly Dictionary<string, CommanderAbilityRuntime> _commanderAbilities = new();
@@ -2288,6 +2295,26 @@ namespace Asterra.Gameplay
             if (state.CooldownRemaining > 0f)
                 return;
 
+            // M1 Royal Standard: ground-targeted plant, resource cost, cast range from King.
+            bool isRoyalStandard = power.Id == FactionDefaultContent.RoyalStandardAbilityId;
+            float plantX = cmd.TargetX;
+            float plantZ = cmd.TargetZ;
+            if (isRoyalStandard)
+            {
+                if (!IsInsidePlayable(plantX, plantZ))
+                    return;
+                if (!TryFindLeaderUnit(cmd.Issuer, FactionDefaultContent.RoyalKingId, out var king))
+                    return;
+                const float castRange = 10.8f; // design cast range 6 * 1.8
+                float dx = plantX - king.X;
+                float dz = plantZ - king.Z;
+                if (dx * dx + dz * dz > castRange * castRange)
+                    return;
+                int activateCost = power.ActivateGoldCost > 0 ? power.ActivateGoldCost : 60;
+                if (!_wallet.TrySpend(cmd.Issuer, ResourceType.Gold, activateCost))
+                    return;
+            }
+
             if (power.Effect == PowerEffectKind.PlaceGate
                 && !CanPlaceTwinGatePair(cmd.TargetX, cmd.TargetZ, cmd.SecondaryX, cmd.SecondaryZ))
                 return;
@@ -2316,46 +2343,105 @@ namespace Asterra.Gameplay
             state.BuildingMitigation = power.BuildingMitigation;
             state.BuffRemaining = power.DurationSeconds;
             state.CooldownRemaining = power.CooldownSeconds;
-            ApplyPowerBuff(cmd.Issuer, state);
-            // Presentation cue at keep / army center.
+            state.HasPlantAnchor = false;
+            state.BannerEntityId = 0;
+            state.AuraRadius = 0f;
+            state.AuraFullRadius = 0f;
             float fx = 0f;
             float fz = 0f;
-            int n = 0;
-            for (int i = 0; i < _buildings.Count; i++)
+            if (isRoyalStandard)
             {
-                var b = _buildings[i];
-                if (b.Owner != cmd.Issuer || b.State == BuildingState.Destroyed)
-                    continue;
-                if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
-                    continue;
-                fx = b.X;
-                fz = b.Z;
-                n = 1;
-                break;
+                // Design radius 8 / full 4 → world via x1.8
+                state.HasPlantAnchor = true;
+                state.AnchorX = plantX;
+                state.AnchorZ = plantZ;
+                state.AuraRadius = 14.4f;
+                state.AuraFullRadius = 7.2f;
+                var banner = SpawnDestructible(_ids.Next(), DefaultDestructibleCatalog.RoyalStandard(), plantX, plantZ);
+                state.BannerEntityId = banner.Id.Value;
+                fx = plantX;
+                fz = plantZ;
+                ApplyPowerBuff(cmd.Issuer, state);
             }
-
-            if (n == 0)
+            else
             {
-                for (int i = 0; i < _units.Count; i++)
+                ApplyPowerBuff(cmd.Issuer, state);
+                // Presentation cue at keep / army center.
+                int n = 0;
+                for (int i = 0; i < _buildings.Count; i++)
                 {
-                    var u = _units[i];
-                    if (!u.IsAlive || u.Owner != cmd.Issuer)
+                    var b = _buildings[i];
+                    if (b.Owner != cmd.Issuer || b.State == BuildingState.Destroyed)
                         continue;
-                    fx += u.X;
-                    fz += u.Z;
-                    n++;
+                    if (!FactionDefaultContent.IsKeepBuildingId(b.DefinitionId))
+                        continue;
+                    fx = b.X;
+                    fz = b.Z;
+                    n = 1;
+                    break;
                 }
 
-                if (n > 0)
+                if (n == 0)
                 {
-                    fx /= n;
-                    fz /= n;
+                    for (int i = 0; i < _units.Count; i++)
+                    {
+                        var u = _units[i];
+                        if (!u.IsAlive || u.Owner != cmd.Issuer)
+                            continue;
+                        fx += u.X;
+                        fz += u.Z;
+                        n++;
+                    }
+
+                    if (n > 0)
+                    {
+                        fx /= n;
+                        fz /= n;
+                    }
                 }
             }
 
             ApplySpecialPowerEffects(cmd, power, fx, fz);
             _combatEvents.Add(new CombatEvent(CombatEventKind.PowerActivated, default, fx, fz, false, cmd.Issuer.Value));
             _mutationCounter ^= 0xA11CEUL ^ (ulong)(cmd.Issuer.Value + 1) * 97ul;
+        }
+
+        private bool TryFindLeaderUnit(PlayerId owner, string definitionId, out SimUnit unit)
+        {
+            unit = null;
+            for (int i = 0; i < _units.Count; i++)
+            {
+                var u = _units[i];
+                if (u.Owner != owner || !u.IsAlive)
+                    continue;
+                if (u.DefinitionId != definitionId)
+                    continue;
+                unit = u;
+                return true;
+            }
+            return false;
+        }
+
+        private void EndRoyalStandardForBanner(uint bannerEntityId)
+        {
+            if (bannerEntityId == 0)
+                return;
+            foreach (var pair in _commanderAbilities)
+            {
+                var state = pair.Value;
+                if (state.BannerEntityId != bannerEntityId)
+                    continue;
+                byte player = 0;
+                int colon = pair.Key.IndexOf(':');
+                if (colon > 0 && byte.TryParse(pair.Key.Substring(0, colon), out var p))
+                    player = p;
+                ClearPowerBuff(new PlayerId(player), state);
+                state.BuffRemaining = 0f;
+                state.HasPlantAnchor = false;
+                state.BannerEntityId = 0;
+                _mutationCounter ^= 0xBAD6EUL ^ bannerEntityId;
+                break;
+            }
         }
 
         private void ApplySpecialPowerEffects(ActivateCommanderAbilityCommand cmd, PowerDefData power, float x, float z)
@@ -3052,6 +3138,22 @@ namespace Asterra.Gameplay
                     changed = true;
                 }
 
+                if (state.HasPlantAnchor && state.BuffRemaining > 0f && state.BannerEntityId != 0)
+                {
+                    if (!_destructiblesById.TryGetValue(state.BannerEntityId, out var banner) || !banner.IsAlive)
+                    {
+                        byte playerDead = 0;
+                        int colonDead = pair.Key.IndexOf(':');
+                        if (colonDead > 0 && byte.TryParse(pair.Key.Substring(0, colonDead), out var pd))
+                            playerDead = pd;
+                        ClearPowerBuff(new PlayerId(playerDead), state);
+                        state.BuffRemaining = 0f;
+                        state.HasPlantAnchor = false;
+                        state.BannerEntityId = 0;
+                        changed = true;
+                    }
+                }
+
                 if (changed)
                     _mutationCounter ^= (ulong)pair.Key.GetHashCode();
             }
@@ -3064,6 +3166,31 @@ namespace Asterra.Gameplay
                 var unit = _units[i];
                 if (unit.Owner != owner || !unit.IsAlive)
                     continue;
+                if (state.HasPlantAnchor && state.AuraRadius > 0f)
+                {
+                    float dx = unit.X - state.AnchorX;
+                    float dz = unit.Z - state.AnchorZ;
+                    float distSq = dx * dx + dz * dz;
+                    float r = state.AuraRadius;
+                    if (distSq > r * r)
+                        continue;
+                    float dist = MathF.Sqrt(distSq);
+                    float scale = 1f;
+                    if (state.AuraFullRadius > 0f && dist > state.AuraFullRadius)
+                        scale = 0.5f; // design falloff half effect 4–8
+                    var scaled = new CommanderAbilityRuntime
+                    {
+                        PowerDefId = state.PowerDefId,
+                        ArmorBonus = state.ArmorBonus * scale,
+                        MoveBonus = state.MoveBonus * scale,
+                        DamageBonus = state.DamageBonus * scale,
+                        BuildingMitigation = state.BuildingMitigation,
+                        Effect = state.Effect,
+                        PercentBonus = state.PercentBonus,
+                    };
+                    ApplyPowerBuffToUnit(unit, scaled);
+                    continue;
+                }
                 ApplyPowerBuffToUnit(unit, state);
             }
         }
@@ -4197,6 +4324,9 @@ namespace Asterra.Gameplay
 
         private void FinalizeDestructible(SimDestructible prop)
         {
+            if (prop.DefinitionId == DefaultDestructibleCatalog.RoyalStandardId)
+                EndRoyalStandardForBanner(prop.Id.Value);
+
             float r = prop.FootprintRadius;
             if (prop.ClearsTerrainOnDestroy)
             {

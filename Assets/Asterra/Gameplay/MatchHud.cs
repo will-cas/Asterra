@@ -170,6 +170,8 @@ namespace Asterra.Gameplay
             }
         }
 
+        private float _goldFlashUntil;
+
         private void DrawResources(PlayerId player)
         {
             float hold = match.Victory != null ? match.Victory.GetHoldProgress(player) : 0f;
@@ -207,11 +209,19 @@ namespace Asterra.Gameplay
 
             float pillH = HudStyle.S(28f);
             float pillY = strip.y + HudStyle.S(8f);
+            if (MatchFeedback.Instance != null
+                && MatchFeedback.Instance.HasActiveMessage
+                && MatchFeedback.Instance.CurrentMessage != null
+                && MatchFeedback.Instance.CurrentMessage.IndexOf("Not enough gold", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                _goldFlashUntil = Time.unscaledTime + 0.45f;
+            var goldColor = Time.unscaledTime < _goldFlashUntil
+                ? Color.Lerp(HudStyle.Gold, new Color(1f, 0.35f, 0.25f), 0.65f)
+                : HudStyle.Gold;
             HudStyle.ResourcePill(
                 new Rect(strip.x + HudStyle.S(8f), pillY, HudStyle.S(210f), pillH),
                 "gold",
                 gold,
-                HudStyle.Gold);
+                goldColor);
 
             if (showForecast)
             {
@@ -328,7 +338,7 @@ namespace Asterra.Gameplay
             if (powerIds == null || powerIds.Length == 0)
                 return;
 
-            float size = HudStyle.S(44f);
+            // Hero / commander moment lives in the bottom dock (64px), not the top strip.
             float gap = HudStyle.S(6f);
             float cardW = HudStyle.S(64f);
             float cardH = HudStyle.S(54f);
@@ -339,6 +349,8 @@ namespace Asterra.Gameplay
                 string powerId = powerIds[i];
                 if (match.Definitions == null || !match.Definitions.TryGetPower(powerId, out var powerDef))
                     continue;
+                if (powerDef.HeroMoment)
+                    continue;
 
                 match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, powerId, out float cd, out float buff);
                 bool unlocked = match.World.HasPower(match.Session.LocalPlayer, powerId);
@@ -346,20 +358,15 @@ namespace Asterra.Gameplay
                 bool canClick = !unlocked || (!powerDef.IsPassive && buff <= 0.05f && cd <= 0.05f);
                 string tip = DescribePower(powerDef, unlocked, buff, cd);
                 string shortName = ShortPowerName(powerDef.DisplayName);
-                bool hero = powerDef.HeroMoment;
-                float thisW = hero ? HudStyle.S(80f) : cardW;
-                float thisH = hero ? HudStyle.S(70f) : cardH;
                 string status = !unlocked ? $"{powerDef.UnlockGoldCost}g"
                     : powerDef.IsPassive ? "On"
                     : buff > 0.05f ? $"{buff:0}s"
                     : cd > 0.05f ? $"{cd:0}s"
                     : IsPrimaryActivePower(roster.PowerIds, i, powerId) ? "Ready"
                     : "Use";
-                if (hero && unlocked)
-                    status = "HERO\n" + status;
                 string label = $"{shortName}\n{status}";
 
-                var rect = new Rect(x - (thisW - cardW), y, thisW, thisH);
+                var rect = new Rect(x, y, cardW, cardH);
                 if (HudStyle.CommandCard(rect, "power", label, HudStyle.Accent, out bool hovered, canClick && !faded, selected: buff > 0.05f))
                 {
                     AsterraAudio.PlayUiClick();
@@ -371,7 +378,59 @@ namespace Asterra.Gameplay
 
                 if (hovered)
                     _hoverTip = tip;
-                y += thisH + gap;
+                y += cardH + gap;
+            }
+        }
+
+        private void DrawCommanderSlot(Rect area)
+        {
+            if (orders == null || match.PlayerRoster == null || match.World == null || match.Definitions == null)
+                return;
+            var powerIds = match.PlayerRoster.PowerIds;
+            if (powerIds == null)
+                return;
+
+            string heroId = null;
+            PowerDefData heroDef = null;
+            for (int i = 0; i < powerIds.Length; i++)
+            {
+                if (!match.Definitions.TryGetPower(powerIds[i], out var pd) || !pd.HeroMoment)
+                    continue;
+                heroId = powerIds[i];
+                heroDef = pd;
+                break;
+            }
+            if (heroId == null || heroDef == null)
+                return;
+
+            float size = HudStyle.S(64f);
+            var rect = new Rect(area.xMax - size, area.y, size, size);
+            match.World.TryGetCommanderAbilityStatus(match.Session.LocalPlayer, heroId, out float cd, out float buff);
+            bool unlocked = match.World.HasPower(match.Session.LocalPlayer, heroId);
+            bool canClick = !unlocked || (buff <= 0.05f && cd <= 0.05f);
+            int activateCost = heroDef.ActivateGoldCost > 0 ? heroDef.ActivateGoldCost : 60;
+            string status = !unlocked ? $"{heroDef.UnlockGoldCost}g"
+                : buff > 0.05f ? $"{buff:0}s"
+                : cd > 0.05f ? $"{cd:0}s"
+                : $"{activateCost}g";
+            string label = $"{ShortPowerName(heroDef.DisplayName)}\n{status}";
+            bool targeting = orders.IsRoyalStandardTargeting;
+            if (HudStyle.CommandCard(rect, "hero", label, HudStyle.Accent, out bool hovered, canClick || !unlocked, selected: buff > 0.05f || targeting))
+            {
+                AsterraAudio.PlayUiClick();
+                if (!unlocked)
+                    orders.UnlockPower(heroId);
+                else if (canClick)
+                    orders.ActivateCommanderAbility(heroId);
+            }
+            if (hovered)
+                _hoverTip = DescribePower(heroDef, unlocked, buff, cd);
+            // CD radial hint (simple fill from bottom)
+            if (unlocked && cd > 0.05f && heroDef.CooldownSeconds > 0.01f)
+            {
+                float frac = Mathf.Clamp01(cd / Mathf.Max(1f, heroDef.CooldownSeconds));
+                HudStyle.DrawPanel(new Rect(rect.x, rect.yMax - rect.height * frac, rect.width, rect.height * frac),
+                    new Color(0f, 0f, 0f, 0.45f));
             }
         }
 
@@ -466,13 +525,18 @@ namespace Asterra.Gameplay
                 HudStyle.AccentSoft);
 
             float selectW = HudStyle.S(220f);
-            DrawSelectionInto(player, new Rect(dock.x + HudStyle.S(8f), dock.y + HudStyle.S(10f), selectW, dock.height - HudStyle.S(18f)));
+            float commanderW = HudStyle.S(72f);
+            var selectRect = new Rect(dock.x + HudStyle.S(8f), dock.y + HudStyle.S(10f), selectW, dock.height - HudStyle.S(18f));
+            DrawSelectionInto(player, selectRect);
+            DrawCommanderSlot(new Rect(selectRect.xMax + HudStyle.S(4f), selectRect.y, commanderW, selectRect.height));
 
             _cmdCardW = HudStyle.S(64f);
+            // commander slot sits between selection and command grid
+
             _cmdCardH = HudStyle.S(62f);
             _cmdGap = HudStyle.S(4f);
             _cmdMaxRows = Mathf.Max(2, Mathf.FloorToInt((dockH - HudStyle.S(24f)) / (_cmdCardH + _cmdGap)));
-            _cmdGridX = dock.x + selectW + HudStyle.S(12f);
+            _cmdGridX = dock.x + selectW + commanderW + HudStyle.S(16f);
             _cmdGridY = dock.y + HudStyle.S(12f);
             _cmdCardIndex = 0;
 
@@ -577,6 +641,13 @@ namespace Asterra.Gameplay
                 GUI.DrawTexture(new Rect(px, y, portrait, portrait), tex);
                 float ratio = max > 0.01f ? Mathf.Clamp01(hp / max) : 1f;
                 HudStyle.DrawPanel(new Rect(px, y + portrait + 2f, portrait * ratio, 4f), HudStyle.Hp);
+                // Royal Standard: Armor+2 portrait glyph only (no world spam).
+                if (match.World.TryGetCommanderAbilityStatus(player, FactionDefaultContent.RoyalStandardAbilityId, out _, out float rsBuff)
+                    && rsBuff > 0.05f)
+                {
+                    HudStyle.DrawPanel(new Rect(px, y, 22f, 14f), new Color(0.15f, 0.18f, 0.28f, 0.92f));
+                    GUI.Label(new Rect(px, y - 2f, 24f, 16f), "+2", HudStyle.Caption);
+                }
                 string stanceLetter = stance == UnitStance.Defensive ? "D"
                     : stance == UnitStance.Hold ? "H"
                     : stance == UnitStance.Passive ? "P"
@@ -1431,11 +1502,13 @@ namespace Asterra.Gameplay
 
             if (!unlocked)
                 return $"{power.DisplayName}: unlock for {power.UnlockGoldCost}g — {effect} for {power.DurationSeconds:0}s";
+            int activate = power.ActivateGoldCost > 0 ? power.ActivateGoldCost : 0;
+            string activateBit = activate > 0 ? $" ({activate}g to plant)" : "";
             if (buff > 0.05f)
                 return $"{power.DisplayName} active — {effect} ({buff:0}s left)";
             if (cd > 0.05f)
                 return $"{power.DisplayName} cooling down ({cd:0}s)";
-            return $"{power.DisplayName}: {effect} for {power.DurationSeconds:0}s (CD {power.CooldownSeconds:0}s)";
+            return $"{power.DisplayName}: {effect} for {power.DurationSeconds:0}s{activateBit} (CD {power.CooldownSeconds:0}s)";
         }
 
         private static string DescribeUpgrade(UpgradeDefData up)

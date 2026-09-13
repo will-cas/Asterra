@@ -14,6 +14,7 @@ namespace Asterra.Gameplay.Content
         public const string MillId = "scenery_mill";
         public const string ShrineId = "scenery_shrine";
         public const string BarnId = "scenery_barn";
+        public const string RoyalStandardId = "destructible_royal_standard";
 
         public static DestructibleDefData Tree()
         {
@@ -74,6 +75,24 @@ namespace Asterra.Gameplay.Content
             };
         }
 
+
+        /// <summary>M1 planted Royal Standard banner — destructible aura anchor (HP 40).</summary>
+        public static DestructibleDefData RoyalStandard()
+        {
+            return new DestructibleDefData
+            {
+                Id = RoyalStandardId,
+                DisplayName = "Royal Standard",
+                MaxHealth = 40f,
+                Armor = 0f,
+                BlocksMovement = false,
+                BlocksLos = false,
+                ClearsTerrainOnDestroy = false,
+                FootprintRadius = 2.5f,
+                ProvidesCover = false,
+            };
+        }
+
         public static bool IsScenery(string definitionId)
         {
             if (string.IsNullOrEmpty(definitionId))
@@ -111,6 +130,8 @@ namespace Asterra.Gameplay.Content
                 return Barn();
             if (id.Contains("rock"))
                 return Rock();
+            if (id == RoyalStandardId)
+                return RoyalStandard();
             if (IsScenery(id))
                 return Cottage();
             return Rock();

@@ -8,7 +8,7 @@ namespace Asterra.Gameplay
     {
         private static MatchFeedback _instance;
 
-        [SerializeField] private float defaultSeconds = 2.2f;
+        [SerializeField] private float defaultSeconds = 3f;
 
         public string CurrentMessage { get; private set; } = string.Empty;
         public float ExpireAt { get; private set; }
@@ -59,11 +59,14 @@ namespace Asterra.Gameplay
 
         private void ShowInternal(string message, float seconds, AsterraSfx? sfx)
         {
-            CurrentMessage = message ?? string.Empty;
+            message = message ?? string.Empty;
+            // Newest replaces oldest; identical active toast does not restart SFX spam.
+            bool same = HasActiveMessage && CurrentMessage == message;
+            CurrentMessage = message;
             float duration = seconds > 0f ? seconds : defaultSeconds;
             ExpireAt = Time.unscaledTime + duration;
             Accent = new Color(0.95f, 0.9f, 0.55f, 1f);
-            if (sfx.HasValue)
+            if (sfx.HasValue && !same)
                 AsterraAudio.Play(sfx.Value);
         }
 

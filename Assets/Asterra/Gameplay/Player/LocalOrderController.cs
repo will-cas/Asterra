@@ -56,6 +56,11 @@ namespace Asterra.Gameplay.Player
         private string _mindControlPowerId;
         private bool _powerPointArmed;
         private string _powerPointPowerId;
+        private bool _royalStandardTargeting;
+        private float _rsPlantLockRemaining;
+        private float _rsPlantX;
+        private float _rsPlantZ;
+        private bool _rsPlantLocking;
         private bool _attackMoveArmed;
         private bool _patrolArmed;
         private GameObject _ghost;
@@ -69,8 +74,21 @@ namespace Asterra.Gameplay.Player
         public bool IsPlaceMode => _placeMode;
         public bool IsAttackMoveArmed => _attackMoveArmed;
         public bool IsPatrolArmed => _patrolArmed;
+        public bool IsRoyalStandardTargeting => _royalStandardTargeting || _rsPlantLocking;
+        public bool TryGetRoyalStandardGhost(out float x, out float z, out bool locking)
+        {
+            x = _rsPlantX;
+            z = _rsPlantZ;
+            locking = _rsPlantLocking;
+            if (_rsPlantLocking)
+                return true;
+            if (_royalStandardTargeting && TryRaycastGround(out x, out z))
+                return true;
+            return false;
+        }
+
         public bool HasArmedMode => _placeMode || _attackMoveArmed || _patrolArmed || _terrainWorkArmed.HasValue
-                                    || _mindControlArmed || _powerPointArmed;
+                                    || _mindControlArmed || _powerPointArmed || _royalStandardTargeting || _rsPlantLocking;
         public SimEntityId? SelectedBuilding => _selectedBuilding;
         public OrderCursorMode CurrentCursorMode { get; private set; } = OrderCursorMode.Select;
         public int IdleWorkerCount => CountIdleWorkers();
@@ -169,6 +187,7 @@ namespace Asterra.Gameplay.Player
             _mindControlPowerId = null;
             _powerPointArmed = false;
             _powerPointPowerId = null;
+            CancelRoyalStandardTargeting();
             if (_ghost != null)
                 _ghost.SetActive(false);
         }
@@ -303,12 +322,41 @@ namespace Asterra.Gameplay.Player
                 && _world.TryGetCommanderAbilityStatus(_local, powerDefId, out float cd, out _)
                 && cd > 0.05f)
             {
-                MatchFeedback.Show($"Cooling down ({cd:0}s)");
+                // M1 polish: cooldown feedback is the slot numeral only — no toast spam.
                 return;
             }
 
             if (match != null && match.Definitions != null && match.Definitions.TryGetPower(powerDefId, out var armedDef))
             {
+
+                // M1 Royal Standard: ground-targeted plant (see Royal Standard Feedback UX).
+                if (powerDefId == FactionDefaultContent.RoyalStandardAbilityId
+                    || armedDef.Id == FactionDefaultContent.RoyalStandardAbilityId)
+                {
+                    int gold = match.Wallet != null ? match.Wallet.Get(_local, ResourceType.Gold) : 0;
+                    int cost = armedDef.ActivateGoldCost > 0 ? armedDef.ActivateGoldCost : 60;
+                    if (gold < cost)
+                    {
+                        MatchFeedback.Show("Not enough gold", AsterraSfx.Invalid);
+                        return;
+                    }
+                    if (!TryFindOwnedUnit(FactionDefaultContent.RoyalKingId, out _))
+                    {
+                        MatchFeedback.Show("King fallen", AsterraSfx.Invalid);
+                        return;
+                    }
+                    CancelPlaceMode();
+                    CancelAttackMoveArm();
+                    CancelPatrolArm();
+                    _mindControlArmed = false;
+                    _powerPointArmed = false;
+                    _royalStandardTargeting = true;
+                    _rsPlantLocking = false;
+                    _rsPlantLockRemaining = 0f;
+                    MatchFeedback.Show("Royal Standard: LMB plant / RMB cancel");
+                    return;
+                }
+
                 if (armedDef.Effect == PowerEffectKind.PlaceGate || armedDef.Effect == PowerEffectKind.ExplosiveStrip)
                 {
                     CancelAttackMoveArm();
@@ -400,6 +448,99 @@ namespace Asterra.Gameplay.Player
                     _ => "power",
                 };
                 MatchFeedback.Show($"{def.DisplayName} — {effect}");
+            }
+        }
+
+
+        private bool TryFindOwnedUnit(string definitionId, out UnitSnapshot unit)
+        {
+            unit = default;
+            if (_world == null)
+                return false;
+            for (int i = 0; i < _world.Units.Count; i++)
+            {
+                var u = _world.Units[i];
+                if (u.Owner == _local && u.IsAlive && u.DefinitionId == definitionId)
+                {
+                    unit = u;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void CancelRoyalStandardTargeting()
+        {
+            _royalStandardTargeting = false;
+            _rsPlantLocking = false;
+            _rsPlantLockRemaining = 0f;
+        }
+
+        private void HandleRoyalStandardTargeting()
+        {
+            const float castRange = 10.8f;
+            const float plantLock = 0.4f;
+
+            if (_rsPlantLocking)
+            {
+                if (UnityEngine.Input.GetMouseButtonDown(1) || UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+                {
+                    // Cancel during plant lock: no Gold spend; half-CD on cancel needs sim hook (deferred).
+                    CancelRoyalStandardTargeting();
+                    return;
+                }
+                _rsPlantLockRemaining -= Time.unscaledDeltaTime;
+                if (_rsPlantLockRemaining > 0f)
+                    return;
+                _commands.SubmitLocal(new ActivateCommanderAbilityCommand
+                {
+                    Issuer = _local,
+                    PowerDefId = FactionDefaultContent.RoyalStandardAbilityId,
+                    TargetX = _rsPlantX,
+                    TargetZ = _rsPlantZ,
+                });
+                CancelRoyalStandardTargeting();
+                return;
+            }
+
+            if (UnityEngine.Input.GetMouseButtonDown(1) || UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+            {
+                CancelRoyalStandardTargeting();
+                return;
+            }
+
+            if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi() && TryRaycastGround(out float px, out float pz))
+            {
+                if (!TryFindOwnedUnit(FactionDefaultContent.RoyalKingId, out var king))
+                {
+                    MatchFeedback.Show("King fallen", AsterraSfx.Invalid);
+                    CancelRoyalStandardTargeting();
+                    return;
+                }
+                float dx = px - king.X;
+                float dz = pz - king.Z;
+                if (dx * dx + dz * dz > castRange * castRange)
+                {
+                    MatchFeedback.Show("Out of range", AsterraSfx.Invalid);
+                    return;
+                }
+                int gold = match.Wallet != null ? match.Wallet.Get(_local, ResourceType.Gold) : 0;
+                int cost = 60;
+                if (match.Definitions != null
+                    && match.Definitions.TryGetPower(FactionDefaultContent.RoyalStandardAbilityId, out var pd)
+                    && pd.ActivateGoldCost > 0)
+                    cost = pd.ActivateGoldCost;
+                if (gold < cost)
+                {
+                    MatchFeedback.Show("Not enough gold", AsterraSfx.Invalid);
+                    CancelRoyalStandardTargeting();
+                    return;
+                }
+                _rsPlantX = px;
+                _rsPlantZ = pz;
+                _rsPlantLocking = true;
+                _rsPlantLockRemaining = plantLock;
+                _royalStandardTargeting = false;
             }
         }
 
@@ -800,19 +941,125 @@ namespace Asterra.Gameplay.Player
 
         private void OnGUI()
         {
-            if (!_isDragging)
+            if (_isDragging)
+            {
+                Rect rect = ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen);
+                Rect guiRect = new Rect(rect.xMin, Screen.height - rect.yMax, rect.width, rect.height);
+                // M1 polish: cream drag-box
+                DrawScreenRect(guiRect, new Color(0.96f, 0.92f, 0.78f, 0.18f));
+                DrawScreenRectBorder(guiRect, 2f, new Color(0.94f, 0.88f, 0.62f, 0.95f));
+            }
+
+            DrawRoyalStandardRingsGui();
+            DrawOrderPingGui();
+        }
+
+        private float _orderPingUntil;
+        private float _orderPingX;
+        private float _orderPingZ;
+        private bool _orderPingAttack;
+
+        private void PulseOrderPing(float x, float z, bool attack)
+        {
+            _orderPingX = x;
+            _orderPingZ = z;
+            _orderPingAttack = attack;
+            _orderPingUntil = Time.unscaledTime + 0.55f;
+        }
+
+        private void DrawOrderPingGui()
+        {
+            if (Time.unscaledTime >= _orderPingUntil || rigCamera == null)
+                return;
+            float t = 1f - Mathf.Clamp01((_orderPingUntil - Time.unscaledTime) / 0.55f);
+            var world = new Vector3(_orderPingX, 0.2f, _orderPingZ);
+            var sp = rigCamera.WorldToScreenPoint(world);
+            if (sp.z <= 0f)
+                return;
+            float guiY = Screen.height - sp.y;
+            float r = Mathf.Lerp(10f, 28f, t);
+            var c = _orderPingAttack
+                ? new Color(1f, 0.35f, 0.2f, 0.85f * (1f - t))
+                : new Color(0.35f, 0.75f, 1f, 0.85f * (1f - t));
+            DrawScreenRectBorder(new Rect(sp.x - r, guiY - r, r * 2f, r * 2f), 2f, c);
+        }
+
+        private void DrawRoyalStandardRingsGui()
+        {
+            if (rigCamera == null)
+                return;
+            bool targeting = _royalStandardTargeting || _rsPlantLocking;
+            bool buffActive = false;
+            float bannerX = 0f, bannerZ = 0f;
+            if (_world != null
+                && _world.TryGetCommanderAbilityStatus(_local, FactionDefaultContent.RoyalStandardAbilityId, out _, out float buff)
+                && buff > 0.05f)
+            {
+                // Approximate aura origin: living king while buff runs (banner may exist in sim).
+                if (TryFindOwnedUnit(FactionDefaultContent.RoyalKingId, out var king))
+                {
+                    buffActive = true;
+                    bannerX = king.X;
+                    bannerZ = king.Z;
+                }
+            }
+
+            float gx = 0f, gz = 0f;
+            bool locking = false;
+            bool hasGhost = targeting && TryGetRoyalStandardGhost(out gx, out gz, out locking);
+            if (!hasGhost && !buffActive)
                 return;
 
-            Rect rect = ScreenRectFromPoints(_dragStartScreen, _dragCurrentScreen);
-            Rect guiRect = new Rect(rect.xMin, Screen.height - rect.yMax, rect.width, rect.height);
-            DrawScreenRect(guiRect, new Color(0.2f, 0.75f, 0.35f, 0.18f));
-            DrawScreenRectBorder(guiRect, 2f, new Color(0.35f, 0.95f, 0.45f, 0.9f));
+            float cx = hasGhost ? gx : bannerX;
+            float cz = hasGhost ? gz : bannerZ;
+            // Design rings: inner solid 7.2 / outer dashed 14.4 (owner-space).
+            DrawWorldRingGui(cx, cz, 7.2f, new Color(0.85f, 0.72f, 0.25f, locking ? 0.95f : 0.7f), dashed: false);
+            DrawWorldRingGui(cx, cz, 14.4f, new Color(0.85f, 0.72f, 0.25f, 0.55f), dashed: true);
+            if (hasGhost)
+            {
+                var sp = rigCamera.WorldToScreenPoint(new Vector3(cx, 0.4f, cz));
+                if (sp.z > 0f)
+                {
+                    float guiY = Screen.height - sp.y;
+                    DrawScreenRect(new Rect(sp.x - 4f, guiY - 4f, 8f, 8f), new Color(0.95f, 0.85f, 0.35f, 0.9f));
+                }
+            }
+        }
+
+        private void DrawWorldRingGui(float x, float z, float radius, Color color, bool dashed)
+        {
+            if (rigCamera == null)
+                return;
+            const int segs = 48;
+            Vector2? prev = null;
+            for (int i = 0; i <= segs; i++)
+            {
+                if (dashed && (i % 2 == 1))
+                {
+                    prev = null;
+                    continue;
+                }
+                float a = i / (float)segs * Mathf.PI * 2f;
+                var world = new Vector3(x + Mathf.Sin(a) * radius, 0.15f, z + Mathf.Cos(a) * radius);
+                var sp = rigCamera.WorldToScreenPoint(world);
+                if (sp.z <= 0f)
+                {
+                    prev = null;
+                    continue;
+                }
+                var cur = new Vector2(sp.x, Screen.height - sp.y);
+                if (prev.HasValue)
+                    DrawScreenRectBorder(new Rect(Mathf.Min(prev.Value.x, cur.x), Mathf.Min(prev.Value.y, cur.y),
+                        Mathf.Max(1f, Mathf.Abs(cur.x - prev.Value.x)), Mathf.Max(1f, Mathf.Abs(cur.y - prev.Value.y))), 1.5f, color);
+                prev = cur;
+            }
         }
 
         private void OnDestroy()
         {
             if (_ghost != null)
                 Destroy(_ghost);
+            _ghostBarred = null;
         }
 
         private void HandlePointer()
@@ -824,7 +1071,8 @@ namespace Asterra.Gameplay.Player
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             {
-                if (_attackMoveArmed || _patrolArmed || _placeMode || _terrainWorkArmed.HasValue || _mindControlArmed)
+                if (_attackMoveArmed || _patrolArmed || _placeMode || _terrainWorkArmed.HasValue
+                    || _mindControlArmed || _royalStandardTargeting || _rsPlantLocking || _powerPointArmed)
                 {
                     if (_attackMoveArmed)
                         CancelAttackMoveArm();
@@ -832,6 +1080,9 @@ namespace Asterra.Gameplay.Player
                         CancelPatrolArm();
                     CancelPlaceMode();
                     CancelTerrainWorkMode();
+                    CancelRoyalStandardTargeting();
+                    _powerPointArmed = false;
+                    _powerPointPowerId = null;
                 }
             }
 
@@ -913,6 +1164,13 @@ namespace Asterra.Gameplay.Player
 
                 if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUi())
                     TryIssueMindControlClick();
+                return;
+            }
+
+
+            if (_royalStandardTargeting || _rsPlantLocking)
+            {
+                HandleRoyalStandardTargeting();
                 return;
             }
 
@@ -1103,7 +1361,10 @@ namespace Asterra.Gameplay.Player
 
                 var unitIds = GetOrderUnitIds();
                 if (unitIds.Length == 0)
+                {
+                    MatchFeedback.Show("Missed input", AsterraSfx.Invalid);
                     return;
+                }
 
                 if (TryPickDestructible(out var propView))
                 {
@@ -1162,7 +1423,12 @@ namespace Asterra.Gameplay.Player
                         TargetX = mx,
                         TargetZ = mz,
                     });
+                    PulseOrderPing(mx, mz, attack: false);
                     AsterraAudio.Play(AsterraSfx.OrderMove, 0.7f);
+                }
+                else
+                {
+                    MatchFeedback.Show("Can't go there", AsterraSfx.Invalid);
                 }
             }
         }
@@ -1191,6 +1457,7 @@ namespace Asterra.Gameplay.Player
                         TargetX = x,
                         TargetZ = z,
                     });
+                    PulseOrderPing(x, z, attack: true);
                     MatchFeedback.Show("Attack-move ordered", AsterraSfx.OrderAttack);
                 }
 
@@ -1877,6 +2144,44 @@ namespace Asterra.Gameplay.Player
                 var color = ok ? new Color(0.25f, 0.85f, 0.4f, 0.55f) : new Color(0.9f, 0.2f, 0.2f, 0.55f);
                 SetMatColor(_ghostRenderer.sharedMaterial, color);
             }
+            EnsureGhostBarred(!ok);
+        }
+
+        private Transform _ghostBarred;
+
+        private void EnsureGhostBarred(bool show)
+        {
+            if (_ghost == null)
+                return;
+            if (_ghostBarred == null)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Object.Destroy(go.GetComponent<Collider>());
+                go.name = "GhostBarred";
+                go.transform.SetParent(_ghost.transform, false);
+                go.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+                go.transform.localScale = new Vector3(1.15f, 0.08f, 0.12f);
+                go.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+                var rend = go.GetComponent<Renderer>();
+                rend.sharedMaterial = new Material(rend.sharedMaterial);
+                SetMatColor(rend.sharedMaterial, new Color(0.95f, 0.15f, 0.1f, 0.9f));
+                var go2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Object.Destroy(go2.GetComponent<Collider>());
+                go2.name = "GhostBarred2";
+                go2.transform.SetParent(_ghost.transform, false);
+                go2.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+                go2.transform.localScale = new Vector3(1.15f, 0.08f, 0.12f);
+                go2.transform.localRotation = Quaternion.Euler(0f, 0f, -45f);
+                var rend2 = go2.GetComponent<Renderer>();
+                rend2.sharedMaterial = new Material(rend2.sharedMaterial);
+                SetMatColor(rend2.sharedMaterial, new Color(0.95f, 0.15f, 0.1f, 0.9f));
+                _ghostBarred = go.transform;
+            }
+            if (_ghostBarred != null)
+                _ghostBarred.gameObject.SetActive(show);
+            var sibling = _ghost.transform.Find("GhostBarred2");
+            if (sibling != null)
+                sibling.gameObject.SetActive(show);
         }
 
         private void HandlePlaceModeRotation()
@@ -2286,6 +2591,7 @@ namespace Asterra.Gameplay.Player
         {
             if (_ghost != null)
                 return;
+            _ghostBarred = null;
             _ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Object.Destroy(_ghost.GetComponent<Collider>());
             _ghost.name = "BuildGhost";
