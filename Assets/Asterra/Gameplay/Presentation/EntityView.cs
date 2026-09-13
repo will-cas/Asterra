@@ -978,19 +978,14 @@ namespace Asterra.Gameplay.Presentation
             }
             else
             {
-                // Idle: very light sway so keeps/towers feel alive.
-                float work = (_producing ? 1f + _production01 * 0.8f : 1f)
-                             * (_researching ? 1.25f : 1f);
+                // Idle buildings sit still — sway/breath read as mesh flexing in playtests.
+                // Keep mill spin, gate ajar offset, disabled lean, and work/hit/complete feedback.
                 bool mill = DefinitionId != null && DefinitionId.Contains("mill");
                 bool gate = _buildingKind == BuildingKind.Gate;
-                float sway = Mathf.Sin((t + _animPhase) * 1.15f * work) * (0.55f + (_producing || _researching ? 1.4f : 0f));
-                if (_buildingDisabled)
-                    sway = 0f;
-                float breath = 1f + Mathf.Sin((t + _animPhase) * (0.7f + work * 0.4f)) * (0.012f + (_producing ? 0.02f : 0f));
                 rot = mill
                     ? Quaternion.Euler(0f, (t + _animPhase) * 70f, 0f)
-                    : Quaternion.Euler(_buildingDisabled ? 6f : 0f, sway + (gate ? 12f : 0f), _buildingDisabled ? 4f : 0f);
-                scale = new Vector3(breath, 1f + (breath - 1f) * 0.5f, breath);
+                    : Quaternion.Euler(_buildingDisabled ? 6f : 0f, gate ? 12f : 0f, _buildingDisabled ? 4f : 0f);
+                scale = Vector3.one;
                 pos = Vector3.zero;
                 if (_producing)
                     pos.y = Mathf.Abs(Mathf.Sin((t + _animPhase) * 5.5f)) * 0.04f;

@@ -130,7 +130,9 @@ Shader "Asterra/LitPBR"
                 float gold = saturate(1.0 - abs(hsv.x - 0.12) * 9.0) * smoothstep(0.28, 0.55, hsv.y) * smoothstep(0.35, 0.7, hsv.z);
                 float crystal = saturate(1.0 - abs(hsv.x - 0.72) * 6.0) * smoothstep(0.25, 0.55, hsv.y);
                 float glass = saturate(1.0 - abs(hsv.x - 0.55) * 8.0) * smoothstep(0.2, 0.5, hsv.y);
+                // Grey stone/plaster was auto-tagged as steel → silver chrome at night on buildings.
                 float steel = (1.0 - hsv.y) * smoothstep(0.28, 0.55, hsv.z);
+                steel *= 1.0 - step(0.5, _TeamBuilding);
                 half metal = saturate(_Metallic + gold * 0.72 + steel * 0.62 + crystal * 0.38);
                 half occlusion = AsterraCavityAO(nWS);
                 half smoothness = saturate(1.0 - rough + gold * 0.35 + crystal * 0.45 + glass * 0.4);
