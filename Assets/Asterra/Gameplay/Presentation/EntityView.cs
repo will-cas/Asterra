@@ -1169,9 +1169,9 @@ namespace Asterra.Gameplay.Presentation
 
             var go = new GameObject("Mallet");
             go.transform.SetParent(_bodyRoot, false);
-            // Grip near right hand on raised-arm silhouette; haft +X, head outboard.
-            go.transform.localPosition = new Vector3(0.52f, 1.02f, -0.28f);
-            go.transform.localRotation = Quaternion.Euler(8f, 18f, -28f);
+            // Grip at right palm (OBJ Y-up): hand cluster ~ (0.61, 0.95, 0.52).
+            go.transform.localPosition = new Vector3(0.58f, 0.94f, 0.50f);
+            go.transform.localRotation = Quaternion.Euler(12f, 0f, -18f);
             go.transform.localScale = Vector3.one;
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = malletMesh;
