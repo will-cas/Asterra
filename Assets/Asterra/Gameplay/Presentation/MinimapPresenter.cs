@@ -1,9 +1,13 @@
 using Asterra.Core;
+using Asterra.Gameplay.Content;
 using UnityEngine;
 
 namespace Asterra.Gameplay.Presentation
 {
-    /// <summary>OnGUI minimap: units, buildings, resources, territory, camera focus; click to pan.</summary>
+    /// <summary>
+    /// OnGUI minimap: terrain stamp from the active map definition, units/buildings/resources,
+    /// camera focus; click to pan. World mapping matches <see cref="MapPreviewBuilder"/>.
+    /// </summary>
     public sealed class MinimapPresenter : MonoBehaviour
     {
         [SerializeField] private MatchBootstrap match;
@@ -12,11 +16,18 @@ namespace Asterra.Gameplay.Presentation
 
         private RtsCameraRig _cameraRig;
         private FogOfWarPresenter _fog;
+        private Texture2D _terrain;
+        private string _terrainMapKey;
 
         private void Awake()
         {
             if (match == null)
                 match = FindFirstObjectByType<MatchBootstrap>();
+        }
+
+        private void OnDestroy()
+        {
+            DestroyTerrain();
         }
 
         private void OnGUI()
@@ -28,35 +39,35 @@ namespace Asterra.Gameplay.Presentation
             if (_fog == null)
                 _fog = FindFirstObjectByType<FogOfWarPresenter>();
 
+            EnsureTerrainStamp();
+
             float size = mapSize * HudStyle.Scale;
             float m = margin * HudStyle.Scale;
             Rect mapRect = new Rect(Screen.width - size - m, Screen.height - size - m, size, size);
             HudClickBlocker.Block(mapRect);
 
-            // Soft terrain tint under fog
-            DrawRect(mapRect, new Color(0.18f, 0.28f, 0.16f, 0.95f));
-            DrawRect(new Rect(mapRect.x + 4f, mapRect.y + 4f, mapRect.width - 8f, mapRect.height - 8f),
-                new Color(0.14f, 0.22f, 0.14f, 0.55f));
-            DrawRectBorder(mapRect, 2f, new Color(0.45f, 0.55f, 0.4f, 0.95f));
+            HudStyle.DrawFrame(
+                mapRect,
+                new Color(0.05f, 0.07f, 0.08f, 0.98f),
+                new Color(0.45f, 0.55f, 0.4f, 0.95f),
+                2f);
 
-            // Fog veil (approx) — darken unknown corners toward edges when fog presenter exists.
-            if (_fog != null)
-            {
-                DrawRect(new Rect(mapRect.x, mapRect.y, mapRect.width, 18f), new Color(0.02f, 0.03f, 0.04f, 0.35f));
-                DrawRect(new Rect(mapRect.x, mapRect.yMax - 18f, mapRect.width, 18f), new Color(0.02f, 0.03f, 0.04f, 0.35f));
-                DrawRect(new Rect(mapRect.x, mapRect.y, 18f, mapRect.height), new Color(0.02f, 0.03f, 0.04f, 0.28f));
-                DrawRect(new Rect(mapRect.xMax - 18f, mapRect.y, 18f, mapRect.height), new Color(0.02f, 0.03f, 0.04f, 0.28f));
-            }
+            var texRect = new Rect(mapRect.x + 3f, mapRect.y + 3f, mapRect.width - 6f, mapRect.height - 6f);
+            if (_terrain != null)
+                GUI.DrawTexture(texRect, _terrain, ScaleMode.StretchToFill);
+            else
+                DrawRect(texRect, new Color(0.18f, 0.28f, 0.16f, 0.95f));
+
             var local = match.Session.LocalPlayer;
-            float half = MapBounds.PlayableHalfExtent;
 
-            // Territory circles colored by controller / contested
+            // Territory circles
             var territories = match.World.Territories;
             for (int i = 0; i < territories.Count; i++)
             {
                 var t = territories[i];
-                Vector2 c = WorldToMinimap(t.X, t.Z, mapRect, half);
-                float r = (t.Radius / (half * 2f)) * size;
+                MapPreviewBuilder.WorldToPreviewGui(texRect, t.X, t.Z, out float cx, out float cy);
+                float half = MapPreviewBuilder.Half;
+                float r = (t.Radius / (half * 2f)) * texRect.width;
                 Color fill;
                 if (t.State == TerritoryState.Contested)
                     fill = new Color(0.95f, 0.75f, 0.2f, 0.4f);
@@ -67,7 +78,7 @@ namespace Asterra.Gameplay.Presentation
                 else
                     fill = new Color(0.45f, 0.55f, 0.7f, 0.28f);
 
-                DrawCircle(c, r, fill);
+                DrawCircle(new Vector2(cx, cy), r, fill);
             }
 
             // Resources
@@ -79,15 +90,15 @@ namespace Asterra.Gameplay.Presentation
                     var r = resources[i];
                     if (r.Remaining <= 0)
                         continue;
-                    Vector2 p = WorldToMinimap(r.X, r.Z, mapRect, half);
+                    MapPreviewBuilder.WorldToPreviewGui(texRect, r.X, r.Z, out float px, out float py);
                     var color = r.Type == ResourceType.Gold
                         ? new Color(0.95f, 0.82f, 0.2f)
                         : new Color(0.55f, 0.35f, 0.18f);
-                    DrawRect(new Rect(p.x - 2f, p.y - 2f, 4f, 4f), color);
+                    DrawRect(new Rect(px - 2f, py - 2f, 4f, 4f), color);
                 }
             }
 
-            // Buildings as squares
+            // Buildings
             var buildings = match.World.Buildings;
             for (int i = 0; i < buildings.Count; i++)
             {
@@ -97,12 +108,13 @@ namespace Asterra.Gameplay.Presentation
                 bool own = b.Owner == local;
                 if (!own && _fog != null && !_fog.IsWorldVisible(b.X, b.Z))
                     continue;
-                Vector2 p = WorldToMinimap(b.X, b.Z, mapRect, half);
+                MapPreviewBuilder.WorldToPreviewGui(texRect, b.X, b.Z, out float px, out float py);
                 var color = own ? Color.white : new Color(0.9f, 0.2f, 0.2f);
-                DrawRect(new Rect(p.x - 3f, p.y - 3f, 6f, 6f), color);
+                float s = FactionDefaultContent.IsKeepBuildingId(b.DefinitionId) ? 7f : 5f;
+                DrawRect(new Rect(px - s * 0.5f, py - s * 0.5f, s, s), color);
             }
 
-            // Units as dots
+            // Units
             var units = match.World.Units;
             for (int i = 0; i < units.Count; i++)
             {
@@ -112,19 +124,19 @@ namespace Asterra.Gameplay.Presentation
                 bool own = u.Owner == local;
                 if (!own && _fog != null && !_fog.IsWorldVisible(u.X, u.Z))
                     continue;
-                Vector2 p = WorldToMinimap(u.X, u.Z, mapRect, half);
+                MapPreviewBuilder.WorldToPreviewGui(texRect, u.X, u.Z, out float px, out float py);
                 var color = own ? Color.white : new Color(0.95f, 0.25f, 0.2f);
-                DrawRect(new Rect(p.x - 2f, p.y - 2f, 4f, 4f), color);
+                DrawRect(new Rect(px - 2f, py - 2f, 4f, 4f), color);
             }
 
-            DrawCameraFocus(mapRect, half);
+            DrawCameraFocus(texRect, mapRect);
 
-            // Click to pan
             var e = Event.current;
             if (e != null && e.type == EventType.MouseDown && e.button == 0 && mapRect.Contains(e.mousePosition))
             {
-                float nx = (e.mousePosition.x - mapRect.x) / mapRect.width;
-                float nz = 1f - (e.mousePosition.y - mapRect.y) / mapRect.height;
+                float half = MapPreviewBuilder.Half;
+                float nx = (e.mousePosition.x - texRect.x) / texRect.width;
+                float nz = 1f - (e.mousePosition.y - texRect.y) / texRect.height;
                 float wx = Mathf.Lerp(-half, half, nx);
                 float wz = Mathf.Lerp(-half, half, nz);
                 if (_cameraRig == null)
@@ -135,31 +147,53 @@ namespace Asterra.Gameplay.Presentation
             }
         }
 
-        private void DrawCameraFocus(Rect mapRect, float half)
+        private void EnsureTerrainStamp()
+        {
+            string key = match != null ? match.MapKey : null;
+            if (string.IsNullOrEmpty(key))
+                key = MapCatalog.BlackridgePassId;
+            if (_terrain != null && _terrainMapKey == key)
+                return;
+
+            DestroyTerrain();
+            _terrain = MapPreviewBuilder.Build(key);
+            _terrainMapKey = key;
+        }
+
+        private void DestroyTerrain()
+        {
+            if (_terrain == null)
+                return;
+            Destroy(_terrain);
+            _terrain = null;
+            _terrainMapKey = null;
+        }
+
+        private void DrawCameraFocus(Rect texRect, Rect mapRect)
         {
             if (_cameraRig == null)
                 return;
 
             _cameraRig.GetFocusXZ(out float fx, out float fz);
-            Vector2 center = WorldToMinimap(fx, fz, mapRect, half);
+            MapPreviewBuilder.WorldToPreviewGui(texRect, fx, fz, out float cx, out float cy);
+            var center = new Vector2(cx, cy);
 
-            // Approximate ground view box from camera height (steep RTS look-down).
+            float half = MapPreviewBuilder.Half;
             float height = Mathf.Max(40f, _cameraRig.CameraHeight);
             float viewHalfWorld = Mathf.Clamp(height * 0.42f, 55f, 220f);
-            float halfPxX = (viewHalfWorld / (half * 2f)) * mapRect.width;
-            float halfPxY = (viewHalfWorld * 0.75f / (half * 2f)) * mapRect.height;
+            float halfPxX = (viewHalfWorld / (half * 2f)) * texRect.width;
+            float halfPxY = (viewHalfWorld * 0.75f / (half * 2f)) * texRect.height;
 
             Rect viewRect = new Rect(
                 center.x - halfPxX,
                 center.y - halfPxY,
                 halfPxX * 2f,
                 halfPxY * 2f);
-            viewRect = ClampRectTo(viewRect, mapRect);
+            viewRect = ClampRectTo(viewRect, texRect);
 
             DrawRect(viewRect, new Color(0.35f, 0.9f, 1f, 0.12f));
             DrawRectBorder(viewRect, 2f, new Color(0.45f, 0.95f, 1f, 0.95f));
 
-            // Crosshair at look-at
             const float arm = 7f;
             const float thick = 2f;
             var cross = new Color(1f, 0.95f, 0.35f, 1f);
@@ -177,15 +211,6 @@ namespace Asterra.Gameplay.Presentation
             if (xMax <= xMin || yMax <= yMin)
                 return new Rect(bounds.center.x - 4f, bounds.center.y - 4f, 8f, 8f);
             return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
-        }
-
-        private static Vector2 WorldToMinimap(float x, float z, Rect mapRect, float half)
-        {
-            float nx = Mathf.InverseLerp(-half, half, x);
-            float nz = Mathf.InverseLerp(-half, half, z);
-            return new Vector2(
-                mapRect.x + nx * mapRect.width,
-                mapRect.y + (1f - nz) * mapRect.height);
         }
 
         private static void DrawRect(Rect rect, Color color)
@@ -206,7 +231,6 @@ namespace Asterra.Gameplay.Presentation
 
         private static void DrawCircle(Vector2 center, float radius, Color color)
         {
-            // Approximate with a filled square for simplicity / perf.
             DrawRect(new Rect(center.x - radius, center.y - radius, radius * 2f, radius * 2f), color);
         }
     }
