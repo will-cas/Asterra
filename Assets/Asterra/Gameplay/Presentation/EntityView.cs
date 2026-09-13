@@ -916,7 +916,7 @@ namespace Asterra.Gameplay.Presentation
                 }
                 else if (loc > 0.15f)
                 {
-                    float stride = Mathf.Sin(gait);
+                    // Reuse outer gait stride (CS0136 if redeclared here).
                     raiseDeg = -8f + stride * 10f * loc;
                     twistDeg = stride * 6f * loc;
                     gripNudge = 0f;
