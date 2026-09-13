@@ -38,6 +38,7 @@ namespace Asterra.Gameplay
             Expect(ref fails, sb, "church eight powers", ChurchEightPowers());
             Expect(ref fails, sb, "thrallbind steals then returns", ThrallbindStealsThenReturns());
             Expect(ref fails, sb, "twin gates ignore fog", TwinGatesPlacePair());
+            Expect(ref fails, sb, "royal standard plant buffs aura", RoyalStandardPlant());
 
             sb.Append(fails == 0 ? "TechPowersSelfTest: OK" : $"TechPowersSelfTest: FAIL ({fails})");
             return sb.ToString();
@@ -455,6 +456,100 @@ namespace Asterra.Gameplay
             for (int i = 0; i < 130; i++)
                 sim.Tick(0.25f);
             return victim.IsAlive && victim.Owner == p1;
+        }
+
+        private static bool RoyalStandardPlant() // M1 RS smoke self-test
+        {
+            var ids = new SequentialIdFactory();
+            var wallet = new ResourceWallet();
+            var defs = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs);
+            var sim = new SkirmishWorldSim(wallet, ids, defs);
+            // PlayerId.Value maps to FactionId — Mundor is faction 1.
+            var p = new PlayerId(1);
+            var faction = new FactionId(1);
+            sim.SpawnBuilding(
+                ids.Next(), p, faction, FactionDefaultContent.RoyalCitadelId, 0f, 0f, startActive: true);
+            sim.SpawnUnit(ids.Next(), p, faction, FactionDefaultContent.RoyalKingId, 0f, 0f);
+            var peasant = sim.SpawnUnit(
+                ids.Next(), p, faction, FactionDefaultContent.RoyalPeasantId, 2f, 0f);
+            wallet.Seed(p, ResourceType.Gold, 500);
+            int g0 = wallet.Get(p, ResourceType.Gold);
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new UnlockPowerCommand
+                {
+                    Issuer = p,
+                    PowerDefId = FactionDefaultContent.RoyalStandardAbilityId,
+                },
+            });
+            int g1 = wallet.Get(p, ResourceType.Gold);
+            sim.ApplyCommands(new GameCommand[]
+            {
+                new ActivateCommanderAbilityCommand
+                {
+                    Issuer = p,
+                    PowerDefId = FactionDefaultContent.RoyalStandardAbilityId,
+                    TargetX = 4f,
+                    TargetZ = 0f,
+                },
+            });
+            bool status = sim.TryGetCommanderAbilityStatus(
+                               p,
+                               FactionDefaultContent.RoyalStandardAbilityId,
+                               out float cd,
+                               out float buff)
+                           && cd > 0.05f
+                           && buff > 0.05f;
+            bool goldSpent = wallet.Get(p, ResourceType.Gold) <= g1 - 55;
+            bool armored = peasant.CommanderArmorBonus >= 1.9f;
+            int banners = 0;
+            for (int i = 0; i < sim.Destructibles.Count; i++)
+            {
+                if (sim.Destructibles[i].DefinitionId == DefaultDestructibleCatalog.RoyalStandardId)
+                    banners++;
+            }
+
+            // Out of cast range must no-op.
+            var ids2 = new SequentialIdFactory();
+            var wallet2 = new ResourceWallet();
+            var defs2 = new DefinitionRegistry();
+            FactionDefaultContent.RegisterAll(defs2);
+            var sim2 = new SkirmishWorldSim(wallet2, ids2, defs2);
+            var p2 = new PlayerId(1);
+            var f2 = new FactionId(1);
+            sim2.SpawnBuilding(
+                ids2.Next(), p2, f2, FactionDefaultContent.RoyalCitadelId, 0f, 0f, startActive: true);
+            sim2.SpawnUnit(ids2.Next(), p2, f2, FactionDefaultContent.RoyalKingId, 0f, 0f);
+            wallet2.Seed(p2, ResourceType.Gold, 500);
+            sim2.ApplyCommands(new GameCommand[]
+            {
+                new UnlockPowerCommand
+                {
+                    Issuer = p2,
+                    PowerDefId = FactionDefaultContent.RoyalStandardAbilityId,
+                },
+            });
+            int gFar = wallet2.Get(p2, ResourceType.Gold);
+            sim2.ApplyCommands(new GameCommand[]
+            {
+                new ActivateCommanderAbilityCommand
+                {
+                    Issuer = p2,
+                    PowerDefId = FactionDefaultContent.RoyalStandardAbilityId,
+                    TargetX = 40f,
+                    TargetZ = 0f,
+                },
+            });
+            bool farRejected = wallet2.Get(p2, ResourceType.Gold) == gFar
+                               && (!sim2.TryGetCommanderAbilityStatus(
+                                       p2,
+                                       FactionDefaultContent.RoyalStandardAbilityId,
+                                       out float cdFar,
+                                       out float buffFar)
+                                   || buffFar < 0.05f);
+
+            return status && goldSpent && armored && banners >= 1 && farRejected && g1 < g0;
         }
 
         private static bool TwinGatesPlacePair()
