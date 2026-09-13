@@ -12,8 +12,18 @@ namespace Asterra.Gameplay.Presentation
     {
         private static readonly Dictionary<string, Mesh> Cache = new();
 
+        public static Mesh GetBuilderMalletMesh()
+        {
+            if (TryExact("unit_royal_builder_mallet", out var royal) && royal.vertexCount > 0)
+                return royal;
+            if (TryExact("unit_builder_mallet", out var legacy) && legacy.vertexCount > 0)
+                return legacy;
+            return null;
+        }
+
         public static Mesh GetUnitMesh(string definitionId)
         {
+
             if (string.IsNullOrEmpty(definitionId))
                 return GetOrCreate("unit_militia");
             if (TryExact(definitionId, out var exact))

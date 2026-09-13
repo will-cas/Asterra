@@ -631,8 +631,9 @@ def build_humanoid(name, c, m, kit="levy"):
         p.append(cube("cross_v", (-0.64, 0.22, 1.08), (0.08, 0.05, 0.55), m.gold, c, uv=0.6))
         p.append(cyl("rim", (-0.68, 0.18, 1.08), 0.41, 0.04, m.iron, c, verts=14, rot=(math.radians(82), 0, math.radians(16)), uv=1))
     elif kit == "builder":
-        p.append(cyl("haft", (0.72, 0.0, 0.95), 0.035, 0.9, m.wood, c, verts=8, rot=(0, math.radians(90), 0), uv=1))
-        p.append(cube("head_h", (1.12, 0.0, 0.95), (0.18, 0.12, 0.38), m.iron, c, uv=0.7))
+        # Mallet is a separate child prop (unit_builder_mallet / unit_royal_builder_mallet).
+        # Nudge right forearm forward so an attached tool reads as held.
+        pass
     elif kit == "archer":
         p.append(cyl("bow_u", (0.05, -0.42, 1.45), 0.03, 0.95, m.wood, c, verts=8, uv=0.8))
         p.append(cyl("bow_d", (0.05, -0.42, 0.55), 0.03, 0.85, m.wood, c, verts=8, uv=0.8))

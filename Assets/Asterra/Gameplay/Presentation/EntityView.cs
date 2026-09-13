@@ -87,6 +87,8 @@ namespace Asterra.Gameplay.Presentation
         private Vector3 _lastPos;
         private bool _hasLastPos;
         private Transform _bodyRoot;
+        private Transform _malletRoot;
+        private Quaternion _malletRestRot;
 
         private BuildingState _buildingState = BuildingState.Active;
         private float _buildProgress = 1f;
@@ -171,6 +173,8 @@ namespace Asterra.Gameplay.Presentation
             _animPhase = (id.Value % 97) * 0.173f;
             if (isUnit)
                 EnsureBlobShadow();
+            if (isUnit && _unitRole == UnitRole.Builder)
+                EnsureBuilderMallet();
             if (!isUnit)
                 EnsureScaffold();
             if (!isUnit && AsterraMeshLibrary.IsKeep(definitionId))
@@ -852,23 +856,25 @@ namespace Asterra.Gameplay.Presentation
             if (_wadeWeight > 0.1f)
                 y -= 0.05f * _wadeWeight;
 
-            // Hammer / tool swing while gathering or striking — deliberate, not twitchy.
+            // Body stays grounded; mallet child does the swing when present.
+            float malletSwing = 0f;
+            float malletImpact = 0f;
             if (work > 0.05f)
             {
-                float swing = Mathf.Sin((t + phase) * 5.6f);
-                float impact = Mathf.Max(0f, Mathf.Sin((t + phase) * 5.6f + 1.2f));
-                pitch += swing * 11f * work;
-                z += impact * 0.05f * work;
-                y += impact * 0.02f * work;
-                roll += swing * 3f * work;
+                malletSwing = Mathf.Sin((t + phase) * 5.6f);
+                malletImpact = Mathf.Max(0f, Mathf.Sin((t + phase) * 5.6f + 1.2f));
+                // Light torso follow-through only — not the old full-body tip.
+                pitch += malletSwing * 3.5f * work;
+                roll += malletSwing * 1.5f * work;
+                y += malletImpact * 0.012f * work;
             }
             else if (_idleWeight > 0.45f && loc < 0.15f)
             {
-                // Idle: shift weight, slight tool rest — no vertical "breath" scale.
                 float shift = Mathf.Sin((t + phase) * 0.55f);
                 x += shift * 0.018f * _idleWeight;
                 roll += shift * 2.2f * _idleWeight;
                 pitch += Mathf.Sin((t + phase) * 0.9f) * 1.2f * _idleWeight;
+                malletSwing = shift * 0.35f;
             }
 
             if (_hasCarry && work < 0.25f)
@@ -881,6 +887,18 @@ namespace Asterra.Gameplay.Presentation
             pos = new Vector3(x, y, z);
             rot = Quaternion.Euler(pitch, yaw, roll);
             scale = Vector3.one;
+
+            if (_malletRoot != null)
+            {
+                // Pivot at grip: pitch up on wind-up, slam down on impact.
+                float carryHide = _hasCarry && work < 0.2f ? 1f : 0f;
+                _malletRoot.gameObject.SetActive(carryHide < 0.5f);
+                Quaternion swingRot = Quaternion.Euler(
+                    -25f - malletSwing * 55f - malletImpact * 20f,
+                    8f,
+                    malletSwing * 12f);
+                _malletRoot.localRotation = _malletRestRot * swingRot;
+            }
 
             if (Time.time < _ackUntil)
             {
@@ -1104,6 +1122,30 @@ namespace Asterra.Gameplay.Presentation
         {
             Color scaffold = new Color(0.55f, 0.48f, 0.32f, 1f);
             return Color.Lerp(baseColor, scaffold, 0.45f);
+        }
+
+
+        private void EnsureBuilderMallet()
+        {
+            if (_malletRoot != null || _bodyRoot == null)
+                return;
+
+            Mesh malletMesh = AsterraMeshLibrary.GetBuilderMalletMesh();
+            if (malletMesh == null || malletMesh.vertexCount < 3)
+                return;
+
+            var go = new GameObject("Mallet");
+            go.transform.SetParent(_bodyRoot, false);
+            // Rest at right-hand grip — matches raised arm on unit_royal_builder.
+            go.transform.localPosition = new Vector3(0.55f, 0.95f, -0.35f);
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
+            var filter = go.AddComponent<MeshFilter>();
+            filter.sharedMesh = malletMesh;
+            var rend = go.AddComponent<MeshRenderer>();
+            rend.material = CreateBodyMaterial(malletMesh, isUnit: true);
+            _malletRoot = go.transform;
+            _malletRestRot = go.transform.localRotation;
         }
 
         private void EnsureScaffold()

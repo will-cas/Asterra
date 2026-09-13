@@ -255,17 +255,34 @@ def veiled_shade(g, m, c):
 # --- Mundor medieval English ---
 
 def royal_builder(g, m, c):
+    """Body only — mallet is a separate child prop (`unit_royal_builder_mallet`)."""
     p = []
     p.append(g.cyl("torso", (0, 0.02, 1.24), 0.2, 0.48, m.leather, c, verts=10))
     p.append(g.cube("apron", (0, -0.14, 1.05), (0.32, 0.05, 0.7), m.cloth, c))
     _legs(g, p, c, m.cloth, boot=m.leather)
-    _arms(g, p, c, m.cloth, m.skin, m.skin)
+    # Left arm hangs; right arm reaches forward so a swung mallet reads as held.
+    p.append(g.uv_sphere("sh_l", (-0.26, 0, 1.42), 0.11, m.cloth, c, segs=12, rings=8))
+    p.append(g.uv_sphere("sh_r", (0.26, 0, 1.42), 0.11, m.cloth, c, segs=12, rings=8))
+    p.append(g.cyl("uarm_l", (-0.36, 0, 1.28), 0.072, 0.36, m.cloth, c, verts=14, rot=(0, math.radians(16), 0)))
+    p.append(g.cyl("uarm_r", (0.38, -0.12, 1.32), 0.072, 0.36, m.cloth, c, verts=14, rot=(math.radians(55), math.radians(-8), math.radians(-18))))
+    p.append(g.uv_sphere("el_l", (-0.44, 0.03, 1.12), 0.058, m.cloth, c, segs=10, rings=8))
+    p.append(g.uv_sphere("el_r", (0.52, -0.28, 1.18), 0.058, m.cloth, c, segs=10, rings=8))
+    p.append(g.cyl("larm_l", (-0.48, 0.05, 1.0), 0.06, 0.32, m.skin, c, verts=14, rot=(0, math.radians(10), 0)))
+    p.append(g.cyl("larm_r", (0.58, -0.42, 1.05), 0.06, 0.32, m.skin, c, verts=14, rot=(math.radians(70), 0, math.radians(-12))))
+    p.append(g.uv_sphere("palm_l", (-0.54, 0.08, 0.82), 0.055, m.skin, c, segs=10, rings=6))
+    p.append(g.uv_sphere("palm_r", (0.62, -0.58, 0.92), 0.055, m.skin, c, segs=10, rings=6))
     _head(g, p, c, m)
     p.append(g.cyl("cap", (0, 0, 1.8), 0.16, 0.1, m.cloth, c, verts=10))
     p.append(g.cube("sack", (0, 0.28, 1.2), (0.3, 0.2, 0.28), m.leather, c))
-    p.append(g.cyl("mallet", (0.72, 0, 0.95), 0.035, 0.85, m.wood, c, verts=8, rot=(0, math.radians(90), 0)))
-    p.append(g.cube("headh", (1.12, 0, 0.95), (0.2, 0.14, 0.32), m.iron, c))
     return finish(g, "unit_royal_builder", p, c, 0.012)
+
+
+def royal_builder_mallet(g, m, c):
+    """Child tool prop — pivot at grip; head along +X in rest pose."""
+    p = []
+    p.append(g.cyl("haft", (0.28, 0, 0), 0.035, 0.85, m.wood, c, verts=8, rot=(0, math.radians(90), 0)))
+    p.append(g.cube("headh", (0.68, 0, 0), (0.2, 0.14, 0.32), m.iron, c))
+    return finish(g, "unit_royal_builder_mallet", p, c, 0.01)
 
 
 def royal_legion(g, m, c):
