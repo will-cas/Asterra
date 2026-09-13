@@ -87,8 +87,7 @@ namespace Asterra.Gameplay
             _view = View.Skirmish;
             _overlay = AsterraMenuPanels.Overlay.None;
             _playerFaction = 1; // Mundor
-            if (_enemyFaction == _playerFaction)
-                _enemyFaction = 0;
+            _enemyFaction = 0; // Uncrowned
             _map = MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass);
             RebuildPreviewIfNeeded();
         }
@@ -207,7 +206,7 @@ namespace Asterra.Gameplay
 
         private void DrawHub(Rect rect)
         {
-            // M1 Main: Skirmish / Settings / Quit. Campaign + Multiplayer hidden (code kept).
+            // Hub: Skirmish (heavy) + Campaign; Settings/Quit chips. No parchment.
             float stackW = Mathf.Min(360f, rect.width * 0.42f);
             float stackX = rect.x + 24f;
             float y = rect.y + 12f;
@@ -219,8 +218,8 @@ namespace Asterra.Gameplay
             GUI.color = Color.white;
             y += 84f;
 
-            float bh = 48f;
-            float gap = 16f;
+            float bh = 56f;
+            float gap = 14f;
             if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Skirmish"))
             {
                 AsterraAudio.PlayUiClick();
@@ -228,14 +227,20 @@ namespace Asterra.Gameplay
             }
             y += bh + gap;
 
-            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Settings"))
+            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, 48f), "Campaign"))
+            {
+                AsterraAudio.PlayUiClick();
+                ShowCampaign();
+            }
+            y += 48f + gap + 8f;
+
+            float chipW = (stackW - 12f) * 0.5f;
+            if (LobbyChip(new Rect(stackX, y, chipW, 32f), "Settings"))
             {
                 AsterraAudio.PlayUiClick();
                 _overlay = AsterraMenuPanels.Overlay.Options;
             }
-            y += bh + gap;
-
-            if (DrawPrimaryStackButton(new Rect(stackX, y, stackW, bh), "Quit"))
+            if (LobbyChip(new Rect(stackX + chipW + 12f, y, chipW, 32f), "Quit"))
             {
                 AsterraAudio.PlayUiClick();
                 _quitConfirm = true;
@@ -439,30 +444,100 @@ namespace Asterra.Gameplay
             HudStyle.DrawFrame(rect, new Color(0.06f, 0.07f, 0.08f, 0.94f), new Color(0.55f, 0.48f, 0.28f, 0.5f), 1.5f);
             GUI.Label(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), "FACTION", HudStyle.Subtitle);
 
-            var playerRoster = FactionDefaultContent.All[_playerFaction % FactionDefaultContent.All.Length];
-            Color playerColor = AsterraMeshLibrary.TeamSwatch(_playerTeamColor);
-            float cardH = Mathf.Min(200f, rect.height * 0.48f);
-            DrawFactionCard(
-                new Rect(rect.x + 10f, rect.y + 36f, rect.width - 20f, cardH),
-                "YOUR FORCE",
-                playerRoster,
-                playerColor,
-                ref _playerFaction,
-                ref _playerTeamColor);
-
-            var enemyRoster = FactionDefaultContent.All[_enemyFaction % FactionDefaultContent.All.Length];
-            Color enemyColor = AsterraMeshLibrary.TeamSwatch(_enemyTeamColor);
-            float enemyY = rect.y + 36f + cardH + 10f;
-            float enemyH = Mathf.Min(160f, rect.yMax - enemyY - 12f);
-            if (enemyH > 120f)
+            var all = FactionDefaultContent.All;
+            float tileY = rect.y + 36f;
+            float tileH = 36f;
+            float gap = 6f;
+            for (int i = 0; i < all.Length; i++)
             {
-                DrawFactionCard(
-                    new Rect(rect.x + 10f, enemyY, rect.width - 20f, enemyH),
-                    "ENEMY FORCE",
-                    enemyRoster,
-                    enemyColor,
-                    ref _enemyFaction,
-                    ref _enemyTeamColor);
+                var roster = all[i];
+                bool playable = IsSkirmishFactionPlayable(i);
+                bool selected = _playerFaction == i;
+                var row = new Rect(rect.x + 10f, tileY, rect.width - 20f, tileH);
+                HudClickBlocker.Block(row);
+
+                Color fill = selected
+                    ? new Color(0.2f, 0.17f, 0.1f, 0.98f)
+                    : playable
+                        ? new Color(0.1f, 0.11f, 0.12f, 0.92f)
+                        : new Color(0.07f, 0.07f, 0.08f, 0.85f);
+                Color border = selected
+                    ? new Color(0.92f, 0.78f, 0.38f, 0.95f)
+                    : playable
+                        ? new Color(0.45f, 0.48f, 0.42f, 0.55f)
+                        : new Color(0.28f, 0.28f, 0.3f, 0.45f);
+                HudStyle.DrawFrame(row, fill, border, selected ? 2f : 1f);
+                if (selected)
+                {
+                    // Inset selection plate + caption line (UX).
+                    var inset = new Rect(row.x + 4f, row.y + 4f, row.width - 8f, row.height - 8f);
+                    HudStyle.DrawPanel(inset, new Color(0.12f, 0.1f, 0.07f, 0.65f));
+                }
+
+                string label = playable ? roster.DisplayName : roster.DisplayName + "  ·  Coming";
+                var prev = GUI.color;
+                GUI.color = playable ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.85f);
+                GUI.Label(new Rect(row.x + 10f, row.y, row.width - 20f, row.height), label, HudStyle.Button);
+                GUI.color = prev;
+
+                if (playable && GUI.Button(row, GUIContent.none, GUIStyle.none))
+                {
+                    _playerFaction = i;
+                    if (_enemyFaction == _playerFaction)
+                        _enemyFaction = _playerFaction == 1 ? 0 : 1;
+                    AsterraAudio.PlayUiClick();
+                }
+                tileY += tileH + gap;
+            }
+
+            // Selected force detail + power one-liner
+            if (_playerFaction >= 0 && _playerFaction < all.Length)
+            {
+                var roster = all[_playerFaction];
+                float detailY = tileY + 8f;
+                GUI.Label(
+                    new Rect(rect.x + 12f, detailY, rect.width - 24f, 20f),
+                    "Selected · " + roster.DisplayName,
+                    HudStyle.Subtitle);
+                detailY += 22f;
+                string power = string.IsNullOrEmpty(roster.PowerDisplayName)
+                    ? "Commander ready"
+                    : roster.PowerDisplayName;
+                GUI.color = new Color(0.9f, 0.82f, 0.45f, 0.95f);
+                GUI.Label(new Rect(rect.x + 12f, detailY, rect.width - 24f, 18f), power, HudStyle.Caption);
+                GUI.color = Color.white;
+                detailY += 20f;
+                GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
+                GUI.Label(
+                    new Rect(rect.x + 12f, detailY, rect.width - 24f, 40f),
+                    PowerOneLiner(roster),
+                    HudStyle.Caption);
+                GUI.color = Color.white;
+
+                detailY += 48f;
+                GUI.Label(new Rect(rect.x + 12f, detailY, rect.width - 24f, 18f), "Enemy", HudStyle.Subtitle);
+                detailY += 22f;
+                // Enemy: playable only
+                float ew = (rect.width - 28f - 6f) * 0.5f;
+                for (int ei = 0; ei < 2; ei++)
+                {
+                    var er = new Rect(rect.x + 12f + ei * (ew + 6f), detailY, ew, 28f);
+                    bool esel = _enemyFaction == ei;
+                    string ename = all[ei].DisplayName;
+                    Color fill = esel ? new Color(0.2f, 0.17f, 0.1f, 0.98f) : new Color(0.1f, 0.11f, 0.12f, 0.92f);
+                    Color border = esel ? new Color(0.92f, 0.78f, 0.38f, 0.9f) : new Color(0.4f, 0.42f, 0.4f, 0.5f);
+                    if (HudStyle.FrameButton(er, ename, fill, border, esel ? 1.5f : 1f))
+                    {
+                        if (ei != _playerFaction)
+                        {
+                            _enemyFaction = ei;
+                            AsterraAudio.PlayUiClick();
+                        }
+                    }
+                }
+
+                detailY += 36f;
+                DrawTeamSwatches(new Rect(rect.x + 12f, detailY, rect.width - 24f, 26f), ref _playerTeamColor);
             }
         }
 
@@ -472,27 +547,48 @@ namespace Asterra.Gameplay
             HudStyle.DrawFrame(rect, new Color(0.06f, 0.07f, 0.08f, 0.94f), new Color(0.45f, 0.5f, 0.55f, 0.5f), 1.5f);
             GUI.Label(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, 22f), "MAP", HudStyle.Subtitle);
 
+            // Honesty: Blackridge playable; other builtins shown grey as Coming.
             var choices = MapCatalog.ListChoices();
             float listY = rect.y + 36f;
-            float rowH = 28f;
-            float listH = Mathf.Min(choices.Count * (rowH + 4f), rect.height * 0.42f);
-            var listRect = new Rect(rect.x + 10f, listY, rect.width - 20f, listH);
-            HudClickBlocker.Block(listRect);
-            float ly = listRect.y;
+            float rowH = 30f;
+            float ly = listY;
+            float listBottom = rect.y + rect.height * 0.48f;
             for (int i = 0; i < choices.Count; i++)
             {
-                if (ly + rowH > listRect.yMax)
+                if (ly + rowH > listBottom)
                     break;
                 var choice = choices[i];
+                bool playable = IsSkirmishMapPlayable(choice);
                 bool selected = choice.Id == _map.Id;
-                var row = new Rect(listRect.x, ly, listRect.width, rowH);
+                var row = new Rect(rect.x + 10f, ly, rect.width - 20f, rowH);
+                HudClickBlocker.Block(row);
+
                 Color fill = selected
-                    ? new Color(0.22f, 0.18f, 0.1f, 0.98f)
-                    : new Color(0.1f, 0.11f, 0.12f, 0.9f);
+                    ? new Color(0.2f, 0.17f, 0.1f, 0.98f)
+                    : playable
+                        ? new Color(0.1f, 0.11f, 0.12f, 0.92f)
+                        : new Color(0.07f, 0.07f, 0.08f, 0.85f);
                 Color border = selected
-                    ? new Color(0.9f, 0.75f, 0.35f, 0.85f)
-                    : new Color(0.35f, 0.38f, 0.4f, 0.45f);
-                if (HudStyle.FrameButton(row, StripStar(choice.DisplayName), fill, border, selected ? 1.5f : 1f))
+                    ? new Color(0.92f, 0.78f, 0.38f, 0.95f)
+                    : playable
+                        ? new Color(0.45f, 0.48f, 0.42f, 0.55f)
+                        : new Color(0.28f, 0.28f, 0.3f, 0.45f);
+                HudStyle.DrawFrame(row, fill, border, selected ? 2f : 1f);
+                if (selected)
+                {
+                    var inset = new Rect(row.x + 4f, row.y + 4f, row.width - 8f, row.height - 8f);
+                    HudStyle.DrawPanel(inset, new Color(0.12f, 0.1f, 0.07f, 0.65f));
+                }
+
+                string label = playable
+                    ? StripStar(choice.DisplayName)
+                    : StripStar(choice.DisplayName) + "  ·  Coming";
+                var prev = GUI.color;
+                GUI.color = playable ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.85f);
+                GUI.Label(new Rect(row.x + 10f, row.y, row.width - 20f, row.height), label, HudStyle.Button);
+                GUI.color = prev;
+
+                if (playable && GUI.Button(row, GUIContent.none, GUIStyle.none))
                 {
                     _map = choice;
                     _spawnSeat = Mathf.Clamp(_spawnSeat, 0, SeatCount(_map) - 1);
@@ -502,8 +598,26 @@ namespace Asterra.Gameplay
                 ly += rowH + 4f;
             }
 
-            float previewY = listY + listH + 12f;
-            float previewSize = Mathf.Min(rect.width - 20f, rect.yMax - previewY - 12f, 220f);
+            // Ensure selection stays on a playable map
+            if (!IsSkirmishMapPlayable(_map))
+            {
+                _map = MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass);
+                RebuildPreviewIfNeeded();
+            }
+
+            GUI.Label(
+                new Rect(rect.x + 12f, ly + 8f, rect.width - 24f, 20f),
+                "Selected · " + StripStar(_map.DisplayName),
+                HudStyle.Subtitle);
+            GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
+            GUI.Label(
+                new Rect(rect.x + 12f, ly + 30f, rect.width - 24f, 36f),
+                MapBlurb(_map),
+                HudStyle.Caption);
+            GUI.color = Color.white;
+
+            float previewY = ly + 72f;
+            float previewSize = Mathf.Min(rect.width - 20f, rect.yMax - previewY - 12f, 200f);
             if (previewSize > 80f)
                 DrawMapPreview(new Rect(rect.x + 10f, previewY, previewSize, previewSize));
         }
@@ -519,17 +633,32 @@ namespace Asterra.Gameplay
 
             float y = rect.y + 40f;
             GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 22f), "You · " + playerRoster.DisplayName, _cardTitleStyle);
-            y += 26f;
+            y += 24f;
             GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
             GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 18f), "vs " + enemyRoster.DisplayName, HudStyle.Caption);
             GUI.color = Color.white;
-            y += 28f;
+            y += 24f;
             GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 22f), StripStar(_map.DisplayName), _cardTitleStyle);
             y += 24f;
-            GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
-            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 36f), MapBlurb(_map), HudStyle.Caption);
+
+            GUI.color = new Color(0.9f, 0.82f, 0.45f, 0.95f);
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 18f), playerRoster.PowerDisplayName ?? "Commander", HudStyle.Caption);
             GUI.color = Color.white;
-            y += 44f;
+            y += 18f;
+            GUI.color = new Color(0.78f, 0.8f, 0.74f, 0.92f);
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 36f), PowerOneLiner(playerRoster), HudStyle.Caption);
+            GUI.color = Color.white;
+            y += 40f;
+
+            GUI.Label(new Rect(rect.x + 14f, y, rect.width - 28f, 18f), "Victory", HudStyle.Subtitle);
+            y += 20f;
+            GUI.color = new Color(0.82f, 0.84f, 0.78f, 0.95f);
+            GUI.Label(
+                new Rect(rect.x + 14f, y, rect.width - 28f, 40f),
+                "Destroy the enemy keep.\nStandard skirmish · ~15–25 min.",
+                HudStyle.Caption);
+            GUI.color = Color.white;
+            y += 48f;
 
             DrawDifficultyStrip(new Rect(rect.x + 10f, y, rect.width - 20f, 72f));
             y += 84f;
@@ -575,7 +704,8 @@ namespace Asterra.Gameplay
                 return;
             }
 
-            if (DrawStartButton(new Rect(btnX, startY, btnW, startH), "START"))
+            bool canStart = CanStartSkirmish();
+            if (DrawStartButton(new Rect(btnX, startY, btnW, startH), "START", canStart) && canStart)
             {
                 AsterraAudio.Play(AsterraSfx.OrderTrain, 0.8f);
                 bootstrap.ConfigureAndStartOffline(
@@ -884,16 +1014,22 @@ namespace Asterra.Gameplay
             }
         }
 
-        private bool DrawStartButton(Rect rect, string label = "START SKIRMISH")
+        private bool DrawStartButton(Rect rect, string label = "START SKIRMISH", bool enabled = true)
         {
             HudClickBlocker.Block(rect);
-            HudStyle.DrawFrame(
-                rect,
-                new Color(0.22f, 0.18f, 0.08f, 0.98f),
-                new Color(0.9f, 0.75f, 0.35f, 0.85f),
-                2f);
-            HudStyle.DrawAccentBar(new Rect(rect.x, rect.y, rect.width, 3f), new Color(0.95f, 0.8f, 0.35f, 1f));
-            bool clicked = GUI.Button(rect, label, _startStyle);
+            Color fill = enabled
+                ? new Color(0.22f, 0.18f, 0.08f, 0.98f)
+                : new Color(0.12f, 0.12f, 0.12f, 0.85f);
+            Color border = enabled
+                ? new Color(0.9f, 0.75f, 0.35f, 0.85f)
+                : new Color(0.35f, 0.35f, 0.35f, 0.55f);
+            HudStyle.DrawFrame(rect, fill, border, enabled ? 2f : 1f);
+            if (enabled)
+                HudStyle.DrawAccentBar(new Rect(rect.x, rect.y, rect.width, 3f), new Color(0.95f, 0.8f, 0.35f, 1f));
+            var prev = GUI.color;
+            GUI.color = enabled ? Color.white : new Color(0.55f, 0.55f, 0.55f, 0.8f);
+            bool clicked = enabled && GUI.Button(rect, label, _startStyle);
+            GUI.color = prev;
             if (clicked)
                 AsterraAudio.PlayUiClick();
             return clicked;
@@ -943,12 +1079,53 @@ namespace Asterra.Gameplay
             };
         }
 
+
+        // M1 honesty: only Mundor (1) + Uncrowned (0) are playable in skirmish.
+        private static bool IsSkirmishFactionPlayable(int index)
+        {
+            int n = FactionDefaultContent.All.Length;
+            if (n <= 0) return false;
+            int i = ((index % n) + n) % n;
+            return i == 0 || i == 1;
+        }
+
+        private static bool IsSkirmishMapPlayable(MapCatalog.Choice map)
+        {
+            return map.IsBuiltin && map.BuiltinId == SkirmishMapId.BlackridgePass;
+        }
+
+        private static string PowerOneLiner(FactionRoster roster)
+        {
+            if (roster == null) return string.Empty;
+            if (roster.PowerDisplayName == "Royal Standard")
+                return "Plant a banner: nearby allies hold the line.";
+            if (roster.PowerDisplayName == "Wrath of Skies")
+                return "Call down a strike on a chosen ground point.";
+            if (string.IsNullOrEmpty(roster.PowerDisplayName))
+                return "Commander power locked for this force.";
+            return "Commander power — details in match.";
+        }
+
+        private bool CanStartSkirmish()
+        {
+            return IsSkirmishFactionPlayable(_playerFaction)
+                   && IsSkirmishFactionPlayable(_enemyFaction)
+                   && IsSkirmishMapPlayable(_map)
+                   && _playerFaction != _enemyFaction;
+        }
+
         private static void CycleFaction(ref int index, int delta)
         {
             int n = FactionDefaultContent.All.Length;
-            index = (index + delta) % n;
-            if (index < 0)
-                index += n;
+            if (n <= 0) return;
+            // Skip Coming factions in M1 skirmish.
+            for (int step = 0; step < n; step++)
+            {
+                index = (index + delta) % n;
+                if (index < 0) index += n;
+                if (IsSkirmishFactionPlayable(index))
+                    return;
+            }
         }
 
         private static MapCatalog.Choice PreviousMap(MapCatalog.Choice current)
