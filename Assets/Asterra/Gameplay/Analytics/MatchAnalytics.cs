@@ -15,7 +15,7 @@ namespace Asterra.Gameplay.Analytics
         /// <summary>When false (default), events stay as Debug stubs only.</summary>
         public static bool UseLiveAnalytics = false;
 
-        public static void RecordMatchStart(string mapKey, MatchPlayMode mode, int playerCount, uint seed)
+        public static void RecordMatchStart(string mapKey, MatchPlayMode mode, int playerCount, int seed)
         {
             var payload = new Dictionary<string, object>
             {

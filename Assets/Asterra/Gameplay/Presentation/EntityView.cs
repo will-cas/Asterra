@@ -1244,6 +1244,60 @@ namespace Asterra.Gameplay.Presentation
             return s_haloRing;
         }
 
+        private static Mesh s_selectionRect;
+        private static Mesh s_selectionTriangle;
+
+        private static Mesh SelectionRectMesh()
+        {
+            if (s_selectionRect != null)
+                return s_selectionRect;
+            const float o = 1f;
+            const float i = 0.82f;
+            var verts = new Vector3[]
+            {
+                new Vector3(-o, 0f, -o), new Vector3(o, 0f, -o), new Vector3(o, 0f, o), new Vector3(-o, 0f, o),
+                new Vector3(-i, 0f, -i), new Vector3(i, 0f, -i), new Vector3(i, 0f, i), new Vector3(-i, 0f, i),
+            };
+            var tris = new int[]
+            {
+                0, 1, 5, 0, 5, 4,
+                1, 2, 6, 1, 6, 5,
+                2, 3, 7, 2, 7, 6,
+                3, 0, 4, 3, 4, 7,
+            };
+            s_selectionRect = new Mesh { name = "AsterraSelectionRect" };
+            s_selectionRect.vertices = verts;
+            s_selectionRect.triangles = tris;
+            s_selectionRect.RecalculateNormals();
+            s_selectionRect.RecalculateBounds();
+            return s_selectionRect;
+        }
+
+        private static Mesh SelectionTriangleMesh()
+        {
+            if (s_selectionTriangle != null)
+                return s_selectionTriangle;
+            const float o = 1f;
+            const float i = 0.78f;
+            var verts = new Vector3[]
+            {
+                new Vector3(0f, 0f, o), new Vector3(o, 0f, -o), new Vector3(-o, 0f, -o),
+                new Vector3(0f, 0f, i), new Vector3(i * 0.85f, 0f, -i), new Vector3(-i * 0.85f, 0f, -i),
+            };
+            var tris = new int[]
+            {
+                0, 1, 4, 0, 4, 3,
+                1, 2, 5, 1, 5, 4,
+                2, 0, 3, 2, 3, 5,
+            };
+            s_selectionTriangle = new Mesh { name = "AsterraSelectionTriangle" };
+            s_selectionTriangle.vertices = verts;
+            s_selectionTriangle.triangles = tris;
+            s_selectionTriangle.RecalculateNormals();
+            s_selectionTriangle.RecalculateBounds();
+            return s_selectionTriangle;
+        }
+
         private void EnsureHealthBar(bool isUnit)
         {
             if (_hpRoot != null)

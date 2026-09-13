@@ -772,7 +772,7 @@ namespace Asterra.Gameplay
             IsMatchRunning = true;
             Debug.Log($"[Asterra] Match started mode={playMode} seed={matchSeed} map={MapKey} players={_participants.Count}");
             CloudBuildInfo.LogBootstrap();
-            MatchAnalytics.RecordMatchStart(MapKey, playMode, _participants.Count, matchSeed);
+            MatchAnalytics.RecordMatchStart(MapKey, playMode, _participants.Count, (int)matchSeed);
         }
 
         private void BindTerrainTexturePaint()
