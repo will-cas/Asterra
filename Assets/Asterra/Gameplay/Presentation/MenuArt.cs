@@ -44,7 +44,7 @@ namespace Asterra.Gameplay.Presentation
             string crestKey = AsterraMeshLibrary.CrestKeyForFaction(factionDefinitionId);
             if (string.IsNullOrEmpty(crestKey))
                 return null;
-            string cacheKey = crestKey + (muted ? "_m" : "_f") + ColorUtility.ToHtmlStringRGB(accent);
+            string cacheKey = crestKey + "_64" + (muted ? "_m" : "_f") + ColorUtility.ToHtmlStringRGB(accent);
             if (CrestIcons.TryGetValue(cacheKey, out var cached) && cached != null)
                 return cached;
             var tex = BakeCrest(crestKey, accent, muted);
@@ -54,7 +54,7 @@ namespace Asterra.Gameplay.Presentation
 
         private static Texture2D BakeCrest(string crestKey, Color accent, bool muted)
         {
-            const int s = 48;
+            const int s = 64;
             var tex = new Texture2D(s, s, TextureFormat.RGBA32, false)
             {
                 name = crestKey,
@@ -100,11 +100,12 @@ namespace Asterra.Gameplay.Presentation
             float w = maxX - minX;
             float h = maxY - minY;
 
+            // Coming tiles: ~50% chroma (UX).
             Color ink = muted
-                ? Color.Lerp(accent, new Color(0.25f, 0.25f, 0.28f), 0.65f)
+                ? Color.Lerp(Color.Lerp(accent, Color.white, 0.15f), new Color(0.45f, 0.45f, 0.48f), 0.5f)
                 : Color.Lerp(accent, Color.white, 0.2f);
             Color edge = muted
-                ? Color.Lerp(ink, Color.black, 0.35f)
+                ? Color.Lerp(ink, Color.black, 0.25f)
                 : Color.Lerp(accent, Color.white, 0.45f);
 
             for (int t = 0; t + 2 < tris.Length; t += 3)
