@@ -89,6 +89,7 @@ namespace Asterra.Gameplay.Presentation
         private Transform _bodyRoot;
         private Transform _malletRoot;
         private Quaternion _malletRestRot;
+        private Vector3 _malletRestPos;
 
         private BuildingState _buildingState = BuildingState.Active;
         private float _buildProgress = 1f;
@@ -859,14 +860,24 @@ namespace Asterra.Gameplay.Presentation
             // Body stays grounded; mallet child does the swing when present.
             float malletSwing = 0f;
             float malletImpact = 0f;
+            float workCycle = 0f;
+            float workShaped = 0f;
             if (work > 0.05f)
             {
-                malletSwing = Mathf.Sin((t + phase) * 5.6f);
-                malletImpact = Mathf.Max(0f, Mathf.Sin((t + phase) * 5.6f + 1.2f));
-                // Light torso follow-through only — not the old full-body tip.
-                pitch += malletSwing * 3.5f * work;
-                roll += malletSwing * 1.5f * work;
-                y += malletImpact * 0.012f * work;
+                workCycle = Mathf.Repeat((t + phase) * 0.9f, 1f);
+                if (workCycle < 0.55f)
+                    workShaped = Mathf.SmoothStep(0f, 1f, workCycle / 0.55f);
+                else
+                {
+                    float u = (workCycle - 0.55f) / 0.45f;
+                    workShaped = 1f - u * u;
+                }
+                malletSwing = workShaped * 2f - 1f;
+                malletImpact = workCycle > 0.55f ? Mathf.Max(0f, 1f - workShaped) : 0f;
+                // Light torso follow-through only — mallet does the readable motion.
+                pitch += malletSwing * 2.2f * work;
+                roll += malletSwing * 1.0f * work;
+                y += malletImpact * 0.01f * work;
             }
             else if (_idleWeight > 0.45f && loc < 0.15f)
             {
@@ -890,14 +901,36 @@ namespace Asterra.Gameplay.Presentation
 
             if (_malletRoot != null)
             {
-                // Pivot at grip: pitch up on wind-up, slam down on impact.
+                // Haft is +X from grip — rotate around Z so the head arcs (raise → slam).
                 float carryHide = _hasCarry && work < 0.2f ? 1f : 0f;
                 _malletRoot.gameObject.SetActive(carryHide < 0.5f);
-                Quaternion swingRot = Quaternion.Euler(
-                    -25f - malletSwing * 55f - malletImpact * 20f,
-                    8f,
-                    malletSwing * 12f);
+
+                float raiseDeg;
+                float twistDeg;
+                float gripNudge;
+                if (work > 0.05f)
+                {
+                    raiseDeg = Mathf.Lerp(-18f, 62f, workShaped) * work;
+                    twistDeg = Mathf.Sin(workCycle * Mathf.PI * 2f) * 8f * work;
+                    gripNudge = (1f - workShaped) * 0.045f * work;
+                }
+                else if (loc > 0.15f)
+                {
+                    float stride = Mathf.Sin(gait);
+                    raiseDeg = -8f + stride * 10f * loc;
+                    twistDeg = stride * 6f * loc;
+                    gripNudge = 0f;
+                }
+                else
+                {
+                    raiseDeg = -12f + malletSwing * 8f;
+                    twistDeg = malletSwing * 4f;
+                    gripNudge = 0f;
+                }
+
+                Quaternion swingRot = Quaternion.Euler(twistDeg * 0.35f, 6f + twistDeg, raiseDeg);
                 _malletRoot.localRotation = _malletRestRot * swingRot;
+                _malletRoot.localPosition = _malletRestPos + new Vector3(0f, -gripNudge * 0.35f, -gripNudge);
             }
 
             if (Time.time < _ackUntil)
@@ -1136,9 +1169,9 @@ namespace Asterra.Gameplay.Presentation
 
             var go = new GameObject("Mallet");
             go.transform.SetParent(_bodyRoot, false);
-            // Rest at right-hand grip — matches raised arm on unit_royal_builder.
-            go.transform.localPosition = new Vector3(0.55f, 0.95f, -0.35f);
-            go.transform.localRotation = Quaternion.identity;
+            // Grip near right hand on raised-arm silhouette; haft +X, head outboard.
+            go.transform.localPosition = new Vector3(0.52f, 1.02f, -0.28f);
+            go.transform.localRotation = Quaternion.Euler(8f, 18f, -28f);
             go.transform.localScale = Vector3.one;
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = malletMesh;
@@ -1146,6 +1179,7 @@ namespace Asterra.Gameplay.Presentation
             rend.material = CreateBodyMaterial(malletMesh, isUnit: true);
             _malletRoot = go.transform;
             _malletRestRot = go.transform.localRotation;
+            _malletRestPos = go.transform.localPosition;
         }
 
         private void EnsureScaffold()
@@ -1203,6 +1237,12 @@ namespace Asterra.Gameplay.Presentation
                     if (_troopRenderers[i] != null)
                         _troopRenderers[i].enabled = revealed;
                 }
+            }
+            if (_malletRoot != null)
+            {
+                var mr = _malletRoot.GetComponent<Renderer>();
+                if (mr != null)
+                    mr.enabled = revealed;
             }
             // Keep pick volumes enabled for owned-side queries; FOW only hides mesh.
             if (_pickCollider != null)
