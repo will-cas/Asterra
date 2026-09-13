@@ -1135,6 +1135,17 @@ namespace Asterra.Gameplay
         }
 
 
+
+        private static void DrawCrestLockBadge(Rect crestRect)
+        {
+            float b = 18f;
+            var badge = new Rect(crestRect.xMax - b - 2f, crestRect.yMax - b - 2f, b, b);
+            HudStyle.DrawFrame(badge, new Color(0.08f, 0.08f, 0.1f, 0.95f), new Color(0.65f, 0.55f, 0.32f, 0.85f), 1f);
+            // Mini padlock: shackle + body.
+            HudStyle.DrawPanel(new Rect(badge.x + 5f, badge.y + 3f, 8f, 6f), new Color(0.7f, 0.7f, 0.72f, 0.95f));
+            HudStyle.DrawPanel(new Rect(badge.x + 4f, badge.y + 7f, 10f, 8f), new Color(0.85f, 0.75f, 0.4f, 0.95f));
+        }
+
         // M1 honesty: only Mundor (1) + Uncrowned (0) are playable in skirmish.
         private static bool IsSkirmishFactionPlayable(int index)
         {
