@@ -255,19 +255,36 @@ def veiled_shade(g, m, c):
 # --- Mundor medieval English ---
 
 def royal_builder(g, m, c):
-    """Body only — mallet is a separate child prop (`unit_royal_builder_mallet`).
+    """Mundor workman body — mallet is child prop `unit_royal_builder_mallet`.
 
-    Connected A-pose arms (no floating pieces). Mallet grips at right palm;
-    Unity rest pos ~ (0.54, 0.82, -0.08) after OBJ Y-up export.
+    Reads as builder at RTS camera: heavy apron, tool belt, soft cap, pouch,
+    stocky stance. Arms connected A-pose; Eng swings the separate mallet.
     """
     p = []
-    p.append(g.cyl("torso", (0, 0.02, 1.24), 0.2, 0.48, m.leather, c, verts=10))
-    p.append(g.cube("apron", (0, -0.14, 1.05), (0.32, 0.05, 0.7), m.cloth, c))
-    _legs(g, p, c, m.cloth, boot=m.leather)
+    # Stocky torso + rolled sleeves silhouette
+    p.append(g.cyl("hips", (0, 0, 0.96), 0.18, 0.22, m.cloth, c, verts=12))
+    p.append(g.cyl("torso", (0, 0.02, 1.26), 0.24, 0.52, m.cloth, c, verts=12))
+    p.append(g.cube("apron", (0, -0.18, 1.0), (0.42, 0.06, 0.95), m.leather, c))
+    p.append(g.cube("apron_bib", (0, -0.16, 1.35), (0.28, 0.05, 0.35), m.leather, c))
+    p.append(g.cube("belt", (0, 0.02, 1.02), (0.48, 0.28, 0.08), m.leather, c))
+    p.append(g.cube("buckle", (0, -0.16, 1.02), (0.1, 0.04, 0.1), m.iron, c))
+    # Tool belt pouches / spare chisel (readable extras; mallet is separate)
+    p.append(g.cube("pouch_l", (-0.28, 0.12, 0.92), (0.14, 0.12, 0.18), m.leather, c))
+    p.append(g.cube("pouch_r", (0.3, 0.1, 0.9), (0.12, 0.1, 0.16), m.leather, c))
+    p.append(g.cyl("chisel", (0.38, 0.08, 1.05), 0.025, 0.35, m.iron, c, verts=6, rot=(math.radians(25), 0, math.radians(15))))
+    p.append(g.cyl("handle_ch", (0.36, 0.06, 0.88), 0.03, 0.12, m.wood, c, verts=6))
+    _legs(g, p, c, m.cloth, boot=m.leather, spread=0.14)
     _arms(g, p, c, m.cloth, m.skin, m.skin)
-    _head(g, p, c, m)
-    p.append(g.cyl("cap", (0, 0, 1.8), 0.16, 0.1, m.cloth, c, verts=10))
-    p.append(g.cube("sack", (0, 0.28, 1.2), (0.3, 0.2, 0.28), m.leather, c))
+    # Rolled sleeve cuffs
+    p.append(g.cyl("cuff_l", (-0.46, 0.04, 1.08), 0.075, 0.08, m.cloth, c, verts=10))
+    p.append(g.cyl("cuff_r", (0.46, 0.04, 1.08), 0.075, 0.08, m.cloth, c, verts=10))
+    _head(g, p, c, m, hair="crop")
+    # Soft workman's cap (not a helmet)
+    p.append(g.cyl("cap", (0, 0.02, 1.78), 0.17, 0.1, m.cloth, c, verts=12))
+    p.append(g.cyl("brim", (0, -0.06, 1.72), 0.22, 0.035, m.cloth, c, verts=14))
+    # Timber sack on back — builder carry read
+    p.append(g.cube("sack", (0, 0.32, 1.22), (0.36, 0.22, 0.4), m.leather, c))
+    p.append(g.cyl("plank", (0.08, 0.42, 1.35), 0.04, 0.55, m.wood, c, verts=6, rot=(0, math.radians(90), math.radians(12))))
     return finish(g, "unit_royal_builder", p, c, 0.012)
 
 

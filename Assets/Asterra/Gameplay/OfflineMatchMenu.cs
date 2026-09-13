@@ -101,7 +101,9 @@ namespace Asterra.Gameplay
         {
             if (_mapPreview != null)
             {
-                Destroy(_mapPreview);
+                // Authored menu stills are cached in MenuArt — do not destroy them.
+                if (_mapPreview != MenuArt.BlackridgeMapPreview)
+                    Destroy(_mapPreview);
                 _mapPreview = null;
                 _previewMapId = null;
             }
@@ -112,6 +114,17 @@ namespace Asterra.Gameplay
             if (_mapPreview != null && _previewMapId == _map.Id)
                 return;
             DestroyPreview();
+            if (_map.Id == MapCatalog.BlackridgePassId
+                || _map.Id.IndexOf("blackridge", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                var art = MenuArt.BlackridgeMapPreview;
+                if (art != null)
+                {
+                    _mapPreview = art;
+                    _previewMapId = _map.Id;
+                    return;
+                }
+            }
             _mapPreview = MapPreviewBuilder.Build(_map.Id);
             _previewMapId = _map.Id;
         }
@@ -204,9 +217,29 @@ namespace Asterra.Gameplay
             }
         }
 
+
+        private void DrawHubDiorama(Rect rect)
+        {
+            var tex = MenuArt.HubDiorama;
+            if (tex == null)
+                return;
+            float pad = 8f;
+            var plate = new Rect(rect.x + rect.width * 0.38f, rect.y + pad, rect.width * 0.62f - pad, rect.height - pad * 2f);
+            Color prev = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.92f);
+            GUI.DrawTexture(plate, tex, ScaleMode.ScaleAndCrop);
+            GUI.color = prev;
+            HudStyle.DrawFrame(
+                new Rect(rect.x, rect.y, rect.width * 0.42f, rect.height),
+                new Color(0.04f, 0.035f, 0.03f, 0.55f),
+                new Color(0f, 0f, 0f, 0f),
+                0f);
+        }
+
         private void DrawHub(Rect rect)
         {
             // Hub: Skirmish (heavy) + Campaign; Settings/Quit chips. No parchment.
+            DrawHubDiorama(rect);
             float stackW = Mathf.Min(360f, rect.width * 0.42f);
             float stackX = rect.x + 24f;
             float y = rect.y + 12f;
