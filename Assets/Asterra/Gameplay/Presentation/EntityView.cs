@@ -987,8 +987,6 @@ namespace Asterra.Gameplay.Presentation
                     : Quaternion.Euler(_buildingDisabled ? 6f : 0f, gate ? 12f : 0f, _buildingDisabled ? 4f : 0f);
                 scale = Vector3.one;
                 pos = Vector3.zero;
-                if (_producing)
-                    pos.y = Mathf.Abs(Mathf.Sin((t + _animPhase) * 5.5f)) * 0.04f;
 
                 if (t < _completePopUntil)
                 {
