@@ -498,6 +498,16 @@ namespace Asterra.Gameplay
             }
         }
 
+        /// <summary>M1 right-stack allowlist — RS is the dock hero slot, not duplicated here.</summary>
+        private static bool IsM1HudPower(string powerId)
+        {
+            if (string.IsNullOrEmpty(powerId))
+                return false;
+            return powerId == FactionDefaultContent.TombOathPassiveId
+                   || powerId == FactionDefaultContent.LevyHornAbilityId
+                   || powerId == FactionDefaultContent.KingsChargeAbilityId;
+        }
+
         private static string ShortPowerName(string displayName)
         {
             if (string.IsNullOrEmpty(displayName))
