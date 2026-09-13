@@ -2,7 +2,7 @@
 
 - **Faction:** [mundor_crown](../factions/mundor_crown.md)
 - **Role:** unit
-- **Status:** missing-stills
+- **Status:** captured
 - **Author:** `tools/meshgen/asterra_units.py` / `asterra_unique_humans.py`
 - **Mesh:** `Meshes/unit_royal_longbow.obj` / `.fbx`
 
