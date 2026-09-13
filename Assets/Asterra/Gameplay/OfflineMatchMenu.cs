@@ -23,7 +23,7 @@ namespace Asterra.Gameplay
         private int _enemyFaction = 1;
         private int _playerTeamColor;
         private int _enemyTeamColor = 1;
-        private MapCatalog.Choice _map = MapCatalog.BuiltinChoice(SkirmishMapId.LushForest);
+        private MapCatalog.Choice _map = MapCatalog.BuiltinChoice(SkirmishMapId.BlackridgePass);
         private AiDifficulty _difficulty = AiDifficulty.Normal;
         private int _spawnSeat;
         private Texture2D _mapPreview;
@@ -864,6 +864,8 @@ namespace Asterra.Gameplay
                     return "Two cities across a canal. Four bridges. Towers on both banks.";
                 case SkirmishMapId.AncientRelic:
                     return "The Reliquary bowl. Cliffs east and west. Jump down into the relic ring.";
+                case SkirmishMapId.BlackridgePass:
+                    return "Mountain pass between Crownlands and Iron Frontier. Chokepoint mid-ridge, high ground on the flanks.";
                 default:
                     return "Skirmish battlefield.";
             }
@@ -899,6 +901,8 @@ namespace Asterra.Gameplay
                 case SkirmishMapId.FrozenWastes:
                     return seat == 0 ? "N-WEST" : "S-EAST";
                 case SkirmishMapId.AncientRelic:
+                    return seat == 0 ? "SOUTH" : "NORTH";
+                case SkirmishMapId.BlackridgePass:
                     return seat == 0 ? "SOUTH" : "NORTH";
                 default:
                     return seat == 0 ? "WEST" : "EAST";

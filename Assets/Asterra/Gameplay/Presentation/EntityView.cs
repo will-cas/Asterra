@@ -840,8 +840,8 @@ namespace Asterra.Gameplay.Presentation
                     lean = 6f;
                     break;
                 case UnitRole.Builder:
-                    bobAmp = 0.05f;
-                    lean = 5f;
+                    bobAmp = 0.09f;
+                    lean = 9f;
                     break;
                 default:
                     bobAmp = 0.055f;
@@ -1182,15 +1182,15 @@ namespace Asterra.Gameplay.Presentation
                 outer = Mathf.Clamp(outer, 4.0f, 7.5f);
             var ring = new GameObject(friendly ? "SelectionRect" : "SelectionTriangle");
             ring.transform.SetParent(transform, false);
-            ring.transform.localPosition = new Vector3(0f, 0.12f, 0f);
+            ring.transform.localPosition = new Vector3(0f, 0.28f, 0f);
             ring.transform.localScale = new Vector3(outer, 1f, outer);
             var filter = ring.AddComponent<MeshFilter>();
             // M1 polish: own = rectangle, enemy = triangle (buildings keep rect).
             filter.sharedMesh = (!isUnit || friendly) ? SelectionRectMesh() : SelectionTriangleMesh();
             var ringRend = ring.AddComponent<MeshRenderer>();
             Color halo = friendly
-                ? new Color(0.25f, 0.55f, 1f, 0.95f)
-                : new Color(0.95f, 0.35f, 0.25f, 0.95f);
+                ? new Color(0.45f, 0.78f, 1f, 1f)
+                : new Color(1f, 0.42f, 0.28f, 1f);
             if (!isUnit)
                 halo = _factionColor;
             halo.a = 0.95f;
@@ -1252,7 +1252,7 @@ namespace Asterra.Gameplay.Presentation
             if (s_selectionRect != null)
                 return s_selectionRect;
             const float o = 1f;
-            const float i = 0.82f;
+            const float i = 0.72f;
             var verts = new Vector3[]
             {
                 new Vector3(-o, 0f, -o), new Vector3(o, 0f, -o), new Vector3(o, 0f, o), new Vector3(-o, 0f, o),

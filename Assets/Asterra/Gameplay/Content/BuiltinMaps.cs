@@ -15,6 +15,7 @@ namespace Asterra.Gameplay.Content
                 case SkirmishMapId.FrozenWastes: return FrozenWastes();
                 case SkirmishMapId.LushForest: return LushForest();
                 case SkirmishMapId.TwinCities: return TwinCities();
+                case SkirmishMapId.BlackridgePass: return BlackridgePass();
                 default: return AncientRelic();
             }
         }
@@ -302,6 +303,72 @@ namespace Asterra.Gameplay.Content
                 Obj("swamp_push", "Push the south swamp", "reach", false, 40f, -110f, 32f, 0f, "swamp"));
             Talk(def, Line("swamp", "Scout", "They mean to burn the south swamp behind them. Push it if you can."));
             Enter(def, "swamp", 40f, -110f, 36f);
+            return def;
+        }
+
+
+        /// <summary>
+        /// M1 vertical-slice map: mountain pass between Crownlands and Iron Frontier.
+        /// Seat 0 = south (Crown approach), seat 1 = north.
+        /// </summary>
+        public static MapDefinition BlackridgePass()
+        {
+            var def = Base("blackridge_pass", "Blackridge Pass", 0f, -220f, DefaultTerrainCatalog.GrassShort);
+            def.keeps = new[]
+            {
+                Keep(0, 0f, -300f),
+                Keep(1, 0f, 300f),
+            };
+            def.terrain = new[]
+            {
+                // Flanking ridges
+                Rect(-450, -450, -95, 450, DefaultTerrainCatalog.Mountain),
+                Rect(95, -450, 450, 450, DefaultTerrainCatalog.Mountain),
+                // Pass floor
+                Rect(-95, -450, 95, 450, DefaultTerrainCatalog.GrassBare),
+                Rect(-36, -320, 36, 320, DefaultTerrainCatalog.Road),
+                // High ground / berms at the choke
+                Rect(-95, -80, -48, 80, DefaultTerrainCatalog.Hill),
+                Rect(48, -80, 95, 80, DefaultTerrainCatalog.Hill),
+                Rect(-70, -28, -52, 28, DefaultTerrainCatalog.Berm),
+                Rect(52, -28, 70, 28, DefaultTerrainCatalog.Berm),
+                // Approach clearings near keeps
+                Rect(-70, -360, 70, -240, DefaultTerrainCatalog.GrassShort),
+                Rect(-70, 240, 70, 360, DefaultTerrainCatalog.GrassShort),
+                // Sparse timber pockets
+                Rect(-90, -200, -60, -140, DefaultTerrainCatalog.Forest),
+                Rect(60, 140, 90, 200, DefaultTerrainCatalog.Forest),
+            };
+            def.buildings = new[]
+            {
+                Bld(0, "tower", -55f, -120f),
+                Bld(0, "tower", 55f, -120f),
+                Bld(1, "tower", -55f, 120f),
+                Bld(1, "tower", 55f, 120f),
+            };
+            def.territories = new[]
+            {
+                Territory(0f, 0f, 32f, 10),
+                Territory(-40f, -180f, 24f, 6),
+                Territory(40f, 180f, 24f, 6),
+            };
+            def.destructibles = new[]
+            {
+                Prop("crumbling_tower", -60f, 0f),
+                Prop("crumbling_tower", 60f, 0f),
+                Prop("farm", -30f, -250f),
+                Prop("farm", 30f, 250f),
+                Prop("cottage", 20f, -270f),
+                Prop("cottage", -20f, 270f),
+                Prop("rock", -80f, -40f),
+                Prop("rock", 80f, 40f),
+                Prop("rock", -75f, 90f),
+                Prop("rock", 75f, -90f),
+            };
+            Script(
+                def,
+                Obj("hold_pass", "Hold the pass", "optional_hold", false, 0f, 0f, 36f, 90f),
+                Obj("take_ridge", "Take the far keep", "destroy_keeps", true, 0f, 0f, 40f));
             return def;
         }
 

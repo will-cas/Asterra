@@ -10,7 +10,7 @@ namespace Asterra.Gameplay.Presentation
     public static class AsterraLightingLook
     {
         public const float NoonSunIntensity = 2.15f;
-        public const float MoonIntensity = 0.16f;
+        public const float MoonIntensity = 0.42f;
 
         public static void ConfigureSun(Light sun)
         {

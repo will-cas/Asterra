@@ -18,6 +18,7 @@ namespace Asterra.Gameplay.Content
         public const string LushForestId = "lush_forest";
         public const string TwinCitiesId = "twin_cities";
         public const string AncientRelicId = "ancient_relic";
+        public const string BlackridgePassId = "blackridge_pass";
 
         public readonly struct Choice
         {
@@ -54,13 +55,14 @@ namespace Asterra.Gameplay.Content
         {
             var list = new List<Choice>(12)
             {
-                BuiltinChoice(SkirmishMapId.LushForest),
-                BuiltinChoice(SkirmishMapId.RiverCrossing),
-                BuiltinChoice(SkirmishMapId.OutcastCamp),
+                BuiltinChoice(SkirmishMapId.BlackridgePass),
+                BuiltinChoice(SkirmishMapId.MundorCapital),
                 BuiltinChoice(SkirmishMapId.TwinCities),
+                BuiltinChoice(SkirmishMapId.RiverCrossing),
+                BuiltinChoice(SkirmishMapId.LushForest),
+                BuiltinChoice(SkirmishMapId.OutcastCamp),
                 BuiltinChoice(SkirmishMapId.FrozenWastes),
                 BuiltinChoice(SkirmishMapId.AncientRelic),
-                BuiltinChoice(SkirmishMapId.MundorCapital),
             };
 
             foreach (var path in EnumerateMapFiles())
@@ -154,6 +156,9 @@ namespace Asterra.Gameplay.Content
                     return true;
                 case AncientRelicId:
                     map = SkirmishMapId.AncientRelic;
+                    return true;
+                case BlackridgePassId:
+                    map = SkirmishMapId.BlackridgePass;
                     return true;
                 default:
                     map = SkirmishMapId.LushForest;

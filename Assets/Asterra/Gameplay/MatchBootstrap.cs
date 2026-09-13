@@ -30,8 +30,8 @@ namespace Asterra.Gameplay
         [SerializeField] private FactionDefinition[] factions = new FactionDefinition[3];
         [SerializeField] private int playerFactionIndex;
         [SerializeField] private int enemyFactionIndex = 1;
-        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.LushForest;
-        [SerializeField] private string mapKey = MapCatalog.LushForestId;
+        [SerializeField] private SkirmishMapId mapId = SkirmishMapId.BlackridgePass;
+        [SerializeField] private string mapKey = MapCatalog.BlackridgePassId;
         [SerializeField] private float tickHz = 20f;
         [SerializeField] private int commandDelayTicks = 2;
         [SerializeField] private int startingGold = 700;

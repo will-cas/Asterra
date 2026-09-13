@@ -93,7 +93,7 @@ namespace Asterra.Gameplay.Presentation
                 sunMul *= Mathf.Lerp(1f, 0.55f, weather.Intensity);
 
             float targetSun = tod.SunIntensity * AsterraLightingLook.NoonSunIntensity * sunMul;
-            targetSun = Mathf.Lerp(targetSun, AsterraLightingLook.MoonIntensity * 0.35f, night);
+            targetSun = Mathf.Lerp(targetSun, AsterraLightingLook.MoonIntensity * 0.85f, night);
             targetSun = Mathf.Max(0.02f, targetSun);
 
             float targetKelvin = AsterraLightingLook.SunKelvin(time01);
@@ -105,17 +105,17 @@ namespace Asterra.Gameplay.Presentation
 
             Color sunRgb = AsterraLightingLook.KelvinRgb(targetKelvin);
             Color zenithDay = Color.Lerp(new Color(0.23f, 0.48f, 0.88f), new Color(0.55f, 0.62f, 0.7f), overcast);
-            Color zenithNight = new Color(0.03f, 0.04f, 0.09f);
+            Color zenithNight = new Color(0.07f, 0.09f, 0.16f);
             Color targetSky = Color.Lerp(zenithDay, zenithNight, night);
             targetSky = Color.Lerp(targetSky, sunRgb * 0.35f, (1f - night) * (1f - overcast) * 0.12f);
 
             Color targetEquator = Color.Lerp(
                 Color.Lerp(new Color(0.78f, 0.84f, 0.9f), sunRgb, 0.22f),
-                new Color(0.08f, 0.1f, 0.16f),
+                new Color(0.14f, 0.17f, 0.26f),
                 night);
             targetEquator = Color.Lerp(targetEquator, new Color(0.5f, 0.54f, 0.58f), overcast * day);
 
-            Color targetGround = Color.Lerp(new Color(0.32f, 0.28f, 0.18f), new Color(0.06f, 0.07f, 0.08f), night);
+            Color targetGround = Color.Lerp(new Color(0.32f, 0.28f, 0.18f), new Color(0.10f, 0.11f, 0.14f), night);
             if (snow > 0.05f)
                 targetGround = Color.Lerp(targetGround, new Color(0.72f, 0.78f, 0.84f), snow * day);
 
@@ -126,7 +126,7 @@ namespace Asterra.Gameplay.Presentation
             Color targetFog = Color.Lerp(targetEquator, targetSky, 0.45f);
             targetFog = Color.Lerp(targetFog, new Color(0.45f, 0.5f, 0.55f), precip * 0.5f);
 
-            float targetExposure = Mathf.Lerp(1.18f, 0.72f, night);
+            float targetExposure = Mathf.Lerp(1.18f, 0.98f, night);
             targetExposure = Mathf.Lerp(targetExposure, 0.88f, overcast * day);
             float targetAtmosphere = Mathf.Lerp(1.02f, 1.55f, overcast);
             targetAtmosphere = Mathf.Lerp(targetAtmosphere, 0.78f, night);
@@ -198,7 +198,7 @@ namespace Asterra.Gameplay.Presentation
             RenderSettings.ambientGroundColor = _smoothedGround;
             RenderSettings.ambientIntensity = 1f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
-            RenderSettings.reflectionIntensity = Mathf.Lerp(0.85f, 0.22f, night);
+            RenderSettings.reflectionIntensity = Mathf.Lerp(0.85f, 0.40f, night);
 
             if (_sky != null)
             {
@@ -221,7 +221,7 @@ namespace Asterra.Gameplay.Presentation
             if (_colorAdjust != null)
             {
                 float pulse = AsterraLightingLook.LightningBloom;
-                _colorAdjust.postExposure.value = Mathf.Lerp(0.12f, -0.35f, night) + pulse * 0.85f;
+                _colorAdjust.postExposure.value = Mathf.Lerp(0.12f, -0.08f, night) + pulse * 0.85f;
                 _colorAdjust.contrast.value = Mathf.Lerp(8f, 4f, overcast);
                 _colorAdjust.saturation.value = Mathf.Lerp(6f, -8f, overcast);
             }

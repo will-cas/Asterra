@@ -13,6 +13,7 @@ namespace Asterra.Gameplay.Content
         LushForest = 4,
         TwinCities = 5,
         AncientRelic = 6,
+        BlackridgePass = 7,
     }
 
     /// <summary>
